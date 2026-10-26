@@ -1,0 +1,466 @@
+// Convenções (ver .claude/rules/database.md):
+// - Tabelas com tenant têm barbershop_id + policy RLS criada em SQL manual na migration.
+// - Dinheiro em centavos (Int); percentuais em basis points (Int, 10000 = 100%).
+// - Datas em timestamptz; IDs UUID v7.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────── Identidade e tenancy ─────────────
+
+/// Tenant. Sem RLS: é lido pelo slug nas rotas públicas e no login.
+model Barbershop {
+  id                           String   @id @default(uuid(7)) @db.Uuid
+  name                         String
+  slug                         String   @unique
+  timezone                     String   @default("America/Sao_Paulo")
+  /// Antecedência mínima para o cliente cancelar online (business-rules §2).
+  cancellationMinNoticeMinutes Int      @default(120) @map("cancellation_min_notice_minutes")
+  /// Intervalo obrigatório entre atendimentos do mesmo profissional.
+  bufferMinutes                Int      @default(0) @map("buffer_minutes")
+  createdAt                    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  roles       Role[]
+  clients     Client[]
+  services    Service[]
+  memberships Membership[]
+
+  @@map("barbershops")
+}
+
+/// Identidade global de login. Sem RLS: acessada só pelo módulo auth.
+model User {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  /// Sempre normalizado em minúsculas pela aplicação.
+  email        String   @unique
+  name         String
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  memberships   Membership[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+/// Papel = conjunto de permissões, por barbearia. Novos papéis não exigem código.
+model Role {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  barbershopId String   @map("barbershop_id") @db.Uuid
+  /// Identificador estável (owner, professional, receptionist, client ou customizado).
+  key          String
+  name         String
+  /// Papéis padrão criados no cadastro da barbearia; não podem ser apagados.
+  isSystem     Boolean  @default(false) @map("is_system")
+  /// Códigos do catálogo em src/modules/auth/permissions.ts.
+  permissions  String[]
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  barbershop  Barbershop   @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  memberships Membership[]
+
+  @@unique([barbershopId, key])
+  @@map("roles")
+}
+
+/// Vínculo usuário ↔ barbearia ↔ papel. Funcionários e clientes com conta.
+model Membership {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  barbershopId   String   @map("barbershop_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  roleId         String   @map("role_id") @db.Uuid
+  /// Aparece como coluna na agenda (o dono também pode atender).
+  isProfessional Boolean  @default(false) @map("is_professional")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  barbershop        Barbershop        @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role              Role              @relation(fields: [roleId], references: [id])
+  refreshTokens     RefreshToken[]
+  workSchedules     WorkSchedule[]
+  appointments      Appointment[]
+  orderItems        OrderItem[]
+  commissionEntries CommissionEntry[]
+  timeOffs          TimeOff[]
+  commissionRules   CommissionRule[]
+
+  /// Alvo das FKs compostas (barbershop_id, membership_id): garante mesmo tenant no banco.
+  @@unique([barbershopId, id], map: "memberships_tenant_id_key")
+  @@unique([barbershopId, userId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+/// Refresh token opaco, guardado só como hash. Sem RLS: pertence ao usuário.
+model RefreshToken {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  membershipId String    @map("membership_id") @db.Uuid
+  /// Todos os tokens de uma mesma sessão; reuso de um token revoga a família inteira.
+  familyId     String    @map("family_id") @db.Uuid
+  tokenHash    String    @unique @map("token_hash")
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+// ───────────── Equipe ─────────────
+
+/// Expediente semanal no fuso da barbearia. Vários intervalos por dia (ex.: pausa do almoço).
+model WorkSchedule {
+  id           String @id @default(uuid(7)) @db.Uuid
+  barbershopId String @map("barbershop_id") @db.Uuid
+  membershipId String @map("membership_id") @db.Uuid
+  /// 0 = domingo … 6 = sábado
+  weekday      Int
+  /// Minutos desde a meia-noite (horário local da barbearia).
+  startMinute  Int    @map("start_minute")
+  endMinute    Int    @map("end_minute")
+
+  membership Membership @relation(fields: [barbershopId, membershipId], references: [barbershopId, id], onDelete: Cascade, map: "work_schedules_tenant_membership_fkey")
+
+  @@index([barbershopId, membershipId])
+  @@map("work_schedules")
+}
+
+/// Folga, férias ou bloqueio pontual de agenda.
+model TimeOff {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  barbershopId String   @map("barbershop_id") @db.Uuid
+  membershipId String   @map("membership_id") @db.Uuid
+  startsAt     DateTime @map("starts_at") @db.Timestamptz
+  endsAt       DateTime @map("ends_at") @db.Timestamptz
+  reason       String?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  membership Membership @relation(fields: [barbershopId, membershipId], references: [barbershopId, id], onDelete: Cascade, map: "time_offs_tenant_membership_fkey")
+
+  @@index([barbershopId, membershipId, startsAt])
+  @@map("time_offs")
+}
+
+// ───────────── Clientes (PII — business-rules §9) ─────────────
+
+/// Cadastro de cliente por barbearia. Classificação de dados (AFA 20) nos comentários:
+/// P2 = dado pessoal identificável (mascarar em logs).
+model Client {
+  id                      String    @id @default(uuid(7)) @db.Uuid
+  barbershopId            String    @map("barbershop_id") @db.Uuid
+  /// Conta de login do cliente (agendamento online), quando existir.
+  userId                  String?   @map("user_id") @db.Uuid
+  /// P2
+  name                    String
+  /// P2 — só dígitos, com DDI (ex.: 5511999998888)
+  phone                   String?
+  /// P2
+  email                   String?
+  /// P2
+  birthDate               DateTime? @map("birth_date") @db.Date
+  marketingConsentAt      DateTime? @map("marketing_consent_at") @db.Timestamptz
+  marketingConsentChannel String?   @map("marketing_consent_channel")
+  notes                   String?
+  anonymizedAt            DateTime? @map("anonymized_at") @db.Timestamptz
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  barbershop   Barbershop    @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "clients_barbershop_fkey")
+  appointments Appointment[]
+  orders       Order[]
+
+  @@unique([barbershopId, id], map: "clients_tenant_id_key")
+  @@unique([barbershopId, userId])
+  @@index([barbershopId, name])
+  @@map("clients")
+}
+
+// ───────────── Catálogo ─────────────
+
+model Service {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  barbershopId    String   @map("barbershop_id") @db.Uuid
+  name            String
+  description     String?
+  priceCents      Int      @map("price_cents")
+  durationMinutes Int      @map("duration_minutes")
+  /// Inativo some do agendamento, mas continua no histórico (sem DELETE).
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  barbershop       Barbershop        @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "services_barbershop_fkey")
+  appointmentItems AppointmentItem[]
+  orderItems       OrderItem[]
+  commissionRules  CommissionRule[]
+
+  @@unique([barbershopId, id], map: "services_tenant_id_key")
+  @@index([barbershopId, active])
+  @@map("services")
+}
+
+enum CommissionType {
+  PERCENT
+  FIXED
+}
+
+/// Precedência (business-rules §4): funcionário+serviço > serviço > funcionário.
+model CommissionRule {
+  id           String         @id @default(uuid(7)) @db.Uuid
+  barbershopId String         @map("barbershop_id") @db.Uuid
+  membershipId String?        @map("membership_id") @db.Uuid
+  serviceId    String?        @map("service_id") @db.Uuid
+  type         CommissionType
+  /// PERCENT: basis points (4000 = 40%). FIXED: centavos.
+  value        Int
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  membership Membership? @relation(fields: [barbershopId, membershipId], references: [barbershopId, id], onDelete: Cascade, map: "commission_rules_tenant_membership_fkey")
+  service    Service?    @relation(fields: [barbershopId, serviceId], references: [barbershopId, id], onDelete: Cascade, map: "commission_rules_tenant_service_fkey")
+
+  /// Criado com NULLS NOT DISTINCT na migration (NULL = "qualquer"), que o Prisma não expressa.
+  @@unique([barbershopId, membershipId, serviceId], map: "commission_rules_target_key")
+  @@index([barbershopId])
+  @@map("commission_rules")
+}
+
+// ───────────── Agenda ─────────────
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  IN_SERVICE
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum AppointmentSource {
+  PANEL
+  ONLINE
+}
+
+/// Regra mais crítica do sistema (business-rules §2): exclusion constraint na migration
+/// impede dois atendimentos ativos sobrepostos para o mesmo profissional.
+model Appointment {
+  id                 String            @id @default(uuid(7)) @db.Uuid
+  barbershopId       String            @map("barbershop_id") @db.Uuid
+  professionalId     String            @map("professional_id") @db.Uuid
+  clientId           String            @map("client_id") @db.Uuid
+  startsAt           DateTime          @map("starts_at") @db.Timestamptz
+  endsAt             DateTime          @map("ends_at") @db.Timestamptz
+  /// endsAt + buffer da barbearia no momento do agendamento; é o que a constraint compara.
+  blockedUntil       DateTime          @map("blocked_until") @db.Timestamptz
+  status             AppointmentStatus @default(SCHEDULED)
+  source             AppointmentSource
+  notes              String?
+  cancellationReason String?           @map("cancellation_reason")
+  createdByUserId    String            @map("created_by_user_id") @db.Uuid
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  professional Membership        @relation(fields: [barbershopId, professionalId], references: [barbershopId, id], map: "appointments_tenant_professional_fkey")
+  client       Client            @relation(fields: [barbershopId, clientId], references: [barbershopId, id], map: "appointments_tenant_client_fkey")
+  items        AppointmentItem[]
+  order        Order?
+
+  @@unique([barbershopId, id], map: "appointments_tenant_id_key")
+  @@index([barbershopId, startsAt])
+  @@index([barbershopId, clientId])
+  @@map("appointments")
+}
+
+/// Serviços do agendamento com snapshot de nome, preço e duração.
+model AppointmentItem {
+  id              String @id @default(uuid(7)) @db.Uuid
+  barbershopId    String @map("barbershop_id") @db.Uuid
+  appointmentId   String @map("appointment_id") @db.Uuid
+  serviceId       String @map("service_id") @db.Uuid
+  position        Int
+  name            String
+  priceCents      Int    @map("price_cents")
+  durationMinutes Int    @map("duration_minutes")
+
+  appointment Appointment @relation(fields: [barbershopId, appointmentId], references: [barbershopId, id], onDelete: Cascade, map: "appointment_items_tenant_appointment_fkey")
+  service     Service     @relation(fields: [barbershopId, serviceId], references: [barbershopId, id], map: "appointment_items_tenant_service_fkey")
+
+  @@index([barbershopId, appointmentId])
+  @@map("appointment_items")
+}
+
+// ───────────── Idempotência ─────────────
+
+/// Respostas de POSTs sensíveis (Idempotency-Key). Escopo = usuário; sem RLS.
+model IdempotencyKey {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  key          String
+  requestHash  String   @map("request_hash")
+  /// null enquanto a requisição original ainda está em processamento.
+  responseCode Int?     @map("response_code")
+  responseBody Json?    @map("response_body")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([userId, key])
+  @@index([createdAt])
+  @@map("idempotency_keys")
+}
+
+// ───────────── Outbox (AFA 12) ─────────────
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+/// Eventos de domínio gravados na MESMA transação da mudança e despachados por um worker
+/// (evita dual-write). Tabela de sistema, sem RLS: o payload só carrega IDs, nunca PII.
+model OutboxEvent {
+  id            String       @id @default(uuid(7)) @db.Uuid
+  barbershopId  String       @map("barbershop_id") @db.Uuid
+  /// Nome no passado: AppointmentBooked, AppointmentCancelled…
+  type          String
+  payload       Json
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  nextAttemptAt DateTime     @default(now()) @map("next_attempt_at") @db.Timestamptz
+  lastError     String?      @map("last_error")
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  processedAt   DateTime?    @map("processed_at") @db.Timestamptz
+
+  @@index([status, nextAttemptAt])
+  @@map("outbox_events")
+}
+
+// ───────────── Comanda e financeiro (business-rules §3 e §4) ─────────────
+
+enum OrderStatus {
+  OPEN
+  CLOSED
+  VOIDED
+}
+
+enum PaymentMethod {
+  CASH
+  PIX
+  CARD_CREDIT
+  CARD_DEBIT
+  OTHER
+}
+
+/// Comanda: fonte da verdade do financeiro. Fechada é imutável (trigger na migration);
+/// correção só por estorno (VOIDED + lançamentos inversos).
+model Order {
+  id             String         @id @default(uuid(7)) @db.Uuid
+  barbershopId   String         @map("barbershop_id") @db.Uuid
+  clientId       String?        @map("client_id") @db.Uuid
+  /// Uma comanda por agendamento.
+  appointmentId  String?        @map("appointment_id") @db.Uuid
+  status         OrderStatus    @default(OPEN)
+  paymentMethod  PaymentMethod? @map("payment_method")
+  /// Gravado no fechamento.
+  totalCents     Int?           @map("total_cents")
+  openedByUserId String         @map("opened_by_user_id") @db.Uuid
+  closedByUserId String?        @map("closed_by_user_id") @db.Uuid
+  closedAt       DateTime?      @map("closed_at") @db.Timestamptz
+  voidedAt       DateTime?      @map("voided_at") @db.Timestamptz
+  voidReason     String?        @map("void_reason")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  client            Client?           @relation(fields: [barbershopId, clientId], references: [barbershopId, id], map: "orders_tenant_client_fkey")
+  appointment       Appointment?      @relation(fields: [barbershopId, appointmentId], references: [barbershopId, id], map: "orders_tenant_appointment_fkey")
+  items             OrderItem[]
+  commissionEntries CommissionEntry[]
+  cashEntries       CashEntry[]
+
+  @@unique([barbershopId, id], map: "orders_tenant_id_key")
+  @@unique([barbershopId, appointmentId], map: "orders_appointment_key")
+  @@index([barbershopId, status])
+  @@index([barbershopId, closedAt])
+  @@map("orders")
+}
+
+/// Item da comanda com snapshot do preço; a regra de comissão é congelada no fechamento.
+model OrderItem {
+  id              String          @id @default(uuid(7)) @db.Uuid
+  barbershopId    String          @map("barbershop_id") @db.Uuid
+  orderId         String          @map("order_id") @db.Uuid
+  serviceId       String          @map("service_id") @db.Uuid
+  professionalId  String          @map("professional_id") @db.Uuid
+  name            String
+  unitPriceCents  Int             @map("unit_price_cents")
+  quantity        Int             @default(1)
+  discountCents   Int             @default(0) @map("discount_cents")
+  /// unitPrice × quantidade − desconto
+  totalCents      Int             @map("total_cents")
+  commissionType  CommissionType? @map("commission_type")
+  commissionValue Int?            @map("commission_value")
+  commissionCents Int?            @map("commission_cents")
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  order        Order      @relation(fields: [barbershopId, orderId], references: [barbershopId, id], onDelete: Cascade, map: "order_items_tenant_order_fkey")
+  service      Service    @relation(fields: [barbershopId, serviceId], references: [barbershopId, id], map: "order_items_tenant_service_fkey")
+  professional Membership @relation(fields: [barbershopId, professionalId], references: [barbershopId, id], map: "order_items_tenant_professional_fkey")
+
+  @@unique([barbershopId, id], map: "order_items_tenant_id_key")
+  @@index([barbershopId, orderId])
+  @@map("order_items")
+}
+
+enum EntryKind {
+  ENTRY
+  REVERSAL
+}
+
+/// Lançamento de comissão. Append-only: estorno gera lançamento negativo.
+model CommissionEntry {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  barbershopId   String    @map("barbershop_id") @db.Uuid
+  orderId        String    @map("order_id") @db.Uuid
+  orderItemId    String    @map("order_item_id") @db.Uuid
+  professionalId String    @map("professional_id") @db.Uuid
+  kind           EntryKind
+  amountCents    Int       @map("amount_cents")
+  occurredAt     DateTime  @default(now()) @map("occurred_at") @db.Timestamptz
+
+  order        Order      @relation(fields: [barbershopId, orderId], references: [barbershopId, id], map: "commission_entries_tenant_order_fkey")
+  professional Membership @relation(fields: [barbershopId, professionalId], references: [barbershopId, id], map: "commission_entries_tenant_professional_fkey")
+
+  @@index([barbershopId, professionalId, occurredAt])
+  @@map("commission_entries")
+}
+
+/// Lançamento de caixa. Append-only: estorno gera lançamento negativo.
+model CashEntry {
+  id           String        @id @default(uuid(7)) @db.Uuid
+  barbershopId String        @map("barbershop_id") @db.Uuid
+  orderId      String        @map("order_id") @db.Uuid
+  method       PaymentMethod
+  kind         EntryKind
+  amountCents  Int           @map("amount_cents")
+  occurredAt   DateTime      @default(now()) @map("occurred_at") @db.Timestamptz
+
+  order Order @relation(fields: [barbershopId, orderId], references: [barbershopId, id], map: "cash_entries_tenant_order_fkey")
+
+  @@index([barbershopId, occurredAt])
+  @@map("cash_entries")
+}
