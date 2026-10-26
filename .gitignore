@@ -1,0 +1,26 @@
+node_modules/
+dist/
+.next/
+out/
+coverage/
+
+# Segredos — nunca commitar (use .env.example)
+.env
+.env.*
+!.env.example
+
+# Prisma 7 gera o client dentro do projeto
+backend/src/generated/
+
+# Claude Code: configurações pessoais
+.claude/settings.local.json
+
+.DS_Store
+*.log
+
+# Playwright
+test-results/
+playwright-report/
+
+# Cache incremental do TypeScript
+*.tsbuildinfo
