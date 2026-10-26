@@ -1,0 +1,96 @@
+# Ambiente de desenvolvimento: Postgres + Node (backend/frontend) em containers.
+# O Node não é instalado no host; todo comando npm roda via `docker compose run`.
+name: tanaregua
+
+x-node: &node
+  image: node:24-alpine
+  working_dir: /app
+  init: true
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: tanaregua
+      POSTGRES_PASSWORD: tanaregua
+      POSTGRES_DB: tanaregua
+    ports:
+      - "5432:5432"
+    volumes:
+      # Postgres 18 espera o volume em /var/lib/postgresql (não mais em .../data).
+      - db-data:/var/lib/postgresql
+      # Diretório, não o arquivo: montagem de arquivo único quebra no Windows quando o
+      # arquivo é reescrito (ENODATA). Roda só na criação do volume.
+      - ./backend/prisma/bootstrap:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tanaregua -d tanaregua"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    <<: *node
+    command: npm run start:dev
+    ports:
+      - "3333:3333"
+    volumes:
+      - ./backend:/app
+      # Testcontainers sobe Postgres efêmero pelos testes e2e usando o Docker do host.
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+      # Só o E2E desliga: RATE_LIMIT_ENABLED=false docker compose up -d backend
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      # Bind mount do Windows não propaga eventos de arquivo: o watch do TypeScript usa polling.
+      TSC_WATCHFILE: DynamicPriorityPolling
+      TSC_WATCHDIRECTORY: DynamicPriorityPolling
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    <<: *node
+    command: npm run dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      # Contrato OpenAPI exportado pelo backend; o cliente tipado é gerado a partir dele.
+      - ./backend/contracts:/contracts:ro
+    env_file:
+      - path: ./frontend/.env
+        required: false
+    environment:
+      # Bind mounts do Windows não propagam eventos de arquivo; polling mantém o hot reload.
+      WATCHPACK_POLLING: "true"
+      API_INTERNAL_URL: http://backend:3333
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      - backend
+
+  # Testes de ponta a ponta (Playwright). Só sobe sob demanda:
+  #   docker compose --profile e2e run --rm e2e
+  # A imagem oficial traz os navegadores (que não rodam em Alpine); a versão acompanha
+  # o @playwright/test do frontend.
+  e2e:
+    image: mcr.microsoft.com/playwright:v1.64.1-noble
+    profiles: ["e2e"]
+    working_dir: /app
+    init: true
+    ipc: host
+    command: npx playwright test
+    volumes:
+      - ./frontend:/app
+    environment:
+      E2E_BASE_URL: http://frontend:3000
+      CI: "true"
+    depends_on:
+      - frontend
+
+volumes:
+  db-data:
