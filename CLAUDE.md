@@ -87,7 +87,7 @@ agent_docs/               contexto aprofundado (regras de negócio, segurança, 
 - Dinheiro é sempre inteiro em centavos (`Int`); percentuais em basis points. Nunca use float.
 - Mudou rota ou resposta da API? Rode `openapi:export` e `api:generate` e commite os dois arquivos (o CI barra a divergência).
 - NestJS 12, Next.js 16 e Prisma 7/8 mudaram APIs recentemente: consulte a doc oficial atual antes de usar um padrão que você só conhece de memória.
-- Commits seguem Conventional Commits (veja `.claude/rules/general.md`).
+- Commits seguem Conventional Commits e são atômicos: uma mudança lógica por commit, cada um passando em lint, typecheck e testes (veja `.claude/rules/general.md`).
 
 # Contexto Aprofundado
 
