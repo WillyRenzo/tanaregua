@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { inject } from 'vitest';
 
 // Roda antes de cada arquivo de teste importar o AppModule (o ConfigModule lê o env no import).
@@ -13,4 +15,7 @@ Object.assign(process.env, {
   OTEL_ENABLED: 'false',
   MAIL_PROVIDER: 'log',
   MAIL_FROM: 'TaNaRegua <teste@tanaregua.local>',
+  // Logos enviados nos testes não vão para backend/storage.
+  STORAGE_DRIVER: 'local',
+  STORAGE_LOCAL_DIR: join(tmpdir(), 'tanaregua-test-storage'),
 });

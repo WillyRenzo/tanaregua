@@ -25,6 +25,7 @@ import { OrdersModule } from './modules/orders/orders.module.js';
 import { ReportsModule } from './modules/reports/reports.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { ClockModule } from './common/time/clock.js';
+import { StorageModule } from './common/storage/object-storage.js';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { ClockModule } from './common/time/clock.js';
     ScheduleModule.forRoot(),
     PrismaModule,
     ClockModule,
+    StorageModule,
     HealthModule,
     AuthModule,
     BarbershopsModule,
