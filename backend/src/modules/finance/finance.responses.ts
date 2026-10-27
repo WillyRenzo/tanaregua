@@ -12,9 +12,12 @@ export const orderViewSchema = z
     items: z.array(
       z.object({
         id: z.uuid(),
-        serviceId: z.uuid(),
+        kind: z.enum(['SERVICE', 'PRODUCT']),
+        serviceId: z.uuid().nullable(),
+        productId: z.uuid().nullable(),
         name: z.string(),
-        professional: z.object({ id: z.uuid(), name: z.string() }),
+        /** Null em produto vendido no balcão. */
+        professional: z.object({ id: z.uuid(), name: z.string() }).nullable(),
         unitPriceCents: z.int(),
         quantity: z.int(),
         discountCents: z.int(),
@@ -77,6 +80,9 @@ export const reportSummarySchema = z
     ),
     topServices: z.array(
       z.object({ serviceId: z.uuid(), name: z.string(), quantity: z.int(), revenueCents: z.int() }),
+    ),
+    topProducts: z.array(
+      z.object({ productId: z.uuid(), name: z.string(), quantity: z.int(), revenueCents: z.int() }),
     ),
     appointments: z.object({
       byStatus: z.record(z.string(), z.int()),

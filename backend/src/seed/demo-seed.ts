@@ -191,30 +191,35 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
     await catalog.upsertCommissionRule({
       membershipId: null,
       serviceId: corte.id,
+      productId: null,
       type: 'PERCENT',
       value: 4000,
     });
     await catalog.upsertCommissionRule({
       membershipId: null,
       serviceId: pigmentacao.id,
+      productId: null,
       type: 'PERCENT',
       value: 5000,
     });
     await catalog.upsertCommissionRule({
       membershipId: bia.id,
       serviceId: null,
+      productId: null,
       type: 'PERCENT',
       value: 3500,
     });
     await catalog.upsertCommissionRule({
       membershipId: bia.id,
       serviceId: barba.id,
+      productId: null,
       type: 'FIXED',
       value: 1500,
     });
     await catalog.upsertCommissionRule({
       membershipId: rafa.id,
       serviceId: null,
+      productId: null,
       type: 'PERCENT',
       value: 3000,
     });

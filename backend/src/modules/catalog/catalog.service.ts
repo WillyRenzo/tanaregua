@@ -3,6 +3,7 @@ import { notFound, unprocessable } from '../../common/http/domain-error.js';
 import { TenantDb } from '../../common/tenancy/tenant-db.service.js';
 import type { Tx } from '../../prisma/prisma.service.js';
 import type { ServiceView } from '../registry.responses.js';
+import { ProductsService } from '../products/products.service.js';
 import { StaffService } from '../staff/staff.service.js';
 import type {
   CreateServiceInput,
@@ -27,6 +28,7 @@ const ruleSelect = {
   id: true,
   membershipId: true,
   serviceId: true,
+  productId: true,
   type: true,
   value: true,
 } as const;
@@ -36,6 +38,7 @@ export class CatalogService {
   constructor(
     @Inject(TenantDb) private readonly db: TenantDb,
     @Inject(StaffService) private readonly staff: StaffService,
+    @Inject(ProductsService) private readonly products: ProductsService,
   ) {}
 
   listServices(query: ListServicesQuery): Promise<ServiceView[]> {
@@ -102,6 +105,9 @@ export class CatalogService {
       if (input.serviceId) {
         await this.findService(tx, auth.barbershopId, input.serviceId);
       }
+      if (input.productId) {
+        await this.products.assertExists(tx, auth.barbershopId, input.productId);
+      }
 
       // NULL significa "qualquer"; o Prisma não faz upsert por unique com NULL, então buscamos antes.
       const existing = await tx.commissionRule.findFirst({
@@ -109,6 +115,7 @@ export class CatalogService {
           barbershopId: auth.barbershopId,
           membershipId: input.membershipId,
           serviceId: input.serviceId,
+          productId: input.productId,
         },
         select: { id: true },
       });
@@ -121,6 +128,7 @@ export class CatalogService {
               barbershopId: auth.barbershopId,
               membershipId: input.membershipId,
               serviceId: input.serviceId,
+              productId: input.productId,
             },
             select: ruleSelect,
           });

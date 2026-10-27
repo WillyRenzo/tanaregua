@@ -137,7 +137,7 @@ function Items({ order }: { order: Order }) {
             <TableCell>
               <span className="font-medium">{item.name}</span>
               <p className="text-muted-foreground text-xs">
-                {item.professional.name} · {formatMoney(item.unitPriceCents)}
+                {item.professional?.name ?? 'Balcão'} · {formatMoney(item.unitPriceCents)}
               </p>
             </TableCell>
             <TableCell className="text-right">

@@ -33,6 +33,7 @@ export const upsertCommissionRuleSchema = z
     z.strictObject({
       membershipId: z.uuid().nullable(),
       serviceId: z.uuid().nullable(),
+      productId: z.uuid().nullable().default(null),
       type: z.literal('PERCENT'),
       /** basis points: 4000 = 40% */
       value: z.number().int().min(0).max(10_000),
@@ -40,13 +41,17 @@ export const upsertCommissionRuleSchema = z
     z.strictObject({
       membershipId: z.uuid().nullable(),
       serviceId: z.uuid().nullable(),
+      productId: z.uuid().nullable().default(null),
       type: z.literal('FIXED'),
       /** centavos */
       value: z.number().int().min(0).max(10_000_00),
     }),
   ])
-  .refine((rule) => rule.membershipId !== null || rule.serviceId !== null, {
-    message: 'Informe o funcionário, o serviço ou ambos.',
+  .refine((rule) => rule.membershipId !== null || rule.serviceId !== null || rule.productId !== null, {
+    message: 'Informe o funcionário, o serviço, o produto ou uma combinação.',
+  })
+  .refine((rule) => rule.serviceId === null || rule.productId === null, {
+    message: 'Uma regra vale para um serviço ou para um produto, não os dois.',
   })
   .meta({
     example: {

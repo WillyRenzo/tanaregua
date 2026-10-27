@@ -493,6 +493,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista produtos com saldo (custo e valor em estoque só para quem gerencia)
+         * @description **Permissões (basta uma):** `products:read`
+         */
+        get: operations["ProductsController_list"];
+        put?: never;
+        /**
+         * Cadastra produto (o saldo começa em zero; use uma entrada)
+         * @description **Permissões (basta uma):** `products:manage`
+         */
+        post: operations["ProductsController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/products/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Detalhe do produto
+         * @description **Permissões (basta uma):** `products:read`
+         */
+        get: operations["ProductsController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Atualiza ou desativa produto (o saldo não muda por aqui)
+         * @description **Permissões (basta uma):** `products:manage`
+         */
+        patch: operations["ProductsController_update"];
+        trace?: never;
+    };
+    "/v1/products/{id}/movements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Histórico de movimentações do produto (últimas 100)
+         * @description **Permissões (basta uma):** `products:manage`
+         */
+        get: operations["ProductsController_movements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/products/{id}/stock-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registra entrada de mercadoria
+         * @description **Permissões (basta uma):** `products:manage`
+         */
+        post: operations["ProductsController_addEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/products/{id}/stock-adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registra ajuste de estoque (inventário, perda, quebra)
+         * @description **Permissões (basta uma):** `products:manage`
+         */
+        post: operations["ProductsController_adjust"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agenda/day": {
         parameters: {
             query?: never;
@@ -1152,9 +1260,42 @@ export interface components {
             membershipId: string | null;
             /** Format: uuid */
             serviceId: string | null;
+            /** Format: uuid */
+            productId: string | null;
             /** @enum {string} */
             type: "PERCENT" | "FIXED";
             value: number;
+        };
+        Product: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: string | null;
+            priceCents: number;
+            costCents: number | null;
+            stockQuantity: number;
+            minStockQuantity: number | null;
+            lowStock: boolean;
+            stockValueCents: number | null;
+            active: boolean;
+        };
+        StockMovement: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "ENTRY" | "SALE" | "SALE_REVERSAL" | "ADJUSTMENT";
+            quantity: number;
+            unitCostCents: number;
+            reason: string | null;
+            /** Format: uuid */
+            orderId: string | null;
+            author: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            };
+            /** Format: date-time */
+            occurredAt: string;
         };
         DayAgenda: {
             date: string;
@@ -1348,14 +1489,18 @@ export interface components {
             items: {
                 /** Format: uuid */
                 id: string;
+                /** @enum {string} */
+                kind: "SERVICE" | "PRODUCT";
                 /** Format: uuid */
-                serviceId: string;
+                serviceId: string | null;
+                /** Format: uuid */
+                productId: string | null;
                 name: string;
                 professional: {
                     /** Format: uuid */
                     id: string;
                     name: string;
-                };
+                } | null;
                 unitPriceCents: number;
                 quantity: number;
                 discountCents: number;
@@ -1394,6 +1539,13 @@ export interface components {
             topServices: {
                 /** Format: uuid */
                 serviceId: string;
+                name: string;
+                quantity: number;
+                revenueCents: number;
+            }[];
+            topProducts: {
+                /** Format: uuid */
+                productId: string;
                 name: string;
                 quantity: number;
                 revenueCents: number;
@@ -3103,6 +3255,11 @@ export interface operations {
                     membershipId: string | null;
                     /** Format: uuid */
                     serviceId: string | null;
+                    /**
+                     * Format: uuid
+                     * @default null
+                     */
+                    productId?: string | null;
                     /** @enum {string} */
                     type: "PERCENT";
                     value: number;
@@ -3111,6 +3268,11 @@ export interface operations {
                     membershipId: string | null;
                     /** Format: uuid */
                     serviceId: string | null;
+                    /**
+                     * Format: uuid
+                     * @default null
+                     */
+                    productId?: string | null;
                     /** @enum {string} */
                     type: "FIXED";
                     value: number;
@@ -3193,6 +3355,420 @@ export interface operations {
             };
             /** @description Recurso inexistente ou de outra barbearia. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ProductsController_list: {
+        parameters: {
+            query?: {
+                includeInactive?: "true" | "false";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"][];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ProductsController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    description?: string | null;
+                    priceCents: number;
+                    /** @default 0 */
+                    costCents?: number;
+                    minStockQuantity?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ProductsController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ProductsController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name?: string;
+                    description?: string | null;
+                    priceCents?: number;
+                    costCents?: number;
+                    minStockQuantity?: number | null;
+                    active?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ProductsController_movements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockMovement"][];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ProductsController_addEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    quantity: number;
+                    unitCostCents: number;
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    ProductsController_adjust: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    quantity: number;
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `insufficient-stock`: O ajuste deixaria o saldo negativo. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4547,7 +5123,7 @@ export interface operations {
                     /** Format: uuid */
                     clientId?: string;
                     /** @default [] */
-                    items?: {
+                    items?: ({
                         /** Format: uuid */
                         serviceId: string;
                         /** Format: uuid */
@@ -4556,7 +5132,19 @@ export interface operations {
                         quantity?: number;
                         /** @default 0 */
                         discountCents?: number;
-                    }[];
+                    } | {
+                        /** Format: uuid */
+                        productId: string;
+                        /**
+                         * Format: uuid
+                         * @default null
+                         */
+                        professionalId?: string | null;
+                        /** @default 1 */
+                        quantity?: number;
+                        /** @default 0 */
+                        discountCents?: number;
+                    })[];
                 };
             };
         };
@@ -4682,6 +5270,18 @@ export interface operations {
                     serviceId: string;
                     /** Format: uuid */
                     professionalId: string;
+                    /** @default 1 */
+                    quantity?: number;
+                    /** @default 0 */
+                    discountCents?: number;
+                } | {
+                    /** Format: uuid */
+                    productId: string;
+                    /**
+                     * Format: uuid
+                     * @default null
+                     */
+                    professionalId?: string | null;
                     /** @default 1 */
                     quantity?: number;
                     /** @default 0 */

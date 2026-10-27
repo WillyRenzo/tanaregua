@@ -2,12 +2,26 @@ import { z } from 'zod';
 import { cursorQuerySchema } from '../../common/http/pagination.js';
 import { PAYMENT_METHODS } from '../finance/finance.service.js';
 
-export const orderItemInputSchema = z.strictObject({
-  serviceId: z.uuid(),
-  professionalId: z.uuid(),
+const itemAmounts = {
   quantity: z.number().int().min(1).max(20).default(1),
   discountCents: z.number().int().min(0).default(0),
+};
+
+/** Serviço: sempre com o profissional que atendeu. */
+export const serviceItemInputSchema = z.strictObject({
+  serviceId: z.uuid(),
+  professionalId: z.uuid(),
+  ...itemAmounts,
 });
+
+/** Produto: profissional opcional; sem ele é venda de balcão e não há comissão. */
+export const productItemInputSchema = z.strictObject({
+  productId: z.uuid(),
+  professionalId: z.uuid().nullable().default(null),
+  ...itemAmounts,
+});
+
+export const orderItemInputSchema = z.union([serviceItemInputSchema, productItemInputSchema]);
 export type OrderItemInput = z.infer<typeof orderItemInputSchema>;
 
 /** Abre a partir de um agendamento OU avulsa (cliente opcional: "cliente balcão"). */
