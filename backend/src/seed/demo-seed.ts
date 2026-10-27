@@ -10,6 +10,8 @@ import { CatalogService } from '../modules/catalog/catalog.service.js';
 import { ClientsService } from '../modules/clients/clients.service.js';
 import type { PaymentMethod } from '../modules/finance/finance.service.js';
 import { OrdersService } from '../modules/orders/orders.service.js';
+import type { OrderItemInput } from '../modules/orders/orders.schemas.js';
+import { ProductsService } from '../modules/products/products.service.js';
 import { PublicBookingService } from '../modules/public-booking/public-booking.service.js';
 import { StaffService } from '../modules/staff/staff.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -77,6 +79,7 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
   const appointments = app.get(AppointmentsService);
   const orders = app.get(OrdersService);
   const publicBooking = app.get(PublicBookingService);
+  const products = app.get(ProductsService);
 
   /** Executa `fn` como se fosse uma requisição autenticada desta sessão. */
   const as = <T>(session: Session, fn: () => Promise<T>) =>
@@ -224,6 +227,57 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
       value: 3000,
     });
 
+    // ───────────── Produtos e estoque ─────────────
+
+    // [nome, preço, custo, estoque mínimo, entrada inicial, peso nas vendas]
+    const productSpecs: [string, number, number, number | null, number, number][] = [
+      ['Pomada modeladora', 4500, 2200, 5, 30, 4],
+      ['Óleo para barba', 3500, 1800, 3, 20, 3],
+      ['Shampoo anticaspa', 3000, 1500, 4, 8, 3],
+      ['Cera capilar', 4000, 2000, null, 15, 1],
+    ];
+    /** Saldo acompanhado aqui para o seed nunca tentar vender o que não tem. */
+    const stock = new Map<string, { id: string; name: string; quantity: number; weight: number }>();
+    const firstDay = at(shiftDate(today, -HISTORY_DAYS - 1), '09:00');
+    for (const [name, priceCents, costCents, minStockQuantity, initial, weight] of productSpecs) {
+      const created = await products.create({ name, priceCents, costCents, minStockQuantity });
+      await clock.at(firstDay, () =>
+        products.addEntry(created.id, {
+          quantity: initial,
+          unitCostCents: costCents,
+          note: 'Estoque inicial',
+        }),
+      );
+      stock.set(created.id, { id: created.id, name, quantity: initial, weight });
+    }
+    const gel = await products.create({
+      name: 'Gel fixador (desativado)',
+      priceCents: 2500,
+      costCents: 1200,
+    });
+    await products.update(gel.id, { active: false });
+    const byName = (name: string) => [...stock.values()].find((product) => product.name === name)!;
+    const pomada = byName('Pomada modeladora');
+    const oleo = byName('Óleo para barba');
+    const shampoo = byName('Shampoo anticaspa');
+    const cera = byName('Cera capilar');
+
+    // Comissão de produto só com regra de produto (o padrão do profissional não vale).
+    await catalog.upsertCommissionRule({
+      membershipId: null,
+      serviceId: null,
+      productId: pomada.id,
+      type: 'FIXED',
+      value: 500,
+    });
+    await catalog.upsertCommissionRule({
+      membershipId: bia.id,
+      serviceId: null,
+      productId: oleo.id,
+      type: 'PERCENT',
+      value: 1000,
+    });
+
     // ───────────── Clientes ─────────────
 
     // [nome, telefone, consentimento de marketing, aniversário neste mês daqui a N dias]
@@ -296,14 +350,30 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
     const closeWith = async (
       appointment: { id: string; endsAt: Date },
       paymentMethod: PaymentMethod,
-      extra?: { serviceId: string; professionalId: string },
+      extras: OrderItemInput[] = [],
     ) => {
       const closedAt = new Date(Math.min(appointment.endsAt.getTime() + 5 * 60_000, Date.now()));
       return clock.at(closedAt, async () => {
         const order = await orders.open({ appointmentId: appointment.id });
-        if (extra) await orders.addItem(order.id, { ...extra, quantity: 1, discountCents: 0 });
+        for (const extra of extras) await orders.addItem(order.id, extra);
         return orders.close(order.id, { paymentMethod });
       });
+    };
+
+    const productWeights = weighted(
+      [...stock.values()].map((product): [number, typeof product] => [product.weight, product]),
+    );
+    /** Produto vendido junto do atendimento: às vezes indicado pelo barbeiro, às vezes no balcão. */
+    const productSale = (professionalId: string): OrderItemInput | null => {
+      const product = productWeights(random());
+      if (product.quantity < 1) return null;
+      product.quantity--;
+      return {
+        productId: product.id,
+        professionalId: random() < 0.7 ? professionalId : null,
+        quantity: 1,
+        discountCents: 0,
+      };
     };
 
     const voidAt = (orderId: string, when: Date, reason: string) =>
@@ -471,11 +541,13 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
                 reason: cancelReasons[closedCount % cancelReasons.length],
               });
             } else {
-              const upsell =
-                random() < 0.1 && !services.includes(sobrancelha)
-                  ? { serviceId: sobrancelha.id, professionalId }
-                  : undefined;
-              const order = await closeWith(appointment, payments(random()), upsell);
+              const extras: OrderItemInput[] = [];
+              if (random() < 0.1 && !services.includes(sobrancelha)) {
+                extras.push({ serviceId: sobrancelha.id, professionalId, quantity: 1, discountCents: 0 });
+              }
+              const product = random() < 0.2 ? productSale(professionalId) : null;
+              if (product) extras.push(product);
+              const order = await closeWith(appointment, payments(random()), extras);
               closedCount++;
               if (closedCount % 25 === 0) {
                 await voidAt(
@@ -483,6 +555,8 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
                   new Date(appointment.endsAt.getTime() + 40 * 60_000),
                   voidReasons[(closedCount / 25) % voidReasons.length]!,
                 );
+                // O estorno devolve o produto ao estoque.
+                if (product && 'productId' in product) stock.get(product.productId)!.quantity++;
               }
             }
           }
@@ -494,10 +568,38 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
       const date = shiftDate(today, offset);
       const weekday = weekdayOf(date);
       if (weekday === 0) continue; // domingo fechado no histórico: o gráfico mostra o ritmo da semana
+      if (offset === -15) {
+        // Reposição no meio do período (o shampoo fica de fora e termina abaixo do mínimo).
+        for (const product of [pomada, oleo, cera]) {
+          await clock.at(at(date, '08:30'), () =>
+            products.addEntry(product.id, {
+              quantity: 12,
+              unitCostCents: 2100,
+              note: 'Reposição do distribuidor',
+            }),
+          );
+          product.quantity += 12;
+        }
+      }
       await fillDay(date, weekday === 6 ? 0.65 : weekday === 5 ? 0.5 : 0.35, true);
     }
     for (let offset = 1; offset <= UPCOMING_DAYS; offset++) {
       await fillDay(shiftDate(today, offset), 0.3 / offset + 0.1, false);
+    }
+
+    // Ajuste de inventário e uma venda de balcão hoje (produto sem profissional, sem comissão).
+    if (cera.quantity >= 1) {
+      await clock.at(at(yesterday, '19:00'), () =>
+        products.adjust(cera.id, { quantity: -1, reason: 'Embalagem danificada' }),
+      );
+      cera.quantity--;
+    }
+    if (shampoo.quantity >= 1) {
+      const counter = await orders.open({
+        items: [{ productId: shampoo.id, professionalId: null, quantity: 1, discountCents: 0 }],
+      });
+      await orders.close(counter.id, { paymentMethod: 'CASH' });
+      shampoo.quantity--;
     }
 
     // LGPD: cliente que pediu exclusão. Some da lista, o histórico fica como "Cliente anonimizado".

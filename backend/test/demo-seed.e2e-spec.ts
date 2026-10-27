@@ -121,6 +121,33 @@ describe('Seed de demonstração (e2e)', () => {
     expect(mine.body.some((a: { startsAt: string }) => Date.parse(a.startsAt) < now)).toBe(true);
   });
 
+  it('tem produtos com vendas, alerta de reposição e saldo que bate com o histórico', async () => {
+    const owner = await loginPanel(DEMO_ACCOUNTS.owner.email);
+    const list = await as(app, owner.accessToken).get('/v1/products').expect(200);
+    const products = list.body as { id: string; name: string; stockQuantity: number; lowStock: boolean }[];
+    expect(products.map((product) => product.name)).toEqual(
+      expect.arrayContaining(['Pomada modeladora', 'Óleo para barba', 'Shampoo anticaspa', 'Cera capilar']),
+    );
+    expect(products.find((product) => product.name === 'Shampoo anticaspa')?.lowStock).toBe(true);
+
+    for (const product of products) {
+      const movements = await as(app, owner.accessToken)
+        .get(`/v1/products/${product.id}/movements`)
+        .expect(200);
+      const sum = movements.body.reduce((total: number, m: { quantity: number }) => total + m.quantity, 0);
+      expect(sum, product.name).toBe(product.stockQuantity);
+    }
+
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const from = new Date(`${today}T12:00:00Z`);
+    from.setUTCDate(from.getUTCDate() - 29);
+    const report = await as(app, owner.accessToken)
+      .get('/v1/reports/summary')
+      .query({ from: from.toISOString().slice(0, 10), to: today })
+      .expect(200);
+    expect(report.body.topProducts.length).toBeGreaterThanOrEqual(3);
+  });
+
   it('a barbearia vizinha é isolada da demo', async () => {
     const neighbor = await loginPanel(DEMO_ACCOUNTS.neighborOwner.email);
     const clients = await as(app, neighbor.accessToken).get('/v1/clients').expect(200);
