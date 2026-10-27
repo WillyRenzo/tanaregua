@@ -91,6 +91,7 @@ agent_docs/               contexto aprofundado (regras de negócio, segurança, 
 - Mudou rota ou resposta da API? Rode `openapi:export` e `api:generate` e commite os dois arquivos (o CI barra a divergência).
 - NestJS 12, Next.js 16 e Prisma 7/8 mudaram APIs recentemente: consulte a doc oficial atual antes de usar um padrão que você só conhece de memória.
 - Commits seguem Conventional Commits e são atômicos: uma mudança lógica por commit, cada um passando em lint, typecheck e testes (veja `.claude/rules/general.md`).
+- Todo módulo novo entra no seed de desenvolvimento: no seed completo (`seedDemo`) e no complemento de uma demo existente (`completeDemo`, que só acrescenta o que falta e nunca sobrescreve personalização), com teste em `backend/test/demo-seed.e2e-spec.ts`.
 
 # Contexto Aprofundado
 
