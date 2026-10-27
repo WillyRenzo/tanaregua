@@ -67,3 +67,20 @@ export function useCancelBooking(slug: string) {
     onSettled: () => client.invalidateQueries({ queryKey: ['my-appointments', slug] }),
   });
 }
+
+export function useRescheduleBooking(slug: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, startsAt }: { id: string; startsAt: string }) =>
+      unwrap(
+        api.POST('/v1/public/{slug}/me/appointments/{id}/reschedule', {
+          params: { path: { slug, id } },
+          body: { startsAt },
+        }),
+      ),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: ['public-availability', slug] });
+      void client.invalidateQueries({ queryKey: ['my-appointments', slug] });
+    },
+  });
+}
