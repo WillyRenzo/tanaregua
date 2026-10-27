@@ -7,6 +7,7 @@ em um SaaS multi-tenant que lida com dados pessoais, salários e pagamentos.
 
 - JWT próprio: **access token curto** (~15 min) e **refresh token rotativo**. O refresh token é guardado como hash no banco, revogado no logout e invalida toda a família de tokens quando há reuso detectado.
 - Refresh token vai em cookie `httpOnly`, `Secure`, `SameSite`. Nunca em `localStorage`.
+- **Painel e agendamento online são sessões separadas**, cada uma com o seu cookie: `tnr_refresh` (equipe, renovado em `/v1/auth/refresh`) e `tnr_client_refresh` (cliente final, renovado em `/v1/auth/client/refresh`). Login no painel nunca grava o cookie do cliente, e vice-versa. Assim, a mesma pessoa (ou o dono testando a própria página) pode estar logada nos dois no mesmo navegador sem que uma sessão substitua a outra. Não volte a unificar os cookies.
 - Senhas com **argon2id**. Nunca logue senhas, tokens ou hashes.
 - O payload do JWT tem o mínimo: `sub`, `barbershopId`, papel/versão de permissões. Nada sensível, porque o payload é legível.
 - Rate limit (`@nestjs/throttler`) em login, refresh, recuperação de senha e nos endpoints públicos de agendamento.
