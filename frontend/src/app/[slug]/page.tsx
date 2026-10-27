@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
+import { BarbershopLogo, BrandStyle } from '@/components/barbershop-brand';
 import { LoadingRows } from '@/components/states';
 import { getPublicBarbershop } from '@/lib/api/server';
 import { BookingFlow } from './booking-flow';
@@ -34,13 +35,24 @@ async function BarbershopContent({ params }: { params: PageProps<'/[slug]'>['par
 
   return (
     <div className="flex min-h-dvh flex-col">
+      <BrandStyle brand={data.barbershop.brand} />
       <header className="bg-sidebar text-sidebar-foreground">
         <div className="mx-auto flex max-w-5xl flex-wrap items-end justify-between gap-4 px-4 py-8 sm:py-12">
-          <div>
-            <p className="font-heading text-sidebar-primary text-sm font-semibold tracking-[0.3em] uppercase">
-              Agendamento online
-            </p>
-            <h1 className="mt-2 text-5xl leading-none font-bold sm:text-6xl">{data.barbershop.name}</h1>
+          <div className="flex items-end gap-4">
+            {data.barbershop.brand.logoVersion && (
+              <BarbershopLogo
+                slug={slug}
+                name={data.barbershop.name}
+                logoVersion={data.barbershop.brand.logoVersion}
+                className="h-16 sm:h-20"
+              />
+            )}
+            <div>
+              <p className="font-heading text-sidebar-primary text-sm font-semibold tracking-[0.3em] uppercase">
+                Agendamento online
+              </p>
+              <h1 className="mt-2 text-5xl leading-none font-bold sm:text-6xl">{data.barbershop.name}</h1>
+            </div>
           </div>
           <Link
             href={`/${slug}/meus-agendamentos`}

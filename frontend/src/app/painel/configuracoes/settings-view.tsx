@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { errorMessage } from '@/lib/api/errors';
 import { zodResolver } from '@/lib/forms/zod-resolver';
 import { useBarbershop, useUpdateBarbershop, type BarbershopSettings } from '@/lib/queries';
+import { BrandSettings } from './brand-settings';
 
 /** Fusos do Brasil (o Acre e o Amazonas ocidental têm fuso próprio). */
 const TIMEZONES = [
@@ -28,7 +29,12 @@ export function SettingsView() {
   const barbershop = useBarbershop();
   if (barbershop.isLoading) return <LoadingRows />;
   if (barbershop.error) return <ErrorState error={barbershop.error} onRetry={() => barbershop.refetch()} />;
-  return <SettingsForm settings={barbershop.data!} />;
+  return (
+    <div className="grid gap-10">
+      <SettingsForm settings={barbershop.data!} />
+      <BrandSettings settings={barbershop.data!} />
+    </div>
+  );
 }
 
 const schema = z.object({

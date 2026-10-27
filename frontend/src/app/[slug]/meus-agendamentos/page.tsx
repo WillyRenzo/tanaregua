@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
+import { BrandStyle } from '@/components/barbershop-brand';
 import { LoadingRows } from '@/components/states';
 import { getPublicBarbershop } from '@/lib/api/server';
 import { MyAppointments } from './my-appointments';
@@ -19,10 +20,13 @@ async function Content({ params }: { params: PageProps<'/[slug]/meus-agendamento
   const data = await getPublicBarbershop((await params).slug);
   if (!data) notFound();
   return (
-    <MyAppointments
-      timezone={data.barbershop.timezone}
-      cancellationMinNoticeMinutes={data.barbershop.cancellationMinNoticeMinutes}
-      rescheduleMinNoticeMinutes={data.barbershop.rescheduleMinNoticeMinutes}
-    />
+    <>
+      <BrandStyle brand={data.barbershop.brand} />
+      <MyAppointments
+        timezone={data.barbershop.timezone}
+        cancellationMinNoticeMinutes={data.barbershop.cancellationMinNoticeMinutes}
+        rescheduleMinNoticeMinutes={data.barbershop.rescheduleMinNoticeMinutes}
+      />
+    </>
   );
 }
