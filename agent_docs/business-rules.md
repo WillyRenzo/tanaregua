@@ -30,7 +30,9 @@ Não invente regra para preencher uma lacuna: pergunte.
 - O agendamento online só oferece horários dentro do expediente do profissional, fora de bloqueios/folgas e sem conflito, numa grade de 15 minutos. O painel aceita encaixe fora do expediente, mas nunca em folga nem com conflito.
 - "Qualquer profissional" no agendamento online: o sistema escolhe o primeiro profissional (na ordem da equipe) livre no horário.
 - **Cancelamento online pelo cliente:** permitido até uma antecedência mínima configurável por barbearia (padrão **2 horas**), sem multa no MVP. Depois disso, só a barbearia cancela.
-- **[PENDENTE]** reagendamento pelo próprio cliente, multa e limite de no-shows.
+- **Reagendamento pelo próprio cliente** (fase 2): permitido até uma antecedência mínima configurável por barbearia (padrão **24 horas** antes do horário atual do agendamento). O novo horário segue as mesmas regras da reserva online (grade, expediente, folgas, conflito). Depois do prazo, só a barbearia reagenda.
+- **Sem multa e sem limite de faltas.** O cliente que falta continua podendo agendar.
+- **Falta sem justificativa** (fase 2): ao marcar "não compareceu", a barbearia pode registrar uma justificativa. Falta sem justificativa fica visível para a equipe no cadastro do cliente e no agendamento (contagem e datas), só como informação: não bloqueia nada e não aparece para o cliente.
 - **[PENDENTE]** se o mesmo cliente pode ter dois atendimentos simultâneos com profissionais diferentes.
 
 ## 3. Comandas (serviços executados)
@@ -47,14 +49,15 @@ Não invente regra para preencher uma lacuna: pergunte.
 - A comissão é configurável por serviço e/ou por funcionário, como percentual ou valor fixo.
   - Precedência (confirmada): regra específica funcionário+serviço > regra do serviço > padrão do funcionário. Sem regra aplicável, não há comissão.
   - Percentual em **basis points** (4000 = 40%); valor fixo em centavos. Arredondamento: meio centavo para cima, só em `calculateCommissionCents`.
-  - **[PROPOSTA]** a comissão nunca passa do valor cobrado pelo item (um fixo de R$ 15 sobre um item de R$ 10 com desconto gera R$ 10). Confirmar com o dono do produto.
+  - A comissão nunca passa do valor cobrado pelo item (confirmada): um fixo de R$ 15 sobre um item de R$ 10 com desconto gera R$ 10.
   - A comissão é calculada no fechamento da comanda e gravada (snapshot). Mudar a configuração não recalcula o passado.
 - Salários e comissões de terceiros são dados sensíveis: só o dono/admin vê. O profissional vê apenas as próprias comissões.
 - Relatórios financeiros derivam de comandas fechadas e lançamentos, nunca de agendamentos.
 
 ## 5. Pagamento online
 
-- Gateway **[PENDENTE]** (Mercado Pago, Asaas, Stripe...).
+- **Desacoplado do fornecedor.** O domínio fala só com a porta `PaymentGateway`; cada gateway é um adapter escolhido por configuração. Trocar de gateway não muda regra de negócio nem tabela (IDs externos ficam em colunas genéricas, com o nome do provedor). Ver `architecture.md`.
+- **Gateway inicial: Mercado Pago**, como um adapter. A escolha definitiva ainda pode mudar; por isso nenhuma regra, tela ou tabela pode depender de algo exclusivo do Mercado Pago.
 - O status do pagamento só muda por **webhook verificado** (assinatura validada) ou por consulta direta ao gateway. Nunca confie no redirect do frontend.
 - O processamento de webhook é **idempotente**: o mesmo evento recebido duas vezes não pode gerar dois lançamentos.
 - O sistema nunca armazena dados de cartão. Usa só os tokens/IDs do gateway.
@@ -63,13 +66,35 @@ Não invente regra para preencher uma lacuna: pergunte.
 
 - O cliente compra um pacote com N sessões de um ou mais serviços. Cada uso consome uma sessão, vinculada à comanda.
 - O saldo de sessões nunca fica negativo.
-- **[PENDENTE]** validade/expiração, transferência entre clientes e reembolso parcial.
+- **Validade configurável** por pacote (definida pela barbearia ao criar o pacote). Sessões não usadas até a data de validade expiram e não podem mais ser consumidas.
+- **Intransferível:** o pacote pertence ao cliente que comprou e não pode ser passado para outro cliente.
+- **Reembolso só quando o pacote foi pago antecipadamente.** O reembolso gera lançamento negativo no caixa (nunca apaga a venda) e encerra o pacote.
+- **O valor do reembolso é definido pela barbearia** a cada reembolso (até o valor pago pelo pacote), com motivo registrado.
+- **Pacote vencido não pode ser reembolsado.**
 
 ## 7. Estoque e produtos
 
 - Vender um produto na comanda dá baixa no estoque ao fechar a comanda. Estornar devolve.
 - Toda movimentação de estoque gera um registro (entrada, saída, ajuste) com autor e motivo. O saldo é derivado ou conciliável com esse histórico.
-- **[PENDENTE]** se é permitido vender com estoque zerado/negativo.
+- **A quantidade em estoque nunca fica negativa.** Fechar uma comanda que venderia mais do que o saldo é recusado com erro claro (garantido também no banco, sob concorrência).
+- **O valor total do estoque pode ficar negativo.** A valorização (custo × quantidade, com ajustes e devoluções a custos diferentes) não tem trava; é informativa.
+
+## 10. Identidade visual por barbearia (fase 2)
+
+- Cada barbearia pode enviar o **logo** e escolher as **cores da marca**, aplicados na página pública de agendamento **e** no painel da equipe dela. Sem configuração, vale a identidade TaNaRegua.
+- A personalização nunca quebra a acessibilidade: o sistema deriva as cores de texto e destaque garantindo contraste WCAG AA; se a cor escolhida não permitir, ela é ajustada (e o dono vê a prévia).
+- Só quem tem permissão de configurações da barbearia altera a identidade visual.
+- **Domínio próprio é opcional e responsabilidade da barbearia assinante:** ela compra o domínio (ex.: `agendar.barbeariadoze.com.br`) e aponta o DNS para a plataforma. O sistema só aceita o domínio depois de verificar que ele aponta para nós, e emite o HTTPS automaticamente. Sem domínio próprio, vale `tanaregua…/{slug}`.
+
+## 11. Assistente de IA (fase 4)
+
+- O dono conversa com um assistente dentro do painel, que interpreta pedidos e executa tarefas no sistema (ex.: "cadastre os produtos desta planilha").
+- O assistente age **como o usuário que está conversando**: só faz o que as permissões dele permitem e só enxerga a barbearia dele. Ele usa as mesmas regras de negócio da API; não tem atalho para o banco.
+- **Toda escrita pede confirmação.** Antes de criar, alterar ou apagar, o assistente mostra o que vai fazer (ex.: prévia dos 40 produtos lidos da planilha, com linhas inválidas destacadas) e só executa depois do "confirmar".
+- Toda ação executada pelo assistente fica registrada (quem pediu, o quê, quando) e aparece no histórico.
+- **Quem usa:** só dono/admin e recepcionista (permissão própria, `assistant:use`, concedida a esses dois papéis; profissional e cliente não têm). Dentro do assistente continuam valendo as permissões de cada um: a recepção não vê salários nem comissões de terceiros por ele.
+- **LGPD:** o assistente não expõe dados sensíveis de clientes. Ao provedor de IA vai só o necessário para a tarefa; telefone, e-mail e data de nascimento são mascarados ou substituídos por identificadores, e os dados completos aparecem na tela vindos direto da API, não do texto gerado pela IA.
+- **[PENDENTE]** limites de uso por plano de assinatura.
 
 ## 8. Usuários, papéis e permissões
 

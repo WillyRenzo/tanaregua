@@ -287,3 +287,39 @@
   4. Fechar a comanda.
   5. Conferir a comissão e o caixa do dia.
   6. Conferir o relatório do período.
+
+---
+
+## Roadmap depois do MVP (decisões de 27/10/2026)
+
+O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
+`business-rules.md`; desenho técnico em `architecture.md`.
+
+### B7 · Endurecimento e deploy (próximo)
+
+- Auditoria (`security-audit`, `code-review`), revisão de IDOR por endpoint, baseline de performance de `/availability` e da agenda do dia.
+- Deploy na **VPS da Hostinger** com Docker Compose de produção (`deploy/`): imagens multi-stage, Caddy com HTTPS, migrations com usuário próprio, imagens no GHCR publicadas pelo CI, backup criptografado fora da VPS.
+- Nada específico do provedor no código: trocar de hospedagem = rodar as mesmas imagens em outro lugar.
+
+### Fase 2 · Operação e personalização
+
+- **Reagendamento pelo cliente** até N horas antes (configurável, padrão 24 h), pela página pública.
+- **Faltas sem justificativa:** justificativa opcional ao marcar "não compareceu"; contagem visível para a equipe no cliente e no agendamento.
+- **Identidade visual por barbearia:** logo (porta `ObjectStorage`) e cores com contraste AA garantido, aplicados na página pública e no painel.
+- **Domínio próprio (opcional):** a barbearia compra e aponta o DNS; a plataforma verifica e emite HTTPS automaticamente.
+- **Estoque e produtos:** venda na comanda, movimentações com autor e motivo, quantidade nunca negativa (garantida no banco), valor total do estoque pode ficar negativo.
+- **Pacotes de serviços:** validade configurável por pacote, intransferível, reembolso só se pago antecipadamente e dentro da validade, com valor definido pela barbearia.
+- **Aniversários e campanhas** com consentimento (LGPD).
+
+### Fase 3 · Dinheiro
+
+- **Pagamento online** pela porta `PaymentGateway` (Mercado Pago como adapter inicial, trocável por configuração), webhook verificado e idempotente, reembolso de pacote pago antecipadamente.
+- **Salários e folha**, relatórios avançados.
+
+### Fase 4 · Assistente de IA
+
+- Chat no painel para o dono pedir tarefas em linguagem natural (ex.: importar produtos de uma planilha Excel).
+- Ferramentas = casos de uso existentes, com as permissões do usuário; toda escrita mostra prévia e só executa após confirmação; auditoria de cada ação.
+- Provedor de IA pela porta `LlmProvider`: Claude como adapter inicial, trocável a qualquer momento por configuração (`LLM_PROVIDER`), sem mudar ferramentas, prompts de domínio nem telas.
+- Acesso: dono e recepcionista (`assistant:use`). LGPD: PII de clientes mascarada antes de ir ao provedor.
+- Pendente: limites de uso por plano.

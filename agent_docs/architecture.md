@@ -46,6 +46,43 @@ A aplicação pré-valida só para dar mensagem amigável. Sob concorrência, o 
 - **Idempotência de POST** (`common/idempotency`): agendar e fechar comanda aceitam `Idempotency-Key`. A mesma chave devolve a resposta original; a mesma chave com outro corpo dá 422.
 - **Fuso:** tudo em UTC no banco; dia, expediente e grade são calculados no fuso da barbearia (`appointments/availability.ts`, função pura testada inclusive com horário de verão).
 
+## Fornecedores externos: portas e adaptadores
+
+Nenhum fornecedor externo aparece no domínio. Cada um é uma **porta** (interface no módulo
+que a usa) com **adapters** escolhidos por variável de ambiente; trocar de fornecedor é
+escrever um adapter novo e mudar a configuração, sem migration e sem mexer em regra de negócio.
+
+| Porta | Uso | Adapters | Status |
+|---|---|---|---|
+| `MailSender` | e-mails do outbox | `LogMailSender` (dev), `ResendMailSender` | implementada |
+| `PaymentGateway` | cobrança online, reembolso e webhooks | `MercadoPagoGateway` (inicial) + fake para testes; outros gateways (Asaas, Stripe…) entram como adapters novos | fase 3 |
+| `ObjectStorage` | logos da identidade visual (e futuros anexos) | disco local/volume (dev e VPS), S3-compatível | fase 2 |
+| `LlmProvider` | assistente de IA | `ClaudeProvider` (inicial, API da Anthropic) + fake para testes; outro provedor = adapter novo + `LLM_PROVIDER` | fase 4 |
+
+Regras para portas novas:
+- A interface fala a língua do domínio (`createCharge`, `parseWebhook`), não a do fornecedor. Tipos do SDK não vazam para fora do adapter.
+- IDs externos são gravados com o nome do provedor (`provider`, `externalId`), para conviver com dois provedores durante uma migração.
+- Efeito externo disparado por mudança de estado sai pelo outbox (AFA 12). Webhook entra por rota própria, verifica assinatura no adapter e é idempotente pelo ID do evento.
+- Todo adapter tem timeout e é coberto por teste com o fake; o adapter real tem teste de contrato isolado.
+
+## Deploy (Hostinger VPS, sem acoplamento)
+
+- **Destino inicial:** VPS da Hostinger rodando Docker Compose de produção: Postgres, API, web e um proxy reverso com HTTPS automático (Caddy). É a mesma topologia do desenvolvimento, com imagens de produção (build multi-stage, `node:24-alpine`, usuário não-root).
+- **Nada específico da Hostinger no código ou nas imagens.** Toda configuração vem de variáveis de ambiente validadas na inicialização; o compose de produção e os scripts de deploy ficam em `deploy/`. Mudar para outro provedor (outra VPS, Fly, Render, AWS) é rodar as mesmas imagens em outro lugar.
+- **Migrations** rodam como passo separado do deploy (`prisma migrate deploy`) com o usuário de migração, nunca com `tanaregua_app`.
+- **Pipeline:** o CI publica as imagens num registry (GHCR); o deploy na VPS faz `pull` + `migrate` + `up -d` por SSH. Rollback = subir a tag anterior.
+- **Domínio próprio da barbearia:** o Caddy emite certificado sob demanda (on-demand TLS) só para domínios que a API confirma estarem cadastrados e verificados (endpoint interno `ask`); o frontend resolve o `Host` para o slug da barbearia. Sem essa checagem, qualquer domínio apontado para a VPS geraria certificado.
+- **Dados:** backup diário criptografado do Postgres para fora da VPS (storage S3-compatível), com teste de restore. Volume do `ObjectStorage` local também entra no backup.
+
+## Assistente de IA (fase 4, desenho previsto)
+
+- Módulo `assistant` no monólito. O modelo recebe a conversa e uma lista de **ferramentas** (tool use) que são casos de uso já existentes (`createProduct`, `listAppointments`…), cada uma com schema Zod de entrada e a **mesma permissão** da rota equivalente.
+- As ferramentas chamam os services de domínio dentro de `TenantDb.run` com o contexto do usuário logado: RLS, permissões e regras valem igual. Não existe ferramenta de SQL livre.
+- Ferramentas de escrita não executam direto: geram um **plano** (prévia) que o usuário confirma no chat; só a confirmação executa, com `Idempotency-Key`.
+- Arquivos enviados (Excel, CSV) são lidos no backend por parsers determinísticos; o modelo vê o conteúdo como **dado**, nunca como instrução (risco de prompt injection, ver `security.md`).
+- Cada execução fica em uma tabela de auditoria por tenant (pedido, plano, confirmação, resultado).
+- **Independente do provedor:** conversa, ferramentas (Zod → JSON Schema) e resultados ficam num formato próprio do módulo; só o adapter traduz para a API do provedor (tool use do Claude, function calling de outro). Trocar de provedor não muda ferramentas nem telas; os testes rodam contra o adapter fake.
+
 ## Frontend
 
 - `/painel/*`: client-side (React Query sobre o cliente tipado). A sessão é reconstruída pelo cookie de refresh no `PanelShell`. As páginas exportam `instant = false`, porque são bloqueadas por sessão (validação de navegação instantânea do Next 16.3+).
@@ -58,7 +95,7 @@ A aplicação pré-valida só para dar mensagem amigável. Sob concorrência, o 
 |---|---|
 | 01 Composable / 02 DDD | módulos por domínio, DI, agregados `Appointment` e `Order` com invariantes |
 | 05 API-first | contrato OpenAPI versionado + cliente gerado + checagem no CI |
-| 06 SaaS abstraction | `MailSender` (Log/Resend); gateway de pagamento seguirá o mesmo padrão |
+| 06 SaaS abstraction | portas e adaptadores para todo fornecedor externo (e-mail, pagamento, storage, IA) e deploy em containers sem dependência do provedor |
 | 09 Zero-trust | guard global deny-by-default, permissões, RLS, menor privilégio no banco |
 | 12 Event-driven | outbox transacional, consumidor idempotente, dead letter |
 | 14 Resiliência | timeout em chamada externa, retry com backoff no outbox (sem circuit breaker: só há um fornecedor externo) |
@@ -75,3 +112,5 @@ A aplicação pré-valida só para dar mensagem amigável. Sob concorrência, o 
 - Não usar `Promise.all` dentro de uma transação Prisma: é tudo a mesma conexão, então não há ganho, e gera warning de depreciação no `pg`.
 - Não usar `prisma db push`, e não deixar FK/índice criado à mão fora do `schema.prisma` (a próxima migration o apagaria; ver `.claude/rules/database.md`).
 - Não editar ou apagar comanda fechada; não dar UPDATE/DELETE em lançamentos.
+- Não importar SDK de fornecedor (gateway, storage, IA, e-mail) fora do adapter, nem colocar configuração específica da Hostinger no código.
+- Não dar ao assistente de IA ferramenta que contorne services, permissões ou confirmação de escrita.
