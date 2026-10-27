@@ -11,6 +11,7 @@ Where each principle is implemented in TaNaRegua:
 - Automated validation → `.claude/settings.json` hook blocks `git commit` on lint/typecheck failure; GitHub Actions runs the full pipeline on every PR.
 - Test-driven bug fixes → Vitest (backend unit + e2e against real Postgres), frontend test runner per `.claude/rules/frontend.md`.
 - Stack-specific practices → `.claude/rules/backend.md`, `frontend.md`, `database.md`.
+- Demo data always current → `backend/src/seed/demo-seed.ts`: every new module ships with examples in the full seed (`seedDemo`) and in the top-up of an existing demo (`completeDemo`), covered by `backend/test/demo-seed.e2e-spec.ts`.
 
 - **Correctness over speed.** Prefer a solution that's verifiably correct
   over one that's merely fast to write.
@@ -36,6 +37,11 @@ Where each principle is implemented in TaNaRegua:
   that library's current official docs rather than relying on
   potentially outdated training knowledge; APIs and recommended patterns
   change between versions.
+- **Every feature ships with demo data.** A module isn't done until the
+  development seed shows it in use, both for a fresh database and for a
+  database that already has the demo from an earlier version (the top-up
+  adds only what's missing, never duplicates, never overwrites what the
+  user customized). Otherwise new features stay invisible in local testing.
 - **No unexplained magic.** Anything non-obvious (a workaround, a
   performance trick, an unusual dependency) gets a short comment
   explaining why, not just what.

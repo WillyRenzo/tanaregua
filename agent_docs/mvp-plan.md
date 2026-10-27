@@ -313,6 +313,11 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
 
 ### Fase 3 · Dinheiro
 
+- **Assinatura e planos (vem primeiro na fase 3):** o uso do TaNaRegua passa a exigir assinatura por barbearia, com vários planos. O básico cobre as fases 1 e 2; o mais caro inclui o assistente de IA (fase 4); proposta de um intermediário com a fase 3. Entregas, em ordem:
+  1. catálogo de recursos, planos e assinatura por barbearia, com verificação na API (`@RequiresFeature`) e no painel (recurso fora do plano aparece como upgrade);
+  2. cobrança recorrente pela porta `PaymentGateway` (Mercado Pago), com webhook verificado e idempotente;
+  3. inadimplência, teste grátis e troca de plano, conforme as decisões pendentes em `business-rules.md` §12.
+  - A verificação de recursos precisa estar pronta **antes** de liberar qualquer recurso da fase 3 ou 4, senão o plano básico já nasceria com eles.
 - **Pagamento online** pela porta `PaymentGateway` (Mercado Pago como adapter inicial, trocável por configuração), webhook verificado e idempotente, reembolso de pacote pago antecipadamente.
 - **Salários e folha**, relatórios avançados.
 
@@ -321,5 +326,5 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
 - Chat no painel para o dono pedir tarefas em linguagem natural (ex.: importar produtos de uma planilha Excel).
 - Ferramentas = casos de uso existentes, com as permissões do usuário; toda escrita mostra prévia e só executa após confirmação; auditoria de cada ação.
 - Provedor de IA pela porta `LlmProvider`: Claude como adapter inicial, trocável a qualquer momento por configuração (`LLM_PROVIDER`), sem mudar ferramentas, prompts de domínio nem telas.
-- Acesso: dono e recepcionista (`assistant:use`). LGPD: PII de clientes mascarada antes de ir ao provedor.
-- Pendente: limites de uso por plano.
+- Acesso: dono e recepcionista (`assistant:use`), **só no plano mais completo** (recurso `assistant`). LGPD: PII de clientes mascarada antes de ir ao provedor.
+- Pendente: limite de uso dentro do plano.

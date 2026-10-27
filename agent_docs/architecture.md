@@ -59,7 +59,7 @@ escrever um adapter novo e mudar a configuração, sem migration e sem mexer em 
 |---|---|---|---|
 | `MailSender` | e-mails do outbox | `LogMailSender` (dev), `ResendMailSender` | implementada |
 | `WhatsAppSender` | aniversários e campanhas (com consentimento) | log (dev) + adapter do provedor escolhido | fase 2; provedor **[PENDENTE]** |
-| `PaymentGateway` | cobrança online, reembolso e webhooks | `MercadoPagoGateway` (inicial) + fake para testes; outros gateways (Asaas, Stripe…) entram como adapters novos | fase 3 |
+| `PaymentGateway` | cobrança online, reembolso, **assinatura recorrente do TaNaRegua** e webhooks | `MercadoPagoGateway` (inicial) + fake para testes; outros gateways (Asaas, Stripe…) entram como adapters novos | fase 3 |
 | `ObjectStorage` | logos da identidade visual (e futuros anexos) | `LocalDiskStorage` (dev e VPS com volume; `STORAGE_LOCAL_DIR`); S3-compatível depois | implementada (`common/storage`) |
 | `LlmProvider` | assistente de IA | `ClaudeProvider` (inicial, API da Anthropic) + fake para testes; outro provedor = adapter novo + `LLM_PROVIDER` | fase 4 |
 
@@ -86,6 +86,19 @@ Regras para portas novas:
 - Arquivos enviados (Excel, CSV) são lidos no backend por parsers determinísticos; o modelo vê o conteúdo como **dado**, nunca como instrução (risco de prompt injection, ver `security.md`).
 - Cada execução fica em uma tabela de auditoria por tenant (pedido, plano, confirmação, resultado).
 - **Independente do provedor:** conversa, ferramentas (Zod → JSON Schema) e resultados ficam num formato próprio do módulo; só o adapter traduz para a API do provedor (tool use do Claude, function calling de outro). Trocar de provedor não muda ferramentas nem telas; os testes rodam contra o adapter fake.
+
+## Assinatura e planos (desenho previsto; regras em business-rules §12)
+
+O mesmo princípio das permissões: **o código checa recursos, nunca nomes de plano**.
+
+- **Catálogo de recursos em código** (`FEATURES`, como `PERMISSIONS` em `auth/permissions.ts`): uma chave por capacidade vendável (`online-payment`, `payroll`, `advanced-reports`, `assistant`…). O núcleo das fases 1 e 2 vale em todo plano e não tem chave própria.
+- **Planos no banco**, catálogo global (sem tenant): `plans` com chave, nome, preço em centavos, ciclo, lista de recursos e limites. Plano novo ou mudança de conteúdo = dado, não código.
+- **Assinatura por barbearia**: `subscriptions` (com tenant e RLS) com plano, status (`TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELED`), fim do período, `provider` e `externalId`. Eventos do gateway em tabela com unique no ID do evento (idempotência).
+- **Verificação na API**: decorator `@RequiresFeature('assistant')` + guard global depois do `AccessGuard`, que lê os recursos da assinatura da barbearia (cache curto por processo, invalidado na troca de plano). Fora do plano: 403 com `type` `plan-upgrade-required`. Acesso efetivo = permissão **e** recurso. O teste de OpenAPI passa a exigir que rotas com `@RequiresFeature` documentem o recurso, como já faz com permissões.
+- **Plano não vai no JWT**: muda com pagamento a qualquer momento e o token vive 15 min. O perfil da sessão (`/v1/auth/me`) devolve os recursos para o painel decidir o que mostrar ou oferecer como upgrade; a API revalida sempre.
+- **Cobrança** pela porta `PaymentGateway` (assinatura recorrente no Mercado Pago como adapter inicial). Webhook verificado → atualiza a assinatura → efeitos (e-mail de cobrança, aviso de inadimplência) saem pelo outbox.
+- **Administração dos planos** é da plataforma, não das barbearias: superfície separada, com autenticação própria e sem acesso aos dados dos tenants. **[PENDENTE]** quando e como (no começo, os planos podem vir por migration/seed).
+- **Seed**: a Barbearia Demo fica no plano mais completo (mostra tudo) e a Vizinha no básico (mostra o bloqueio e o convite de upgrade), seguindo a regra de todo módulo no seed.
 
 ## Frontend
 

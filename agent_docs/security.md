@@ -57,6 +57,8 @@ em um SaaS multi-tenant que lida com dados pessoais, salários e pagamentos.
 
 - Nunca armazene número de cartão/CVV: use checkout ou tokenização do gateway (fora do escopo PCI).
 - Webhooks: verifique a assinatura, rejeite eventos antigos (timestamp), processe de forma idempotente (tabela de eventos processados com unique no ID do evento) e responda rápido (processamento pesado vai para uma fila).
+- **Plano da assinatura (business-rules §12):** o recurso do plano é verificado na API em toda rota que depende dele (`@RequiresFeature`), nunca só escondido no frontend. O plano não vai no JWT (mudaria sem o token saber). Upgrade só vale depois de confirmado pelo gateway (webhook verificado), nunca pelo retorno do checkout no navegador.
+- A administração de planos é da plataforma, com autenticação separada; quem administra planos não ganha acesso aos dados das barbearias.
 
 ## Identidade visual (upload de logo e cores)
 

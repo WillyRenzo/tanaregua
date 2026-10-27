@@ -102,7 +102,7 @@ Não invente regra para preencher uma lacuna: pergunte.
 - Toda ação executada pelo assistente fica registrada (quem pediu, o quê, quando) e aparece no histórico.
 - **Quem usa:** só dono/admin e recepcionista (permissão própria, `assistant:use`, concedida a esses dois papéis; profissional e cliente não têm). Dentro do assistente continuam valendo as permissões de cada um: a recepção não vê salários nem comissões de terceiros por ele.
 - **LGPD:** o assistente não expõe dados sensíveis de clientes. Ao provedor de IA vai só o necessário para a tarefa; telefone, e-mail e data de nascimento são mascarados ou substituídos por identificadores, e os dados completos aparecem na tela vindos direto da API, não do texto gerado pela IA.
-- **[PENDENTE]** limites de uso por plano de assinatura.
+- **Disponível só no plano mais completo** (§12). **[PENDENTE]** limite de uso dentro do plano (ex.: mensagens por mês).
 
 ## 8. Usuários, papéis e permissões
 
@@ -118,3 +118,24 @@ Não invente regra para preencher uma lacuna: pergunte.
 - Mensagens de aniversário ou marketing exigem consentimento registrado (data e canal). Sem consentimento, o aniversário aparece só como lembrete interno.
 - Canais (fase 2): **e-mail e WhatsApp**, cada um por uma porta própria com adapter trocável. A mensagem só sai pelo canal que o cliente consentiu. Provedor de WhatsApp **[PENDENTE]**.
 - O cliente pode pedir exclusão ou anonimização. O histórico financeiro é mantido anonimizado.
+
+## 12. Assinatura e planos (como o TaNaRegua é vendido)
+
+- **Usar o sistema exige assinatura ativa**, por barbearia (tenant). Quem assina e paga é o dono; a cobrança é recorrente.
+- **Vários planos.** Cada plano é um conjunto de **recursos** (e, se preciso, limites). Confirmado:
+  - o plano **mais básico** inclui só as **fases 1 e 2** (agenda, agendamento online, comanda, comissões, caixa, relatórios básicos, estoque, pacotes, aniversários, identidade visual…);
+  - o plano **mais caro** inclui o **assistente de IA** (fase 4).
+  - **[PROPOSTA]** três planos: **Essencial** (fases 1 e 2), **Profissional** (+ fase 3: pagamento online, salários e relatórios avançados) e **Premium** (+ assistente de IA). Nomes, preços e o conteúdo exato de cada um ainda serão definidos.
+- **Criar ou mudar planos não exige código.** Assim como as permissões (§8), o sistema checa **recursos**, nunca o nome do plano. Um plano novo é um registro novo com a lista de recursos dele.
+- **Acesso efetivo = permissão do papel E recurso do plano.** Ex.: a recepcionista tem `assistant:use`, mas só usa o assistente se a barbearia estiver num plano com o recurso do assistente.
+- **Recurso fora do plano:** a API recusa (erro `plan-upgrade-required`) e o painel mostra o recurso como "disponível no plano X", com convite para trocar de plano. Esconder no frontend não basta: quem garante é a API.
+- **Trocar para um plano menor nunca apaga dados.** O que ficou fora do plano só fica inacessível até um novo upgrade (ex.: o histórico de folha continua no banco).
+- **Cobrança pela porta `PaymentGateway`** (§5): a mesma de pagamento online, Mercado Pago como adapter inicial. O status da assinatura só muda por **webhook verificado** ou consulta ao gateway, e o processamento é idempotente. O sistema nunca guarda dados de cartão.
+- **[PENDENTE]**
+  - preços, nomes definitivos, ciclo (mensal/anual) e desconto anual;
+  - período de teste grátis (duração e qual plano durante o teste);
+  - inadimplência: dias de carência, o que acontece depois (ex.: painel só leitura, página pública de agendamento continua ou para) e reativação;
+  - troca de plano no meio do ciclo (cobrança proporcional ou só no próximo ciclo);
+  - limites por plano (ex.: número de profissionais, uso do assistente);
+  - emissão de nota fiscal da assinatura;
+  - plano das barbearias que já existirem quando a cobrança começar.

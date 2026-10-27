@@ -8,7 +8,9 @@ pequenos negócios. O MVP (agenda, agendamento online, comanda, comissões, caix
 relatórios) está implementado. Fase 2: estoque, pacotes, aniversários, identidade
 visual por barbearia, reagendamento pelo cliente e faltas sem justificativa. Fase 3:
 pagamento online, salários e relatórios avançados. Fase 4: assistente de IA que executa
-tarefas no sistema. Roadmap em `agent_docs/mvp-plan.md`.
+tarefas no sistema. Modelo de negócio: assinatura paga por barbearia, com vários planos
+(o básico cobre as fases 1 e 2; o mais completo inclui o assistente de IA). Roadmap em
+`agent_docs/mvp-plan.md`.
 
 # Stack
 
@@ -91,6 +93,8 @@ agent_docs/               contexto aprofundado (regras de negócio, segurança, 
 - Mudou rota ou resposta da API? Rode `openapi:export` e `api:generate` e commite os dois arquivos (o CI barra a divergência).
 - NestJS 12, Next.js 16 e Prisma 7/8 mudaram APIs recentemente: consulte a doc oficial atual antes de usar um padrão que você só conhece de memória.
 - Commits seguem Conventional Commits e são atômicos: uma mudança lógica por commit, cada um passando em lint, typecheck e testes (veja `.claude/rules/general.md`).
+- Todo módulo novo entra no seed de desenvolvimento: no seed completo (`seedDemo`) e no complemento de uma demo existente (`completeDemo`, que só acrescenta o que falta e nunca sobrescreve personalização), com teste em `backend/test/demo-seed.e2e-spec.ts`.
+- Recurso que depende de plano (fase 3 em diante) é verificado na API por recurso, nunca por nome de plano (`business-rules.md` §12).
 
 # Contexto Aprofundado
 
