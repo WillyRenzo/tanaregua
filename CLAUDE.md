@@ -5,8 +5,10 @@ agenda integrada, comandas, financeiro, comissões e salários, estoque, pacotes
 de serviços, aniversários de clientes, relatórios e agendamento online pelo
 cliente final. Projeto paralelo de dev solo, com foco em preço acessível para
 pequenos negócios. O MVP (agenda, agendamento online, comanda, comissões, caixa,
-relatórios) está implementado; estoque, pacotes, aniversários, pagamento online e
-salários são as fases 2 e 3.
+relatórios) está implementado. Fase 2: estoque, pacotes, aniversários, identidade
+visual por barbearia, reagendamento pelo cliente e faltas sem justificativa. Fase 3:
+pagamento online, salários e relatórios avançados. Fase 4: assistente de IA que executa
+tarefas no sistema. Roadmap em `agent_docs/mvp-plan.md`.
 
 # Stack
 
@@ -17,7 +19,8 @@ salários são as fases 2 e 3.
 - **Banco:** PostgreSQL 18 + Prisma ORM **7.10** (driver adapter `@prisma/adapter-pg`). A tag `latest` do npm aponta para o Prisma 8 RC: não atualize sem decisão explícita.
 - **Auth:** JWT próprio no NestJS (access token de 15 min + refresh token rotativo em cookie httpOnly)
 - **npm** com `.npmrc` de supply chain (`ignore-scripts`, `min-release-age=3`) em cada app
-- **CI:** GitHub Actions (`.github/workflows/ci.yml`) · **Deploy:** ainda não definido
+- **CI:** GitHub Actions (`.github/workflows/ci.yml`) · **Deploy:** VPS da Hostinger com Docker Compose, sem acoplamento ao provedor (`agent_docs/architecture.md`)
+- **Fornecedores externos** (e-mail, pagamento, storage, IA) só por portas e adaptadores; nada de SDK fora do adapter
 
 # Comandos
 

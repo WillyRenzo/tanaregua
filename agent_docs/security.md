@@ -57,10 +57,26 @@ em um SaaS multi-tenant que lida com dados pessoais, salários e pagamentos.
 - Nunca armazene número de cartão/CVV: use checkout ou tokenização do gateway (fora do escopo PCI).
 - Webhooks: verifique a assinatura, rejeite eventos antigos (timestamp), processe de forma idempotente (tabela de eventos processados com unique no ID do evento) e responda rápido (processamento pesado vai para uma fila).
 
+## Identidade visual (upload de logo e cores)
+
+- Logo: só PNG, JPEG ou WebP, validado pelos bytes do arquivo (não pela extensão nem pelo `Content-Type`), até 1 MB. **SVG não é aceito** (pode carregar script). A imagem é reprocessada no backend (redimensionada e sem metadados EXIF) antes de ser salva.
+- O arquivo é salvo com nome gerado pelo sistema, sob o prefixo do tenant, e servido com `Content-Type` fixo e `X-Content-Type-Options: nosniff`.
+- Cores entram só como hexadecimal validado (`#RRGGBB`) e viram CSS custom properties. Nunca interpole texto livre da barbearia em CSS ou HTML.
+- Domínio próprio: só é ativado depois de verificado (DNS apontando para a plataforma), é único entre barbearias e o HTTPS sob demanda só é emitido para domínios ativos. O `Host` da requisição nunca define o tenant de rotas autenticadas; ele só resolve a página pública, como o slug.
+
+## Assistente de IA
+
+- **Prompt injection é o risco principal.** Conteúdo de arquivos, nomes de clientes e qualquer dado do banco é dado, não instrução. A defesa não depende do prompt: o assistente só tem ferramentas com as permissões do usuário, sem acesso a outro tenant, e toda escrita exige confirmação humana com prévia.
+- Sem ferramenta genérica (SQL, HTTP, shell). Cada ferramenta valida a entrada com Zod como uma rota da API.
+- Limite de uso por tenant (rate limit e orçamento de tokens) para evitar abuso e custo descontrolado.
+- Enviar dados ao provedor de IA é tratamento de dados pessoais (LGPD): mínimo necessário, mascarar o que não for preciso para a tarefa, provedor com contrato de processamento de dados e sem uso dos dados para treino. A chave da API fica só no backend.
+- As ferramentas devolvem ao modelo identificadores e dados mascarados (ex.: `Carlos S., tel. ••••7777`), nunca telefone, e-mail ou nascimento completos. A interface mostra os dados completos buscando-os na API com as permissões do usuário. Só dono e recepcionista têm `assistant:use`.
+- Logs de auditoria das ações do assistente sem PII em texto aberto.
+
 ## Segredos e variáveis de ambiente
 
 - `.env` nunca é commitado (está no `.gitignore`). Cada app tem um `.env.example` com as chaves, sem valores.
-- Segredos de CI ficam em GitHub Actions Secrets. Em produção, use o gerenciador de segredos da plataforma (ainda não definida).
+- Segredos de CI ficam em GitHub Actions Secrets. Em produção (VPS da Hostinger), os segredos ficam num `.env` fora do repositório, legível só pelo usuário do deploy (`chmod 600`), injetado no Docker Compose; nunca dentro da imagem. SSH da VPS só por chave, sem login de root por senha.
 - Valide as env vars na inicialização (`@nestjs/config` + schema) e falhe se faltar alguma.
 - Segredos JWT longos e aleatórios, diferentes para access e refresh.
 
