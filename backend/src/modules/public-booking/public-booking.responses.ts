@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { brandSchema } from '../registry.responses.js';
 
 export const publicBarbershopSchema = z
   .object({
@@ -7,6 +8,7 @@ export const publicBarbershopSchema = z
     timezone: z.string(),
     cancellationMinNoticeMinutes: z.int(),
     rescheduleMinNoticeMinutes: z.int(),
+    brand: brandSchema,
   })
   .meta({ id: 'PublicBarbershop' });
 

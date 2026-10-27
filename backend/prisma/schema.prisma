@@ -28,6 +28,11 @@ model Barbershop {
   rescheduleMinNoticeMinutes   Int      @default(1440) @map("reschedule_min_notice_minutes")
   /// Intervalo obrigatório entre atendimentos do mesmo profissional.
   bufferMinutes                Int      @default(0) @map("buffer_minutes")
+  /// Identidade visual (business-rules §10): cores em hex minúsculo (#rrggbb).
+  brandPrimaryColor            String?  @map("brand_primary_color")
+  brandSecondaryColor          String?  @map("brand_secondary_color")
+  /// Chave do logo no ObjectStorage (nome gerado pelo sistema, nunca vindo do usuário).
+  logoKey                      String?  @map("logo_key")
   createdAt                    DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt                    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 

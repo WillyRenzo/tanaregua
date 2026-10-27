@@ -705,6 +705,16 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 120
+                  },
+                  "brandPrimaryColor": {
+                    "nullable": true,
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  },
+                  "brandSecondaryColor": {
+                    "nullable": true,
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
                   }
                 },
                 "additionalProperties": false
@@ -754,7 +764,147 @@
             }
           }
         },
-        "summary": "Atualiza as configurações",
+        "summary": "Atualiza as configurações (inclui as cores da marca)",
+        "tags": [
+          "Barbearia"
+        ],
+        "x-required-permissions": [
+          "barbershop:manage"
+        ],
+        "description": "**Permissões (basta uma):** `barbershop:manage`"
+      }
+    },
+    "/v1/barbershop/logo": {
+      "put": {
+        "operationId": "BarbershopsController_uploadLogo",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "PNG, JPEG ou WebP, até 1 MB"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BarbershopSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`about:blank`: Arquivo maior que 1 MB.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid-image`: Arquivo ausente, corrompido ou fora de PNG/JPEG/WebP (SVG não é aceito).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Envia ou troca o logo (reprocessado para WebP, até 512×512)",
+        "tags": [
+          "Barbearia"
+        ],
+        "x-required-permissions": [
+          "barbershop:manage"
+        ],
+        "description": "**Permissões (basta uma):** `barbershop:manage`"
+      },
+      "delete": {
+        "operationId": "BarbershopsController_removeLogo",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BarbershopSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Remove o logo (volta para a identidade TaNaRegua)",
         "tags": [
           "Barbearia"
         ],
@@ -3496,6 +3646,63 @@
         "security": []
       }
     },
+    "/v1/public/{slug}/logo": {
+      "get": {
+        "operationId": "PublicBookingController_logo",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 50,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Imagem do logo (WebP)",
+            "content": {
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso inexistente ou de outra barbearia.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Muitas requisições do mesmo IP (rate limit).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Logo da barbearia",
+        "tags": [
+          "Agendamento online"
+        ],
+        "x-public": true,
+        "security": []
+      }
+    },
     "/v1/public/{slug}/services": {
       "get": {
         "operationId": "PublicBookingController_services",
@@ -5678,6 +5885,9 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "brand": {
+            "$ref": "#/components/schemas/Brand"
           }
         },
         "required": [
@@ -5687,7 +5897,31 @@
           "timezone",
           "cancellationMinNoticeMinutes",
           "rescheduleMinNoticeMinutes",
-          "bufferMinutes"
+          "bufferMinutes",
+          "brand"
+        ],
+        "additionalProperties": false
+      },
+      "Brand": {
+        "type": "object",
+        "properties": {
+          "primaryColor": {
+            "nullable": true,
+            "type": "string"
+          },
+          "secondaryColor": {
+            "nullable": true,
+            "type": "string"
+          },
+          "logoVersion": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "primaryColor",
+          "secondaryColor",
+          "logoVersion"
         ],
         "additionalProperties": false
       },
@@ -6374,6 +6608,9 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "brand": {
+            "$ref": "#/components/schemas/Brand"
           }
         },
         "required": [
@@ -6381,7 +6618,8 @@
           "slug",
           "timezone",
           "cancellationMinNoticeMinutes",
-          "rescheduleMinNoticeMinutes"
+          "rescheduleMinNoticeMinutes",
+          "brand"
         ],
         "additionalProperties": false
       },

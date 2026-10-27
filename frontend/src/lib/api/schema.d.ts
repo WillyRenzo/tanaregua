@@ -175,10 +175,34 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Atualiza as configurações
+         * Atualiza as configurações (inclui as cores da marca)
          * @description **Permissões (basta uma):** `barbershop:manage`
          */
         patch: operations["BarbershopsController_update"];
+        trace?: never;
+    };
+    "/v1/barbershop/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Envia ou troca o logo (reprocessado para WebP, até 512×512)
+         * @description **Permissões (basta uma):** `barbershop:manage`
+         */
+        put: operations["BarbershopsController_uploadLogo"];
+        post?: never;
+        /**
+         * Remove o logo (volta para a identidade TaNaRegua)
+         * @description **Permissões (basta uma):** `barbershop:manage`
+         */
+        delete: operations["BarbershopsController_removeLogo"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/roles": {
@@ -634,6 +658,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/{slug}/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Logo da barbearia */
+        get: operations["PublicBookingController_logo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/{slug}/services": {
         parameters: {
             query?: never;
@@ -1030,6 +1071,12 @@ export interface components {
             cancellationMinNoticeMinutes: number;
             rescheduleMinNoticeMinutes: number;
             bufferMinutes: number;
+            brand: components["schemas"]["Brand"];
+        };
+        Brand: {
+            primaryColor: string | null;
+            secondaryColor: string | null;
+            logoVersion: string | null;
         };
         Role: {
             /** Format: uuid */
@@ -1198,6 +1245,7 @@ export interface components {
             timezone: string;
             cancellationMinNoticeMinutes: number;
             rescheduleMinNoticeMinutes: number;
+            brand: components["schemas"]["Brand"];
         };
         PublicProfessional: {
             /** Format: uuid */
@@ -1867,6 +1915,8 @@ export interface operations {
                     cancellationMinNoticeMinutes?: number;
                     rescheduleMinNoticeMinutes?: number;
                     bufferMinutes?: number;
+                    brandPrimaryColor?: string | null;
+                    brandSecondaryColor?: string | null;
                 };
             };
         };
@@ -1887,6 +1937,119 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    BarbershopsController_uploadLogo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description PNG, JPEG ou WebP, até 1 MB
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BarbershopSettings"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `about:blank`: Arquivo maior que 1 MB. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `invalid-image`: Arquivo ausente, corrompido ou fora de PNG/JPEG/WebP (SVG não é aceito). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    BarbershopsController_removeLogo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BarbershopSettings"];
                 };
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
@@ -3622,6 +3785,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicBarbershop"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Muitas requisições do mesmo IP (rate limit). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PublicBookingController_logo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Imagem do logo (WebP) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/webp": string;
                 };
             };
             /** @description Recurso inexistente ou de outra barbearia. */

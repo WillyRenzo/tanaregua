@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { API_TAGS, ApiProblem, ApiResult, Idempotent } from '../../common/http/openapi.js';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { clientAppointmentViewSchema } from '../appointments/appointments.responses.js';
 import { serviceViewSchema, sessionResponseSchema } from '../registry.responses.js';
 import {
@@ -21,6 +21,7 @@ import {
   Post,
   Query,
   Res,
+  StreamableFile,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
@@ -33,7 +34,7 @@ import {
   type ClientRescheduleInput,
 } from '../appointments/appointments.schemas.js';
 import { SessionCookieService, type SessionResponse } from '../auth/session-cookie.service.js';
-import { BarbershopsModule } from '../barbershops/barbershops.module.js';
+import { BarbershopsModule, BarbershopsService } from '../barbershops/barbershops.module.js';
 import { CatalogModule } from '../catalog/catalog.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { StaffModule } from '../staff/staff.module.js';
@@ -59,6 +60,7 @@ export class PublicBookingController {
   constructor(
     @Inject(PublicBookingService) private readonly booking: PublicBookingService,
     @Inject(SessionCookieService) private readonly cookies: SessionCookieService,
+    @Inject(BarbershopsService) private readonly barbershops: BarbershopsService,
   ) {}
 
   @Public()
@@ -68,6 +70,27 @@ export class PublicBookingController {
   @Get()
   info(@Param('slug', { schema: slugSchema }) slug: string) {
     return this.booking.info(slug);
+  }
+
+  /**
+   * Logo da barbearia, sempre WebP reprocessado no upload. O frontend põe a versão do
+   * logo na URL (?v=), então a imagem pode ficar em cache por um dia.
+   */
+  @Public()
+  @Throttle(BROWSE_THROTTLE)
+  @ApiOkResponse({
+    description: 'Imagem do logo (WebP)',
+    content: { 'image/webp': { schema: { type: 'string', format: 'binary' } } },
+  })
+  @ApiOperation({ summary: 'Logo da barbearia' })
+  @Get('logo')
+  async logo(
+    @Param('slug', { schema: slugSchema }) slug: string,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    const logo = await this.barbershops.logo(slug);
+    response.setHeader('Cache-Control', 'public, max-age=86400');
+    return new StreamableFile(logo.body, { type: logo.contentType, length: logo.body.length });
   }
 
   @Public()

@@ -40,6 +40,7 @@ export class PublicBookingService {
       timezone: shop.timezone,
       cancellationMinNoticeMinutes: shop.cancellationMinNoticeMinutes,
       rescheduleMinNoticeMinutes: shop.rescheduleMinNoticeMinutes,
+      brand: shop.brand,
     };
   }
 
