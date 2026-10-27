@@ -73,6 +73,28 @@ export class FinanceService {
     });
   }
 
+  /**
+   * Reembolso de pacote pago antecipadamente (business-rules §6): saída de caixa ligada à
+   * comanda da venda, que continua fechada e intacta. Não mexe em comissões já lançadas.
+   */
+  async recordRefund(
+    tx: Tx,
+    barbershopId: string,
+    refund: { orderId: string; method: PaymentMethod; amountCents: number; occurredAt: Date },
+  ): Promise<void> {
+    if (refund.amountCents === 0) return;
+    await tx.cashEntry.create({
+      data: {
+        barbershopId,
+        orderId: refund.orderId,
+        method: refund.method,
+        kind: 'REFUND',
+        amountCents: -refund.amountCents,
+        occurredAt: refund.occurredAt,
+      },
+    });
+  }
+
   /** Estorno: espelha cada lançamento original com o valor negativo. */
   async recordReversal(tx: Tx, barbershopId: string, orderId: string, occurredAt: Date): Promise<void> {
     const commissions = await tx.commissionEntry.findMany({

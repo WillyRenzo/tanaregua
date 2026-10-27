@@ -12,9 +12,13 @@ export const orderViewSchema = z
     items: z.array(
       z.object({
         id: z.uuid(),
-        kind: z.enum(['SERVICE', 'PRODUCT']),
+        kind: z.enum(['SERVICE', 'PRODUCT', 'PACKAGE']),
         serviceId: z.uuid().nullable(),
         productId: z.uuid().nullable(),
+        /** Pacote vendido neste item. */
+        packageId: z.uuid().nullable(),
+        /** Serviço pago com sessão deste pacote do cliente (cobra zero). */
+        clientPackageId: z.uuid().nullable(),
         name: z.string(),
         /** Null em produto vendido no balcão. */
         professional: z.object({ id: z.uuid(), name: z.string() }).nullable(),
@@ -47,7 +51,7 @@ export const cashDaySchema = z
         id: z.uuid(),
         orderId: z.uuid(),
         method: paymentMethodSchema,
-        kind: z.enum(['ENTRY', 'REVERSAL']),
+        kind: z.enum(['ENTRY', 'REVERSAL', 'REFUND']),
         amountCents: z.int(),
         occurredAt: z.date(),
         clientName: z.string().nullable(),

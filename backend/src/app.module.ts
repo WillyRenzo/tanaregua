@@ -23,6 +23,7 @@ import { PublicBookingModule } from './modules/public-booking/public-booking.mod
 import { FinanceModule } from './modules/finance/finance.module.js';
 import { OrdersModule } from './modules/orders/orders.module.js';
 import { ProductsModule } from './modules/products/products.module.js';
+import { PackagesModule } from './modules/packages/packages.module.js';
 import { ReportsModule } from './modules/reports/reports.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { ClockModule } from './common/time/clock.js';
@@ -71,6 +72,7 @@ import { StorageModule } from './common/storage/object-storage.js';
     ClientsModule,
     CatalogModule,
     ProductsModule,
+    PackagesModule,
     IdempotencyModule,
     OutboxModule,
     AppointmentsModule,

@@ -11,6 +11,8 @@ import { DEFAULT_ROLES } from '../auth/permissions.js';
 import { BarbershopsService, type BarbershopSettings } from '../barbershops/barbershops.module.js';
 import { CatalogService } from '../catalog/catalog.service.js';
 import { ClientsService } from '../clients/clients.service.js';
+import { PackagesService } from '../packages/packages.service.js';
+import type { MyPackageView } from '../packages/packages.responses.js';
 import { StaffService } from '../staff/staff.service.js';
 import type { PublicBookingInput, PublicLoginInput, PublicRegisterInput } from './public-booking.schemas.js';
 
@@ -30,6 +32,7 @@ export class PublicBookingService {
     @Inject(ClientsService) private readonly clients: ClientsService,
     @Inject(AppointmentsService) private readonly appointments: AppointmentsService,
     @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(PackagesService) private readonly packages: PackagesService,
   ) {}
 
   async info(slug: string) {
@@ -128,6 +131,15 @@ export class PublicBookingService {
     return this.db.run(async (tx, auth) => {
       const clientId = await this.clients.findIdForUser(tx, shop.id, auth.userId);
       return this.appointments.listForClient(tx, shop.id, clientId);
+    });
+  }
+
+  /** Pacotes ativos do cliente nesta barbearia, com saldo e validade (só consulta). */
+  async myPackages(slug: string): Promise<MyPackageView[]> {
+    const shop = await this.assertTokenMatches(slug);
+    return this.db.run(async (tx, auth) => {
+      const clientId = await this.clients.findIdForUser(tx, shop.id, auth.userId);
+      return this.packages.listForClient(tx, shop.id, clientId);
     });
   }
 

@@ -16,11 +16,13 @@ import {
 import { ClientsService } from '../clients/clients.service.js';
 import { FinanceService } from '../finance/finance.service.js';
 import { ProductsService } from '../products/products.service.js';
+import { PackagesService, packageTermsKey, type PackageUseTerms } from '../packages/packages.service.js';
 import { StaffService } from '../staff/staff.service.js';
 import type {
   CloseOrderInput,
   ListOrdersQuery,
   OpenOrderInput,
+  ApplyPackageInput,
   OrderItemInput,
   UpdateOrderItemInput,
   VoidOrderInput,
@@ -50,6 +52,7 @@ export class OrdersService {
     @Inject(ClientsService) private readonly clients: ClientsService,
     @Inject(FinanceService) private readonly finance: FinanceService,
     @Inject(ProductsService) private readonly products: ProductsService,
+    @Inject(PackagesService) private readonly packages: PackagesService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -67,7 +70,7 @@ export class OrdersService {
       });
       const page = toPage(rows, query.limit);
       const rules = await this.catalog.commissionRules(tx, auth.barbershopId);
-      return { items: page.items.map((row) => toView(row, rules)), nextCursor: page.nextCursor };
+      return { items: page.items.map((row) => toView(row, rules, new Map())), nextCursor: page.nextCursor };
     });
   }
 
@@ -147,6 +150,17 @@ export class OrdersService {
       if (!item) throw notFound('Item');
       const quantity = input.quantity ?? item.quantity;
       const discountCents = input.discountCents ?? item.discountCents;
+      if (item.kind === 'PACKAGE' && quantity !== 1) {
+        throw unprocessable('package-quantity', 'Venda um pacote por item.');
+      }
+      if (item.clientPackageId) {
+        // Pago com pacote: não há valor a descontar; muda só a quantidade de sessões.
+        if (discountCents > 0) {
+          throw unprocessable('package-item-discount', 'Serviço pago com pacote não tem desconto.');
+        }
+        await tx.orderItem.update({ where: { id: itemId }, data: { quantity } });
+        return this.view(tx, auth.barbershopId, orderId);
+      }
       await tx.orderItem.update({
         where: { id: itemId },
         data: {
@@ -154,6 +168,59 @@ export class OrdersService {
           discountCents,
           totalCents: itemTotal(item.unitPriceCents, quantity, discountCents),
         },
+      });
+      return this.view(tx, auth.barbershopId, orderId);
+    });
+  }
+
+  /**
+   * Paga um serviço da comanda com sessão de pacote do cliente (o item passa a cobrar
+   * zero) ou desfaz (null). As sessões só saem do saldo no fechamento.
+   */
+  applyPackage(orderId: string, itemId: string, input: ApplyPackageInput): Promise<OrderView> {
+    return this.db.run(async (tx, auth) => {
+      await this.lockOpen(tx, auth.barbershopId, orderId);
+      const item = await tx.orderItem.findFirst({
+        where: { id: itemId, orderId, barbershopId: auth.barbershopId },
+      });
+      if (!item) throw notFound('Item');
+      if (item.kind !== 'SERVICE' || !item.serviceId) {
+        throw unprocessable('package-service-mismatch', 'Só serviços podem ser pagos com pacote.');
+      }
+
+      if (input.clientPackageId === null) {
+        await tx.orderItem.update({
+          where: { id: itemId },
+          data: { clientPackageId: null, discountCents: 0, totalCents: item.unitPriceCents * item.quantity },
+        });
+        return this.view(tx, auth.barbershopId, orderId);
+      }
+
+      const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, select: { clientId: true } });
+      if (!order.clientId) {
+        throw unprocessable('package-needs-client', 'Escolha o cliente da comanda para usar o pacote dele.');
+      }
+      // Outros itens desta comanda já marcados no mesmo pacote e serviço também contam.
+      const sameUse = await tx.orderItem.aggregate({
+        where: {
+          barbershopId: auth.barbershopId,
+          orderId,
+          clientPackageId: input.clientPackageId,
+          serviceId: item.serviceId,
+          id: { not: itemId },
+        },
+        _sum: { quantity: true },
+      });
+      await this.packages.assertUsable(tx, auth.barbershopId, {
+        clientPackageId: input.clientPackageId,
+        clientId: order.clientId,
+        serviceId: item.serviceId,
+        quantity: item.quantity + (sameUse._sum.quantity ?? 0),
+        at: this.clock.now(),
+      });
+      await tx.orderItem.update({
+        where: { id: itemId },
+        data: { clientPackageId: input.clientPackageId, discountCents: 0, totalCents: 0 },
       });
       return this.view(tx, auth.barbershopId, orderId);
     });
@@ -171,9 +238,10 @@ export class OrdersService {
   }
 
   /**
-   * Fechamento em UMA transação (business-rules §3/§4/§7): dá baixa nos produtos (recusa
-   * se faltar estoque), congela as comissões nos itens, fecha a comanda, lança caixa e
-   * comissões e conclui o agendamento. Se qualquer passo falhar, nada é gravado.
+   * Fechamento em UMA transação (business-rules §3/§4/§6/§7): dá baixa nos produtos e nas
+   * sessões de pacote (recusa se faltar), cria os pacotes vendidos, congela as comissões
+   * nos itens, fecha a comanda, lança caixa e comissões e conclui o agendamento. Se
+   * qualquer passo falhar, nada é gravado.
    */
   close(orderId: string, input: CloseOrderInput): Promise<OrderView> {
     return this.db.run(async (tx, auth) => {
@@ -182,6 +250,10 @@ export class OrdersService {
       if (items.length === 0) {
         throw unprocessable('order-empty', 'Adicione ao menos um item antes de fechar a comanda.');
       }
+      const { clientId } = await tx.order.findUniqueOrThrow({
+        where: { id: orderId },
+        select: { clientId: true },
+      });
 
       const closedAt = this.clock.now();
       await this.products.recordSale(tx, auth.barbershopId, {
@@ -192,15 +264,55 @@ export class OrdersService {
         authorUserId: auth.userId,
         occurredAt: closedAt,
       });
+      const packageTerms = await this.packages.recordUses(tx, auth.barbershopId, {
+        orderId,
+        clientId,
+        uses: items.flatMap((item) =>
+          item.clientPackageId && item.serviceId
+            ? [
+                {
+                  orderItemId: item.id,
+                  clientPackageId: item.clientPackageId,
+                  serviceId: item.serviceId,
+                  quantity: item.quantity,
+                },
+              ]
+            : [],
+        ),
+        authorUserId: auth.userId,
+        occurredAt: closedAt,
+      });
+      await this.packages.recordPurchases(tx, auth.barbershopId, {
+        orderId,
+        clientId,
+        items: items.flatMap((item) =>
+          item.packageId ? [{ packageId: item.packageId, pricePaidCents: item.totalCents }] : [],
+        ),
+        authorUserId: auth.userId,
+        occurredAt: closedAt,
+      });
 
       const rules = await this.catalog.commissionRules(tx, auth.barbershopId);
       const commissions: { orderItemId: string; professionalId: string; amountCents: number }[] = [];
       for (const item of items) {
-        const rule = resolveCommissionRule(rules, item.professionalId, commissionTarget(item));
-        const commissionCents = calculateCommissionCents(item.totalCents, rule);
+        const terms =
+          item.clientPackageId && item.serviceId
+            ? packageTerms.get(packageTermsKey(item.clientPackageId, item.serviceId))
+            : undefined;
+        // Pacote vendido não gera comissão na venda: ela sai quando cada sessão é usada.
+        const rule =
+          item.kind === 'PACKAGE'
+            ? undefined
+            : resolveCommissionRule(rules, item.professionalId, commissionTarget(item));
+        const commissionCents = calculateCommissionCents(commissionBase(item, terms), rule);
         await tx.orderItem.update({
           where: { id: item.id },
-          data: { commissionType: rule?.type ?? null, commissionValue: rule?.value ?? null, commissionCents },
+          data: {
+            commissionType: rule?.type ?? null,
+            commissionValue: rule?.value ?? null,
+            commissionCents,
+            ...(terms ? { packageSessionValueCents: terms.sessionValueCents } : {}),
+          },
         });
         // Venda de balcão (produto sem profissional) não tem a quem pagar comissão.
         if (item.professionalId) {
@@ -246,6 +358,12 @@ export class OrdersService {
       }
       const voidedAt = this.clock.now();
       if (order.status === 'CLOSED') {
+        // Primeiro: recusa (sem gravar nada) se um pacote vendido aqui já foi usado ou reembolsado.
+        await this.packages.reverseForOrder(tx, auth.barbershopId, {
+          orderId,
+          authorUserId: auth.userId,
+          occurredAt: voidedAt,
+        });
         await this.finance.recordReversal(tx, auth.barbershopId, orderId, voidedAt);
         // Produto vendido volta para o estoque (business-rules §7).
         await this.products.recordSaleReversal(tx, auth.barbershopId, {
@@ -328,11 +446,38 @@ export class OrdersService {
     }));
   }
 
-  /** Serviço sempre com profissional; produto com profissional opcional (venda de balcão). */
+  /**
+   * Serviço sempre com profissional; produto com profissional opcional (venda de balcão);
+   * pacote sem profissional (a comissão sai quando cada sessão é usada).
+   */
   private async insertItem(tx: Tx, barbershopId: string, orderId: string, input: OrderItemInput) {
-    if (input.professionalId) await this.staff.assertProfessional(tx, barbershopId, input.professionalId);
     const amounts = { quantity: input.quantity, discountCents: input.discountCents };
 
+    if ('packageId' in input) {
+      const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, select: { clientId: true } });
+      if (!order.clientId) {
+        throw unprocessable(
+          'package-needs-client',
+          'Pacote é do cliente: escolha o cliente da comanda antes de vender.',
+        );
+      }
+      const template = await this.packages.packageForSale(tx, barbershopId, input.packageId);
+      await tx.orderItem.create({
+        data: {
+          barbershopId,
+          orderId,
+          kind: 'PACKAGE',
+          packageId: template.id,
+          name: template.name,
+          unitPriceCents: template.priceCents,
+          ...amounts,
+          totalCents: itemTotal(template.priceCents, input.quantity, input.discountCents),
+        },
+      });
+      return;
+    }
+
+    if (input.professionalId) await this.staff.assertProfessional(tx, barbershopId, input.professionalId);
     if ('productId' in input) {
       const [product] = await this.products.productsForSale(tx, barbershopId, [input.productId]);
       await tx.orderItem.create({
@@ -391,9 +536,32 @@ export class OrdersService {
   private async view(tx: Tx, barbershopId: string, orderId: string): Promise<OrderView> {
     const row = await tx.order.findFirst({ where: { id: orderId, barbershopId }, include: orderInclude });
     if (!row) throw notFound('Comanda');
-    const rules = row.status === 'OPEN' ? await this.catalog.commissionRules(tx, barbershopId) : [];
-    return toView(row, rules);
+    if (row.status !== 'OPEN') return toView(row, [], new Map());
+    const rules = await this.catalog.commissionRules(tx, barbershopId);
+    // Comissão prevista de serviço pago com pacote usa o valor da sessão.
+    const terms = await this.packages.sessionTerms(
+      tx,
+      barbershopId,
+      row.items.flatMap((item) =>
+        item.clientPackageId && item.serviceId
+          ? [{ clientPackageId: item.clientPackageId, serviceId: item.serviceId }]
+          : [],
+      ),
+    );
+    return toView(row, rules, terms);
   }
+}
+
+/**
+ * Base da comissão do item (business-rules §4 e §6): o valor cobrado; num serviço pago com
+ * pacote, o valor das sessões usadas, ou zero se o pacote não comissiona sessões.
+ */
+function commissionBase(
+  item: { totalCents: number; quantity: number; clientPackageId: string | null },
+  terms: PackageUseTerms | undefined,
+): number {
+  if (!item.clientPackageId) return item.totalCents;
+  return terms?.commissionOnSessions ? terms.sessionValueCents * item.quantity : 0;
 }
 
 function itemTotal(unitPriceCents: number, quantity: number, discountCents: number): number {
@@ -409,12 +577,14 @@ function commissionTarget(item: { serviceId: string | null; productId: string | 
   return item.productId ? { productId: item.productId } : { serviceId: item.serviceId! };
 }
 
-function toView(row: OrderRow, rules: CommissionRuleTerms[]): OrderView {
+function toView(row: OrderRow, rules: CommissionRuleTerms[], terms: Map<string, PackageUseTerms>): OrderView {
   const items = row.items.map((item) => ({
     id: item.id,
     kind: item.kind,
     serviceId: item.serviceId,
     productId: item.productId,
+    packageId: item.packageId,
+    clientPackageId: item.clientPackageId,
     name: item.name,
     professional: item.professional ? { id: item.professional.id, name: item.professional.user.name } : null,
     unitPriceCents: item.unitPriceCents,
@@ -423,10 +593,17 @@ function toView(row: OrderRow, rules: CommissionRuleTerms[]): OrderView {
     totalCents: item.totalCents,
     commissionCents:
       item.commissionCents ??
-      calculateCommissionCents(
-        item.totalCents,
-        resolveCommissionRule(rules, item.professionalId, commissionTarget(item)),
-      ),
+      (item.kind === 'PACKAGE'
+        ? 0
+        : calculateCommissionCents(
+            commissionBase(
+              item,
+              item.clientPackageId && item.serviceId
+                ? terms.get(packageTermsKey(item.clientPackageId, item.serviceId))
+                : undefined,
+            ),
+            resolveCommissionRule(rules, item.professionalId, commissionTarget(item)),
+          )),
   }));
   return {
     id: row.id,

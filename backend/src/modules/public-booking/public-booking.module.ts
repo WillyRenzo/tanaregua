@@ -37,6 +37,8 @@ import { SessionCookieService, type SessionResponse } from '../auth/session-cook
 import { BarbershopsModule, BarbershopsService } from '../barbershops/barbershops.module.js';
 import { CatalogModule } from '../catalog/catalog.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
+import { PackagesModule } from '../packages/packages.module.js';
+import { myPackageSchema } from '../packages/packages.responses.js';
 import { StaffModule } from '../staff/staff.module.js';
 import {
   publicAvailabilitySchema,
@@ -160,6 +162,14 @@ export class PublicBookingController {
   }
 
   @RequirePermissions('bookings:self')
+  @ApiResult(z.array(myPackageSchema))
+  @ApiOperation({ summary: 'Meus pacotes (saldo e validade)' })
+  @Get('me/packages')
+  myPackages(@Param('slug', { schema: slugSchema }) slug: string) {
+    return this.booking.myPackages(slug);
+  }
+
+  @RequirePermissions('bookings:self')
   @Throttle(BOOKING_THROTTLE)
   @Idempotent()
   @ApiResult(clientAppointmentViewSchema, 201)
@@ -205,7 +215,7 @@ export class PublicBookingController {
 }
 
 @Module({
-  imports: [AppointmentsModule, BarbershopsModule, CatalogModule, ClientsModule, StaffModule],
+  imports: [AppointmentsModule, BarbershopsModule, CatalogModule, ClientsModule, StaffModule, PackagesModule],
   controllers: [PublicBookingController],
   providers: [PublicBookingService],
 })
