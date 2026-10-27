@@ -21,6 +21,7 @@ import { AppointmentsModule } from '../appointments/appointments.module.js';
 import { CatalogModule } from '../catalog/catalog.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { FinanceModule } from '../finance/finance.module.js';
+import { ProductsModule } from '../products/products.module.js';
 import { StaffModule } from '../staff/staff.module.js';
 import {
   closeOrderSchema,
@@ -126,7 +127,7 @@ export class OrdersController {
 }
 
 @Module({
-  imports: [AppointmentsModule, CatalogModule, StaffModule, ClientsModule, FinanceModule],
+  imports: [AppointmentsModule, CatalogModule, StaffModule, ClientsModule, FinanceModule, ProductsModule],
   controllers: [OrdersController],
   providers: [OrdersService],
   exports: [OrdersService],

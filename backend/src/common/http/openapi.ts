@@ -79,6 +79,10 @@ export const API_TAGS = {
   staff: ['Equipe', 'Funcionários, papéis, expediente semanal e folgas.'],
   clients: ['Clientes', 'Cadastro de clientes com consentimento e anonimização (LGPD).'],
   catalog: ['Serviços e comissões', 'Serviços (preço em centavos, duração) e regras de comissão.'],
+  products: [
+    'Produtos e estoque',
+    'Produtos vendidos na comanda, entradas, ajustes e saldo (nunca negativo).',
+  ],
   agenda: [
     'Agenda',
     'Agenda do dia, horários livres e agendamentos. Conflito de horário é barrado pelo banco.',

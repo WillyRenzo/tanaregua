@@ -1,7 +1,14 @@
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service.js';
-import { DEMO_ACCOUNTS, DEMO_PASSWORD, DEMO_SLUG, NEIGHBOR_SLUG, seedDemo } from '../src/seed/demo-seed.js';
-import { as, createTestApp, type TestApp } from './helpers/app.js';
+import {
+  completeDemo,
+  DEMO_ACCOUNTS,
+  DEMO_PASSWORD,
+  DEMO_SLUG,
+  NEIGHBOR_SLUG,
+  seedDemo,
+} from '../src/seed/demo-seed.js';
+import { as, createTestApp, registerTenant, type TestApp } from './helpers/app.js';
 
 /** O README promete estas credenciais: o seed precisa entregá-las de verdade. */
 describe('Seed de demonstração (e2e)', () => {
@@ -121,6 +128,62 @@ describe('Seed de demonstração (e2e)', () => {
     expect(mine.body.some((a: { startsAt: string }) => Date.parse(a.startsAt) < now)).toBe(true);
   });
 
+  it('tem produtos com vendas, alerta de reposição e saldo que bate com o histórico', async () => {
+    const owner = await loginPanel(DEMO_ACCOUNTS.owner.email);
+    const list = await as(app, owner.accessToken).get('/v1/products').expect(200);
+    const products = list.body as { id: string; name: string; stockQuantity: number; lowStock: boolean }[];
+    expect(products.map((product) => product.name)).toEqual(
+      expect.arrayContaining(['Pomada modeladora', 'Óleo para barba', 'Shampoo anticaspa', 'Cera capilar']),
+    );
+    expect(products.find((product) => product.name === 'Shampoo anticaspa')?.lowStock).toBe(true);
+
+    for (const product of products) {
+      const movements = await as(app, owner.accessToken)
+        .get(`/v1/products/${product.id}/movements`)
+        .expect(200);
+      const sum = movements.body.reduce((total: number, m: { quantity: number }) => total + m.quantity, 0);
+      expect(sum, product.name).toBe(product.stockQuantity);
+    }
+
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const from = new Date(`${today}T12:00:00Z`);
+    from.setUTCDate(from.getUTCDate() - 29);
+    const report = await as(app, owner.accessToken)
+      .get('/v1/reports/summary')
+      .query({ from: from.toISOString().slice(0, 10), to: today })
+      .expect(200);
+    expect(report.body.topProducts.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('cada barbearia tem a própria identidade visual; a demo tem logo servido pela API', async () => {
+    const demo = await request(app.getHttpServer()).get(`/v1/public/${DEMO_SLUG}`).expect(200);
+    expect(demo.body.brand).toMatchObject({ primaryColor: '#1f5f8b', secondaryColor: '#e3c567' });
+    expect(demo.body.brand.logoVersion).toEqual(expect.any(String));
+    const logo = await request(app.getHttpServer()).get(`/v1/public/${DEMO_SLUG}/logo`).expect(200);
+    expect(logo.headers['content-type']).toBe('image/webp');
+
+    const neighbor = await request(app.getHttpServer()).get(`/v1/public/${NEIGHBOR_SLUG}`).expect(200);
+    expect(neighbor.body.brand).toEqual({ primaryColor: '#7a1f5c', secondaryColor: null, logoVersion: null });
+  });
+
+  it('a cliente online tem uma reserva reagendada por ela mesma e faltas aparecem com e sem justificativa', async () => {
+    const prisma = app.get(PrismaService);
+    const shop = await prisma.barbershop.findUniqueOrThrow({
+      where: { slug: DEMO_SLUG },
+      select: { id: true },
+    });
+    const rescheduled = await prisma.outboxEvent.count({
+      where: { barbershopId: shop.id, type: 'AppointmentRescheduled' },
+    });
+    expect(rescheduled).toBeGreaterThanOrEqual(1);
+
+    const noShows = await prisma.withContext({ barbershopId: shop.id }, (tx) =>
+      tx.appointment.findMany({ where: { status: 'NO_SHOW' }, select: { noShowJustification: true } }),
+    );
+    expect(noShows.some((noShow) => noShow.noShowJustification === null)).toBe(true);
+    expect(noShows.some((noShow) => noShow.noShowJustification !== null)).toBe(true);
+  });
+
   it('a barbearia vizinha é isolada da demo', async () => {
     const neighbor = await loginPanel(DEMO_ACCOUNTS.neighborOwner.email);
     const clients = await as(app, neighbor.accessToken).get('/v1/clients').expect(200);
@@ -128,10 +191,53 @@ describe('Seed de demonstração (e2e)', () => {
     await request(app.getHttpServer()).get(`/v1/public/${NEIGHBOR_SLUG}`).expect(200);
   });
 
-  it('rodar de novo não duplica nada', async () => {
+  it('rodar de novo não duplica nada: a demo já está completa', async () => {
     const prisma = app.get(PrismaService);
-    const before = await prisma.user.count();
-    expect((await seedDemo(app)).created).toBe(false);
-    expect(await prisma.user.count()).toBe(before);
+    const users = await prisma.user.count();
+    const products = await prisma.product.count();
+    expect(await seedDemo(app)).toMatchObject({ created: false, added: [] });
+    expect(await prisma.user.count()).toBe(users);
+    expect(await prisma.product.count()).toBe(products);
+  });
+
+  it('demo criada por versão anterior do seed ganha só os módulos que faltam', async () => {
+    // Barbearias novas fazem o papel de uma demo antiga: sem produtos e sem marca.
+    const oldDemo = await registerTenant(app);
+    const oldNeighbor = await registerTenant(app);
+    await as(app, oldDemo.token)
+      .post('/v1/staff')
+      .send({
+        name: 'Barbeira',
+        email: `barbeira-${Date.now()}@teste.com`,
+        password: 'senha-forte-123',
+        roleKey: 'professional',
+        isProfessional: true,
+      })
+      .expect(201);
+    const slugs = { demo: oldDemo.slug, neighbor: oldNeighbor.slug };
+
+    expect(await completeDemo(app, slugs)).toEqual([
+      'produtos e estoque (com vendas dos últimos 30 dias)',
+      'identidade visual (cores e logo)',
+      'cor da Barbearia Vizinha',
+    ]);
+
+    const products = await as(app, oldDemo.token).get('/v1/products').expect(200);
+    expect(products.body).toHaveLength(4);
+    expect(products.body.some((product: { lowStock: boolean }) => product.lowStock)).toBe(true);
+    for (const product of products.body as { id: string; name: string; stockQuantity: number }[]) {
+      const movements = await as(app, oldDemo.token).get(`/v1/products/${product.id}/movements`).expect(200);
+      const sum = movements.body.reduce((total: number, m: { quantity: number }) => total + m.quantity, 0);
+      expect(sum, product.name).toBe(product.stockQuantity);
+    }
+    const sales = await app
+      .get(PrismaService)
+      .withContext({ barbershopId: oldDemo.barbershopId }, (tx) =>
+        tx.stockMovement.count({ where: { kind: 'SALE' } }),
+      );
+    expect(sales).toBeGreaterThan(5);
+
+    // Segunda execução: nada mais a acrescentar.
+    expect(await completeDemo(app, slugs)).toEqual([]);
   });
 });

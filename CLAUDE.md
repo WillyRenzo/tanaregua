@@ -40,7 +40,7 @@ fe npm ci
 # Migrations (criar: ver .claude/rules/database.md — migrate dev é interativo)
 be npx prisma migrate deploy
 
-# Dados de demonstração: uma conta por papel, idempotente (credenciais no README)
+# Dados de demonstração: uma conta por papel; numa demo existente, só acrescenta módulos novos (README)
 be npm run db:seed
 
 # Testes

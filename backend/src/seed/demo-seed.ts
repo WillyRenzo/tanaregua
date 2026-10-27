@@ -1,15 +1,19 @@
 import type { INestApplicationContext } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
+import sharp from 'sharp';
 import type { AuthContext, RequestContext } from '../common/tenancy/request-context.js';
 import { Clock } from '../common/time/clock.js';
 import { localTimeToInstant, nextDate } from '../modules/appointments/availability.js';
 import { AppointmentsService } from '../modules/appointments/appointments.service.js';
 import { AuthService, type Session } from '../modules/auth/auth.service.js';
 import { isPermission } from '../modules/auth/permissions.js';
+import { BarbershopsService } from '../modules/barbershops/barbershops.module.js';
 import { CatalogService } from '../modules/catalog/catalog.service.js';
 import { ClientsService } from '../modules/clients/clients.service.js';
 import type { PaymentMethod } from '../modules/finance/finance.service.js';
 import { OrdersService } from '../modules/orders/orders.service.js';
+import type { OrderItemInput } from '../modules/orders/orders.schemas.js';
+import { ProductsService } from '../modules/products/products.service.js';
 import { PublicBookingService } from '../modules/public-booking/public-booking.service.js';
 import { StaffService } from '../modules/staff/staff.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -22,8 +26,12 @@ import { PrismaService } from '../prisma/prisma.service.js';
  *   com comandas fechadas na data do atendimento: caixa, comissões e relatórios por período;
  * - hoje com todos os status na agenda e comandas aberta/fechada/estornada;
  * - a próxima semana parcialmente agendada, folga e férias na equipe;
- * - uma cliente com conta no agendamento online, com histórico e reservas futuras;
- * - uma segunda barbearia para testar o isolamento entre tenants.
+ * - uma cliente com conta no agendamento online, com histórico, reservas futuras, uma
+ *   reserva cancelada e outra reagendada por ela mesma;
+ * - faltas com e sem justificativa;
+ * - identidade visual própria (cores e logo) no painel e na página pública;
+ * - produtos com entradas, vendas (com profissional e no balcão), ajuste e um abaixo do mínimo;
+ * - uma segunda barbearia, com outra cor, para testar o isolamento entre tenants.
  *
  * Tudo passa pelos services de domínio (não por SQL): snapshots de preço, comissões,
  * conflito de horário e outbox seguem as regras reais. O histórico é gerado com sorteio
@@ -53,6 +61,8 @@ export const DEMO_ACCOUNTS = {
 export interface SeedResult {
   created: boolean;
   slugs: string[];
+  /** Demo que já existia: módulos acrescentados nesta execução (vazio = já estava completa). */
+  added: string[];
 }
 
 type Clock24 = `${number}:${number}`;
@@ -62,10 +72,25 @@ const minutes = (clock: Clock24) => {
   return hours! * 60 + mins!;
 };
 
+const DEMO_PRIMARY_COLOR = '#1f5f8b';
+const DEMO_SECONDARY_COLOR = '#e3c567';
+const NEIGHBOR_PRIMARY_COLOR = '#7a1f5c';
+
+const pickPayment = weighted<PaymentMethod>([
+  [45, 'PIX'],
+  [20, 'CARD_CREDIT'],
+  [20, 'CARD_DEBIT'],
+  [15, 'CASH'],
+]);
+
+/** Instante de um horário local da demo (fuso da barbearia). */
+const localAt = (date: string, time: Clock24) => localTimeToInstant(date, minutes(time), TIMEZONE);
+const todayLocal = () => new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE }).format(new Date());
+
 export async function seedDemo(app: INestApplicationContext): Promise<SeedResult> {
   const prisma = app.get(PrismaService);
   if (await prisma.barbershop.findUnique({ where: { slug: DEMO_SLUG }, select: { id: true } })) {
-    return { created: false, slugs: [DEMO_SLUG, NEIGHBOR_SLUG] };
+    return { created: false, slugs: [DEMO_SLUG, NEIGHBOR_SLUG], added: await completeDemo(app) };
   }
 
   const cls = app.get<ClsService<RequestContext>>(ClsService);
@@ -77,6 +102,8 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
   const appointments = app.get(AppointmentsService);
   const orders = app.get(OrdersService);
   const publicBooking = app.get(PublicBookingService);
+  const products = app.get(ProductsService);
+  const barbershops = app.get(BarbershopsService);
 
   /** Executa `fn` como se fosse uma requisição autenticada desta sessão. */
   const as = <T>(session: Session, fn: () => Promise<T>) =>
@@ -150,6 +177,8 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
       reason: 'Férias',
     });
 
+    await applyDemoBrand(app);
+
     // ───────────── Serviços e comissões ─────────────
 
     const corte = await catalog.createService({
@@ -191,33 +220,49 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
     await catalog.upsertCommissionRule({
       membershipId: null,
       serviceId: corte.id,
+      productId: null,
       type: 'PERCENT',
       value: 4000,
     });
     await catalog.upsertCommissionRule({
       membershipId: null,
       serviceId: pigmentacao.id,
+      productId: null,
       type: 'PERCENT',
       value: 5000,
     });
     await catalog.upsertCommissionRule({
       membershipId: bia.id,
       serviceId: null,
+      productId: null,
       type: 'PERCENT',
       value: 3500,
     });
     await catalog.upsertCommissionRule({
       membershipId: bia.id,
       serviceId: barba.id,
+      productId: null,
       type: 'FIXED',
       value: 1500,
     });
     await catalog.upsertCommissionRule({
       membershipId: rafa.id,
       serviceId: null,
+      productId: null,
       type: 'PERCENT',
       value: 3000,
     });
+
+    // ───────────── Produtos e estoque ─────────────
+
+    const demoProducts = await createDemoProducts(
+      app,
+      at(shiftDate(today, -HISTORY_DAYS - 1), '09:00'),
+      bia.id,
+    );
+    const { pomada, oleo, shampoo, cera } = demoProducts;
+    /** Saldo acompanhado aqui para o seed nunca tentar vender o que não tem. */
+    const stock = new Map(Object.values(demoProducts).map((product) => [product.id, product]));
 
     // ───────────── Clientes ─────────────
 
@@ -291,14 +336,30 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
     const closeWith = async (
       appointment: { id: string; endsAt: Date },
       paymentMethod: PaymentMethod,
-      extra?: { serviceId: string; professionalId: string },
+      extras: OrderItemInput[] = [],
     ) => {
       const closedAt = new Date(Math.min(appointment.endsAt.getTime() + 5 * 60_000, Date.now()));
       return clock.at(closedAt, async () => {
         const order = await orders.open({ appointmentId: appointment.id });
-        if (extra) await orders.addItem(order.id, { ...extra, quantity: 1, discountCents: 0 });
+        for (const extra of extras) await orders.addItem(order.id, extra);
         return orders.close(order.id, { paymentMethod });
       });
+    };
+
+    const productWeights = weighted(
+      [...stock.values()].map((product): [number, typeof product] => [product.weight, product]),
+    );
+    /** Produto vendido junto do atendimento: às vezes indicado pelo barbeiro, às vezes no balcão. */
+    const productSale = (professionalId: string): OrderItemInput | null => {
+      const product = productWeights(random());
+      if (product.quantity < 1) return null;
+      product.quantity--;
+      return {
+        productId: product.id,
+        professionalId: random() < 0.7 ? professionalId : null,
+        quantity: 1,
+        discountCents: 0,
+      };
     };
 
     const voidAt = (orderId: string, when: Date, reason: string) =>
@@ -331,9 +392,28 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
         return booked;
       });
 
+    /** Reagendamento pela própria cliente (até 24 h antes), para o primeiro horário a partir de `from`. */
+    const rescheduleOnline = (appointmentId: string, date: string, from: Clock24, serviceIds: string[]) =>
+      as(paula, async () => {
+        const availability = await publicBooking.availability(DEMO_SLUG, {
+          date,
+          serviceIds,
+          professionalId: bia.id,
+        });
+        const slot = availability.professionals[0]?.starts.find((start) => start >= at(date, from));
+        if (!slot) return null;
+        const moved = await publicBooking.reschedule(DEMO_SLUG, appointmentId, { startsAt: slot });
+        markBusy(bia.id, date, localHour(moved.startsAt), Math.ceil(localHour(moved.endsAt, true)));
+        return moved;
+      });
+
     const paulaTomorrow = await bookOnline(tomorrow, '10:00', [corte.id]);
     const paulaId = paulaTomorrow?.client.id;
-    await bookOnline(shiftDate(today, 6), '16:00', [corte.id, sobrancelha.id]);
+    // Marcou às 16h de daqui a 6 dias e depois ela mesma passou para a manhã (e-mail de remarcação no outbox).
+    const toReschedule = await bookOnline(shiftDate(today, 6), '16:00', [corte.id, sobrancelha.id]);
+    if (toReschedule) {
+      await rescheduleOnline(toReschedule.id, shiftDate(today, 6), '09:00', [corte.id, sobrancelha.id]);
+    }
     const toCancel = await bookOnline(shiftDate(today, 5), '11:00', [hidratacao.id]);
     if (toCancel) await as(paula, () => publicBooking.cancel(DEMO_SLUG, toCancel.id));
 
@@ -417,12 +497,7 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
       [1, [infantil]],
       [1, [hidratacao, barba]],
     ]);
-    const payments = weighted<PaymentMethod>([
-      [45, 'PIX'],
-      [20, 'CARD_CREDIT'],
-      [20, 'CARD_DEBIT'],
-      [15, 'CASH'],
-    ]);
+    const payments = pickPayment;
     const voidReasons = [
       'Lançado na comanda errada',
       'Cobrança em duplicidade na maquininha',
@@ -466,11 +541,13 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
                 reason: cancelReasons[closedCount % cancelReasons.length],
               });
             } else {
-              const upsell =
-                random() < 0.1 && !services.includes(sobrancelha)
-                  ? { serviceId: sobrancelha.id, professionalId }
-                  : undefined;
-              const order = await closeWith(appointment, payments(random()), upsell);
+              const extras: OrderItemInput[] = [];
+              if (random() < 0.1 && !services.includes(sobrancelha)) {
+                extras.push({ serviceId: sobrancelha.id, professionalId, quantity: 1, discountCents: 0 });
+              }
+              const product = random() < 0.2 ? productSale(professionalId) : null;
+              if (product) extras.push(product);
+              const order = await closeWith(appointment, payments(random()), extras);
               closedCount++;
               if (closedCount % 25 === 0) {
                 await voidAt(
@@ -478,6 +555,8 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
                   new Date(appointment.endsAt.getTime() + 40 * 60_000),
                   voidReasons[(closedCount / 25) % voidReasons.length]!,
                 );
+                // O estorno devolve o produto ao estoque.
+                if (product && 'productId' in product) stock.get(product.productId)!.quantity++;
               }
             }
           }
@@ -489,10 +568,38 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
       const date = shiftDate(today, offset);
       const weekday = weekdayOf(date);
       if (weekday === 0) continue; // domingo fechado no histórico: o gráfico mostra o ritmo da semana
+      if (offset === -15) {
+        // Reposição no meio do período (o shampoo fica de fora e termina abaixo do mínimo).
+        for (const product of [pomada, oleo, cera]) {
+          await clock.at(at(date, '08:30'), () =>
+            products.addEntry(product.id, {
+              quantity: 12,
+              unitCostCents: 2100,
+              note: 'Reposição do distribuidor',
+            }),
+          );
+          product.quantity += 12;
+        }
+      }
       await fillDay(date, weekday === 6 ? 0.65 : weekday === 5 ? 0.5 : 0.35, true);
     }
     for (let offset = 1; offset <= UPCOMING_DAYS; offset++) {
       await fillDay(shiftDate(today, offset), 0.3 / offset + 0.1, false);
+    }
+
+    // Ajuste de inventário e uma venda de balcão hoje (produto sem profissional, sem comissão).
+    if (cera.quantity >= 1) {
+      await clock.at(at(yesterday, '19:00'), () =>
+        products.adjust(cera.id, { quantity: -1, reason: 'Embalagem danificada' }),
+      );
+      cera.quantity--;
+    }
+    if (shampoo.quantity >= 1) {
+      const counter = await orders.open({
+        items: [{ productId: shampoo.id, professionalId: null, quantity: 1, discountCents: 0 }],
+      });
+      await orders.close(counter.id, { paymentMethod: 'CASH' });
+      shampoo.quantity--;
     }
 
     // LGPD: cliente que pediu exclusão. Some da lista, o histórico fica como "Cliente anonimizado".
@@ -511,6 +618,8 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
   });
   await as(neighbor, async () => {
     const marta = neighbor.profile.membership.id;
+    // Outra marca (vinho, sem logo): cada barbearia vê só a própria identidade.
+    await barbershops.update({ brandPrimaryColor: NEIGHBOR_PRIMARY_COLOR });
     await staff.replaceSchedule(marta, everyDay([['10:00', '20:00']]));
     const corte = await catalog.createService({
       name: 'Corte da Vizinha',
@@ -536,7 +645,246 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
     });
   });
 
-  return { created: true, slugs: [DEMO_SLUG, NEIGHBOR_SLUG] };
+  return { created: true, slugs: [DEMO_SLUG, NEIGHBOR_SLUG], added: [] };
+}
+
+// ───────────── Complemento de uma demo criada por versão anterior do seed ─────────────
+
+/**
+ * Quem já tem a demo no banco não precisa apagar tudo para ver um módulo novo: rodar o seed
+ * de novo acrescenta só o que falta (cada passo confere se já existe), sem duplicar nem
+ * apagar nada. Devolve a descrição do que foi acrescentado.
+ */
+export async function completeDemo(
+  app: INestApplicationContext,
+  slugs: { demo: string; neighbor: string } = { demo: DEMO_SLUG, neighbor: NEIGHBOR_SLUG },
+): Promise<string[]> {
+  const added: string[] = [];
+
+  await asOwnerOf(app, slugs.demo, async (professionalIds) => {
+    const products = app.get(ProductsService);
+    if ((await products.list({ includeInactive: true })).length === 0) {
+      await addProductsToExistingDemo(app, professionalIds);
+      added.push('produtos e estoque (com vendas dos últimos 30 dias)');
+    }
+    const settings = await app.get(BarbershopsService).get();
+    if (!settings.brand.primaryColor && !settings.brand.logoVersion) {
+      await applyDemoBrand(app);
+      added.push('identidade visual (cores e logo)');
+    }
+  });
+
+  await asOwnerOf(app, slugs.neighbor, async () => {
+    const barbershops = app.get(BarbershopsService);
+    if (!(await barbershops.get()).brand.primaryColor) {
+      await barbershops.update({ brandPrimaryColor: NEIGHBOR_PRIMARY_COLOR });
+      added.push('cor da Barbearia Vizinha');
+    }
+  });
+
+  return added;
+}
+
+/**
+ * Executa `fn` como o dono da barbearia (contexto de requisição autenticada), passando os
+ * profissionais ativos. Não faz nada se a barbearia não existir.
+ */
+async function asOwnerOf(
+  app: INestApplicationContext,
+  slug: string,
+  fn: (professionalIds: string[]) => Promise<void>,
+): Promise<void> {
+  const prisma = app.get(PrismaService);
+  const shop = await prisma.barbershop.findUnique({ where: { slug }, select: { id: true } });
+  if (!shop) return;
+  const { owner, professionals } = await prisma.withContext({ barbershopId: shop.id }, async (tx) => ({
+    owner: await tx.membership.findFirst({
+      where: { barbershopId: shop.id, active: true, role: { key: 'owner' } },
+      select: { id: true, userId: true, role: { select: { permissions: true } } },
+    }),
+    professionals: await tx.membership.findMany({
+      where: { barbershopId: shop.id, active: true, isProfessional: true },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+  }));
+  if (!owner) return;
+
+  const cls = app.get<ClsService<RequestContext>>(ClsService);
+  await cls.run(async () => {
+    cls.set('auth', {
+      userId: owner.userId,
+      barbershopId: shop.id,
+      membershipId: owner.id,
+      permissions: owner.role.permissions.filter(isPermission),
+    });
+    await fn(professionals.map((professional) => professional.id));
+  });
+}
+
+/**
+ * Produtos numa demo antiga: o histórico de atendimentos já existe, então as vendas entram
+ * como comandas de balcão nos últimos 30 dias (às vezes com o profissional que indicou).
+ */
+async function addProductsToExistingDemo(app: INestApplicationContext, professionalIds: string[]) {
+  const clock = app.get(Clock);
+  const orders = app.get(OrdersService);
+  const products = app.get(ProductsService);
+  const today = todayLocal();
+  const random = mulberry32(20261027);
+
+  // O segundo profissional (a Bia, na demo) tem regra própria no óleo.
+  const demoProducts = await createDemoProducts(
+    app,
+    localAt(shiftDate(today, -31), '09:00'),
+    professionalIds[1] ?? professionalIds[0] ?? null,
+  );
+  const { pomada, oleo, shampoo, cera } = demoProducts;
+  const pick = weighted(
+    Object.values(demoProducts).map((product): [number, DemoProduct] => [product.weight, product]),
+  );
+
+  for (let offset = -30; offset <= -1; offset++) {
+    const date = shiftDate(today, offset);
+    if (weekdayOf(date) === 0) continue;
+    if (offset === -15) {
+      for (const product of [pomada, oleo, cera]) {
+        await clock.at(localAt(date, '08:30'), () =>
+          products.addEntry(product.id, {
+            quantity: 12,
+            unitCostCents: 2100,
+            note: 'Reposição do distribuidor',
+          }),
+        );
+        product.quantity += 12;
+      }
+    }
+    const sales = Math.floor(random() * 3);
+    for (let i = 0; i < sales; i++) {
+      const product = pick(random());
+      if (product.quantity < 1) continue;
+      product.quantity--;
+      const seller =
+        professionalIds.length > 0 && random() < 0.7
+          ? professionalIds[Math.floor(random() * professionalIds.length)]!
+          : null;
+      await clock.at(localAt(date, `${11 + i * 3}:00`), async () => {
+        const order = await orders.open({
+          items: [{ productId: product.id, professionalId: seller, quantity: 1, discountCents: 0 }],
+        });
+        await orders.close(order.id, { paymentMethod: pickPayment(random()) });
+      });
+    }
+  }
+
+  if (cera.quantity >= 1) {
+    await clock.at(localAt(shiftDate(today, -1), '19:00'), () =>
+      products.adjust(cera.id, { quantity: -1, reason: 'Embalagem danificada' }),
+    );
+  }
+  // O shampoo termina perto do fim: aparece no alerta de reposição.
+  if (shampoo.quantity > 4) {
+    await products.adjust(shampoo.id, { quantity: -(shampoo.quantity - 3), reason: 'Inventário: vencidos' });
+  }
+}
+
+// ───────────── Peças reaproveitadas pelo seed completo e pelo complemento ─────────────
+
+interface DemoProduct {
+  id: string;
+  name: string;
+  /** Saldo acompanhado pelo seed (para nunca tentar vender o que não tem). */
+  quantity: number;
+  /** Peso no sorteio das vendas. */
+  weight: number;
+}
+
+/**
+ * Produtos da demo com a entrada inicial em `firstDay`, um produto desativado e as regras
+ * de comissão de produto (só regra de produto; o padrão do profissional não vale).
+ * Precisa rodar num contexto autenticado de quem gerencia a barbearia.
+ */
+async function createDemoProducts(
+  app: INestApplicationContext,
+  firstDay: Date,
+  oleoSellerId: string | null,
+): Promise<Record<'pomada' | 'oleo' | 'shampoo' | 'cera', DemoProduct>> {
+  const clock = app.get(Clock);
+  const products = app.get(ProductsService);
+  const catalog = app.get(CatalogService);
+
+  // [chave, nome, preço, custo, estoque mínimo, entrada inicial, peso nas vendas]
+  const specs = [
+    ['pomada', 'Pomada modeladora', 4500, 2200, 5, 30, 4],
+    ['oleo', 'Óleo para barba', 3500, 1800, 3, 20, 3],
+    ['shampoo', 'Shampoo anticaspa', 3000, 1500, 4, 8, 3],
+    ['cera', 'Cera capilar', 4000, 2000, null, 15, 1],
+  ] as const;
+  const created = {} as Record<'pomada' | 'oleo' | 'shampoo' | 'cera', DemoProduct>;
+  for (const [key, name, priceCents, costCents, minStockQuantity, initial, weight] of specs) {
+    const product = await products.create({ name, priceCents, costCents, minStockQuantity });
+    await clock.at(firstDay, () =>
+      products.addEntry(product.id, { quantity: initial, unitCostCents: costCents, note: 'Estoque inicial' }),
+    );
+    created[key] = { id: product.id, name, quantity: initial, weight };
+  }
+  const gel = await products.create({ name: 'Gel fixador (desativado)', priceCents: 2500, costCents: 1200 });
+  await products.update(gel.id, { active: false });
+
+  await catalog.upsertCommissionRule({
+    membershipId: null,
+    serviceId: null,
+    productId: created.pomada.id,
+    type: 'FIXED',
+    value: 500,
+  });
+  if (oleoSellerId) {
+    await catalog.upsertCommissionRule({
+      membershipId: oleoSellerId,
+      serviceId: null,
+      productId: created.oleo.id,
+      type: 'PERCENT',
+      value: 1000,
+    });
+  }
+  return created;
+}
+
+/**
+ * Azul e dourado no lugar do cobre padrão: painel e página pública saem com a marca da
+ * demo. O logo passa pelo mesmo caminho do upload (validação e reprocessamento).
+ */
+async function applyDemoBrand(app: INestApplicationContext): Promise<void> {
+  const barbershops = app.get(BarbershopsService);
+  await barbershops.update({
+    brandPrimaryColor: DEMO_PRIMARY_COLOR,
+    brandSecondaryColor: DEMO_SECONDARY_COLOR,
+  });
+  const logo = await demoLogo();
+  await barbershops.replaceLogo({ buffer: logo, size: logo.length });
+}
+
+/**
+ * Logo da demo (poste de barbearia nas cores da marca), desenhado aqui para não versionar
+ * binário. Sai em PNG porque o upload aceita só PNG, JPEG ou WebP (SVG é recusado).
+ */
+async function demoLogo(): Promise<Buffer> {
+  const stripes = [0, 1, 2, 3, 4, 5, 6]
+    .map((i) => {
+      const y = 40 + i * 28;
+      return `<path d="M96 ${y + 20} L160 ${y - 12} L160 ${y + 2} L96 ${y + 34} Z" fill="#c0392b"/>`;
+    })
+    .join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+    <circle cx="128" cy="128" r="124" fill="#e3c567"/>
+    <circle cx="128" cy="128" r="108" fill="#1f5f8b"/>
+    <defs><clipPath id="pole"><rect x="100" y="64" width="56" height="128" rx="10"/></clipPath></defs>
+    <rect x="100" y="64" width="56" height="128" rx="10" fill="#ffffff"/>
+    <g clip-path="url(#pole)">${stripes}</g>
+    <rect x="90" y="50" width="76" height="18" rx="8" fill="#e3c567"/>
+    <rect x="90" y="188" width="76" height="18" rx="8" fill="#e3c567"/>
+  </svg>`;
+  return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
 function toAuth(session: Session): AuthContext {

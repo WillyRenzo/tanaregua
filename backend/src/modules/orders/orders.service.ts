@@ -15,6 +15,7 @@ import {
 } from '../catalog/commission-policy.js';
 import { ClientsService } from '../clients/clients.service.js';
 import { FinanceService } from '../finance/finance.service.js';
+import { ProductsService } from '../products/products.service.js';
 import { StaffService } from '../staff/staff.service.js';
 import type {
   CloseOrderInput,
@@ -48,6 +49,7 @@ export class OrdersService {
     @Inject(StaffService) private readonly staff: StaffService,
     @Inject(ClientsService) private readonly clients: ClientsService,
     @Inject(FinanceService) private readonly finance: FinanceService,
+    @Inject(ProductsService) private readonly products: ProductsService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -169,36 +171,48 @@ export class OrdersService {
   }
 
   /**
-   * Fechamento em UMA transação (business-rules §3/§4): congela as comissões nos itens,
-   * fecha a comanda, lança caixa e comissões e conclui o agendamento. Se qualquer passo
-   * falhar, nada é gravado.
+   * Fechamento em UMA transação (business-rules §3/§4/§7): dá baixa nos produtos (recusa
+   * se faltar estoque), congela as comissões nos itens, fecha a comanda, lança caixa e
+   * comissões e conclui o agendamento. Se qualquer passo falhar, nada é gravado.
    */
   close(orderId: string, input: CloseOrderInput): Promise<OrderView> {
     return this.db.run(async (tx, auth) => {
       const order = await this.lockOpen(tx, auth.barbershopId, orderId);
       const items = await tx.orderItem.findMany({ where: { barbershopId: auth.barbershopId, orderId } });
       if (items.length === 0) {
-        throw unprocessable('order-empty', 'Adicione ao menos um serviço antes de fechar a comanda.');
+        throw unprocessable('order-empty', 'Adicione ao menos um item antes de fechar a comanda.');
       }
+
+      const closedAt = this.clock.now();
+      await this.products.recordSale(tx, auth.barbershopId, {
+        orderId,
+        items: items.flatMap((item) =>
+          item.productId ? [{ productId: item.productId, quantity: item.quantity }] : [],
+        ),
+        authorUserId: auth.userId,
+        occurredAt: closedAt,
+      });
 
       const rules = await this.catalog.commissionRules(tx, auth.barbershopId);
       const commissions: { orderItemId: string; professionalId: string; amountCents: number }[] = [];
       for (const item of items) {
-        const rule = resolveCommissionRule(rules, item.professionalId, item.serviceId);
+        const rule = resolveCommissionRule(rules, item.professionalId, commissionTarget(item));
         const commissionCents = calculateCommissionCents(item.totalCents, rule);
         await tx.orderItem.update({
           where: { id: item.id },
           data: { commissionType: rule?.type ?? null, commissionValue: rule?.value ?? null, commissionCents },
         });
-        commissions.push({
-          orderItemId: item.id,
-          professionalId: item.professionalId,
-          amountCents: commissionCents,
-        });
+        // Venda de balcão (produto sem profissional) não tem a quem pagar comissão.
+        if (item.professionalId) {
+          commissions.push({
+            orderItemId: item.id,
+            professionalId: item.professionalId,
+            amountCents: commissionCents,
+          });
+        }
       }
 
       const totalCents = items.reduce((sum, item) => sum + item.totalCents, 0);
-      const closedAt = this.clock.now();
       await tx.order.update({
         where: { id: orderId },
         data: {
@@ -233,6 +247,12 @@ export class OrdersService {
       const voidedAt = this.clock.now();
       if (order.status === 'CLOSED') {
         await this.finance.recordReversal(tx, auth.barbershopId, orderId, voidedAt);
+        // Produto vendido volta para o estoque (business-rules §7).
+        await this.products.recordSaleReversal(tx, auth.barbershopId, {
+          orderId,
+          authorUserId: auth.userId,
+          occurredAt: voidedAt,
+        });
       }
       await tx.order.update({
         where: { id: orderId },
@@ -242,7 +262,7 @@ export class OrdersService {
     });
   }
 
-  /** Itens vendidos no período (relatório de serviços mais vendidos). */
+  /** Serviços mais vendidos no período (comandas fechadas). */
   async topServices(tx: Tx, barbershopId: string, from: Date, to: Date) {
     const rows = await tx.$queryRaw<
       { service_id: string; name: string; quantity: bigint; revenue_cents: bigint }[]
@@ -251,7 +271,7 @@ export class OrdersService {
              SUM(oi.total_cents)::bigint AS revenue_cents
         FROM order_items oi
         JOIN orders o ON o.id = oi.order_id AND o.barbershop_id = oi.barbershop_id
-       WHERE oi.barbershop_id = ${barbershopId}::uuid AND o.status = 'CLOSED'
+       WHERE oi.barbershop_id = ${barbershopId}::uuid AND o.status = 'CLOSED' AND oi.kind = 'SERVICE'
          AND o.closed_at >= ${from} AND o.closed_at < ${to}
        GROUP BY oi.service_id
        ORDER BY revenue_cents DESC
@@ -264,14 +284,40 @@ export class OrdersService {
     }));
   }
 
-  /** Faturamento por profissional (itens de comandas fechadas) no período. Nomes ficam com a equipe. */
+  /** Produtos mais vendidos no período (comandas fechadas). */
+  async topProducts(tx: Tx, barbershopId: string, from: Date, to: Date) {
+    const rows = await tx.$queryRaw<
+      { product_id: string; name: string; quantity: bigint; revenue_cents: bigint }[]
+    >`
+      SELECT oi.product_id, MIN(oi.name) AS name, SUM(oi.quantity)::bigint AS quantity,
+             SUM(oi.total_cents)::bigint AS revenue_cents
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id AND o.barbershop_id = oi.barbershop_id
+       WHERE oi.barbershop_id = ${barbershopId}::uuid AND o.status = 'CLOSED' AND oi.kind = 'PRODUCT'
+         AND o.closed_at >= ${from} AND o.closed_at < ${to}
+       GROUP BY oi.product_id
+       ORDER BY revenue_cents DESC
+       LIMIT 10`;
+    return rows.map((row) => ({
+      productId: row.product_id,
+      name: row.name,
+      quantity: Number(row.quantity),
+      revenueCents: Number(row.revenue_cents),
+    }));
+  }
+
+  /**
+   * Faturamento por profissional (itens de comandas fechadas, inclusive produtos que ele
+   * vendeu) no período. Venda de balcão não entra aqui. Nomes ficam com a equipe.
+   */
   async revenueByProfessional(tx: Tx, barbershopId: string, from: Date, to: Date) {
     const rows = await tx.$queryRaw<{ professional_id: string; revenue_cents: bigint; services: bigint }[]>`
       SELECT oi.professional_id, SUM(oi.total_cents)::bigint AS revenue_cents,
-             SUM(oi.quantity)::bigint AS services
+             COALESCE(SUM(oi.quantity) FILTER (WHERE oi.kind = 'SERVICE'), 0)::bigint AS services
         FROM order_items oi
         JOIN orders o ON o.id = oi.order_id AND o.barbershop_id = oi.barbershop_id
        WHERE oi.barbershop_id = ${barbershopId}::uuid AND o.status = 'CLOSED'
+         AND oi.professional_id IS NOT NULL
          AND o.closed_at >= ${from} AND o.closed_at < ${to}
        GROUP BY oi.professional_id
        ORDER BY revenue_cents DESC`;
@@ -282,19 +328,40 @@ export class OrdersService {
     }));
   }
 
+  /** Serviço sempre com profissional; produto com profissional opcional (venda de balcão). */
   private async insertItem(tx: Tx, barbershopId: string, orderId: string, input: OrderItemInput) {
+    if (input.professionalId) await this.staff.assertProfessional(tx, barbershopId, input.professionalId);
+    const amounts = { quantity: input.quantity, discountCents: input.discountCents };
+
+    if ('productId' in input) {
+      const [product] = await this.products.productsForSale(tx, barbershopId, [input.productId]);
+      await tx.orderItem.create({
+        data: {
+          barbershopId,
+          orderId,
+          kind: 'PRODUCT',
+          productId: product!.id,
+          professionalId: input.professionalId,
+          name: product!.name,
+          unitPriceCents: product!.priceCents,
+          ...amounts,
+          totalCents: itemTotal(product!.priceCents, input.quantity, input.discountCents),
+        },
+      });
+      return;
+    }
+
     const [service] = await this.catalog.servicesForBooking(tx, barbershopId, [input.serviceId]);
-    await this.staff.assertProfessional(tx, barbershopId, input.professionalId);
     await tx.orderItem.create({
       data: {
         barbershopId,
         orderId,
+        kind: 'SERVICE',
         serviceId: service!.id,
         professionalId: input.professionalId,
         name: service!.name,
         unitPriceCents: service!.priceCents,
-        quantity: input.quantity,
-        discountCents: input.discountCents,
+        ...amounts,
         totalCents: itemTotal(service!.priceCents, input.quantity, input.discountCents),
       },
     });
@@ -337,12 +404,19 @@ function itemTotal(unitPriceCents: number, quantity: number, discountCents: numb
   return gross - discountCents;
 }
 
+/** O que o item vendeu, para escolher a regra de comissão (o CHECK do banco garante um dos dois). */
+function commissionTarget(item: { serviceId: string | null; productId: string | null }) {
+  return item.productId ? { productId: item.productId } : { serviceId: item.serviceId! };
+}
+
 function toView(row: OrderRow, rules: CommissionRuleTerms[]): OrderView {
   const items = row.items.map((item) => ({
     id: item.id,
+    kind: item.kind,
     serviceId: item.serviceId,
+    productId: item.productId,
     name: item.name,
-    professional: { id: item.professional.id, name: item.professional.user.name },
+    professional: item.professional ? { id: item.professional.id, name: item.professional.user.name } : null,
     unitPriceCents: item.unitPriceCents,
     quantity: item.quantity,
     discountCents: item.discountCents,
@@ -351,7 +425,7 @@ function toView(row: OrderRow, rules: CommissionRuleTerms[]): OrderView {
       item.commissionCents ??
       calculateCommissionCents(
         item.totalCents,
-        resolveCommissionRule(rules, item.professionalId, item.serviceId),
+        resolveCommissionRule(rules, item.professionalId, commissionTarget(item)),
       ),
   }));
   return {

@@ -19,6 +19,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { RequirePermissions } from '../../common/auth/decorators.js';
+import { ProductsModule } from '../products/products.module.js';
 import { StaffModule } from '../staff/staff.module.js';
 import {
   createServiceSchema,
@@ -90,7 +91,7 @@ export class CatalogController {
 }
 
 @Module({
-  imports: [StaffModule],
+  imports: [StaffModule, ProductsModule],
   controllers: [CatalogController],
   providers: [CatalogService],
   exports: [CatalogService],

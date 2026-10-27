@@ -109,35 +109,18 @@ function Reports({ today }: { today: string }) {
               )}
             </section>
 
-            <section aria-labelledby="services-title">
-              <h2 id="services-title" className="mb-3 text-xl font-bold">
-                Serviços mais vendidos
-              </h2>
-              {data!.topServices.length === 0 ? (
-                <EmptyState title="Nada vendido no período" />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Serviço</TableHead>
-                      <TableHead className="text-right">Qtd.</TableHead>
-                      <TableHead className="text-right">Receita</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data!.topServices.map((service) => (
-                      <TableRow key={service.serviceId}>
-                        <TableCell>{service.name}</TableCell>
-                        <TableCell className="text-right">{service.quantity}</TableCell>
-                        <TableCell className="text-right font-medium">
-                          {formatMoney(service.revenueCents)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </section>
+            <TopItems
+              id="services-title"
+              title="Serviços mais vendidos"
+              column="Serviço"
+              rows={data!.topServices.map((row) => ({ key: row.serviceId, ...row }))}
+            />
+            <TopItems
+              id="products-title"
+              title="Produtos mais vendidos"
+              column="Produto"
+              rows={data!.topProducts.map((row) => ({ key: row.productId, ...row }))}
+            />
           </div>
 
           <section aria-labelledby="status-title">
@@ -156,5 +139,47 @@ function Reports({ today }: { today: string }) {
         </div>
       )}
     </>
+  );
+}
+
+function TopItems({
+  id,
+  title,
+  column,
+  rows,
+}: {
+  id: string;
+  title: string;
+  column: string;
+  rows: { key: string; name: string; quantity: number; revenueCents: number }[];
+}) {
+  return (
+    <section aria-labelledby={id}>
+      <h2 id={id} className="mb-3 text-xl font-bold">
+        {title}
+      </h2>
+      {rows.length === 0 ? (
+        <EmptyState title="Nada vendido no período" />
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{column}</TableHead>
+              <TableHead className="text-right">Qtd.</TableHead>
+              <TableHead className="text-right">Receita</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow key={row.key}>
+                <TableCell>{row.name}</TableCell>
+                <TableCell className="text-right">{row.quantity}</TableCell>
+                <TableCell className="text-right font-medium">{formatMoney(row.revenueCents)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </section>
   );
 }

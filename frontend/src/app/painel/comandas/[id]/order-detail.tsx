@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Package, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MoneyInput } from '@/components/money-input';
 import { ErrorState, LoadingRows, PageHeader } from '@/components/states';
@@ -32,6 +32,7 @@ import {
   useBarbershop,
   useCloseOrder,
   useOrder,
+  useProducts,
   useRemoveOrderItem,
   useServices,
   useStaff,
@@ -109,7 +110,9 @@ function Items({ order }: { order: Order }) {
 
   if (order.items.length === 0) {
     return (
-      <p className="text-muted-foreground py-6 text-sm">Nenhum item. Adicione os serviços realizados.</p>
+      <p className="text-muted-foreground py-6 text-sm">
+        Nenhum item. Adicione os serviços realizados e os produtos vendidos.
+      </p>
     );
   }
 
@@ -117,7 +120,7 @@ function Items({ order }: { order: Order }) {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Serviço</TableHead>
+          <TableHead>Item</TableHead>
           <TableHead className="w-20 text-right">Qtd.</TableHead>
           <TableHead className="w-32 text-right">Desconto</TableHead>
           <TableHead className="text-right">Total</TableHead>
@@ -136,8 +139,13 @@ function Items({ order }: { order: Order }) {
           <TableRow key={item.id}>
             <TableCell>
               <span className="font-medium">{item.name}</span>
+              {item.kind === 'PRODUCT' && (
+                <Badge variant="outline" className="ml-2">
+                  <Package aria-hidden /> Produto
+                </Badge>
+              )}
               <p className="text-muted-foreground text-xs">
-                {item.professional.name} · {formatMoney(item.unitPriceCents)}
+                {item.professional?.name ?? 'Balcão'} · {formatMoney(item.unitPriceCents)}
               </p>
             </TableCell>
             <TableCell className="text-right">
@@ -244,62 +252,117 @@ function DiscountInput({
   );
 }
 
+/** Venda de produto sem profissional: balcão, sem comissão (business-rules §4). */
+const COUNTER = '__balcao__';
+
 function AddItem({ orderId }: { orderId: string }) {
+  const session = useAuthenticatedSession();
+  const canSellProducts = can(session, 'products:read');
   const services = useServices();
+  const products = useProducts();
   const staff = useStaff();
   const add = useAddOrderItem(orderId);
-  const [serviceId, setServiceId] = useState('');
+  const [kind, setKind] = useState<'service' | 'product'>('service');
+  const [itemId, setItemId] = useState('');
   const [professionalId, setProfessionalId] = useState('');
   const professionals = (staff.data ?? []).filter((member) => member.isProfessional && member.active);
+  const isProduct = kind === 'product';
+
+  const switchKind = (next: 'service' | 'product') => {
+    setKind(next);
+    setItemId('');
+    setProfessionalId(next === 'product' ? COUNTER : '');
+  };
 
   const submit = async () => {
-    if (!serviceId || !professionalId) {
-      toast.error('Escolha o serviço e quem atendeu.');
+    if (!itemId || !professionalId) {
+      toast.error(isProduct ? 'Escolha o produto.' : 'Escolha o serviço e quem atendeu.');
       return;
     }
     try {
-      await add.mutateAsync({ serviceId, professionalId, quantity: 1, discountCents: 0 });
-      setServiceId('');
+      await add.mutateAsync(
+        isProduct
+          ? {
+              productId: itemId,
+              professionalId: professionalId === COUNTER ? null : professionalId,
+              quantity: 1,
+              discountCents: 0,
+            }
+          : { serviceId: itemId, professionalId, quantity: 1, discountCents: 0 },
+      );
+      setItemId('');
     } catch (error) {
       toast.error(errorMessage(error));
     }
   };
 
   return (
-    <div className="border-border mt-4 grid gap-3 rounded-lg border border-dashed p-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-      <div className="grid gap-1.5">
-        <Label htmlFor="add-service">Serviço</Label>
-        <Select value={serviceId} onValueChange={setServiceId}>
-          <SelectTrigger id="add-service" className="w-full">
-            <SelectValue placeholder="Escolha" />
-          </SelectTrigger>
-          <SelectContent>
-            {services.data?.map((service) => (
-              <SelectItem key={service.id} value={service.id}>
-                {service.name} · {formatMoney(service.priceCents)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+    <div className="border-border mt-4 grid gap-3 rounded-lg border border-dashed p-4">
+      {canSellProducts && (
+        <div className="flex gap-2" role="radiogroup" aria-label="Tipo de item">
+          {(
+            [
+              ['service', 'Serviço'],
+              ['product', 'Produto'],
+            ] as const
+          ).map(([value, label]) => (
+            <Button
+              key={value}
+              type="button"
+              size="sm"
+              role="radio"
+              aria-checked={kind === value}
+              variant={kind === value ? 'default' : 'outline'}
+              onClick={() => switchKind(value)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      )}
+      <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        <div className="grid gap-1.5">
+          <Label htmlFor="add-item">{isProduct ? 'Produto' : 'Serviço'}</Label>
+          <Select value={itemId} onValueChange={setItemId}>
+            <SelectTrigger id="add-item" className="w-full">
+              <SelectValue placeholder="Escolha" />
+            </SelectTrigger>
+            <SelectContent>
+              {isProduct
+                ? products.data?.map((product) => (
+                    <SelectItem key={product.id} value={product.id} disabled={product.stockQuantity < 1}>
+                      {product.name} · {formatMoney(product.priceCents)} ·{' '}
+                      {product.stockQuantity < 1 ? 'sem estoque' : `${product.stockQuantity} em estoque`}
+                    </SelectItem>
+                  ))
+                : services.data?.map((service) => (
+                    <SelectItem key={service.id} value={service.id}>
+                      {service.name} · {formatMoney(service.priceCents)}
+                    </SelectItem>
+                  ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="add-professional">{isProduct ? 'Quem vendeu' : 'Quem atendeu'}</Label>
+          <Select value={professionalId} onValueChange={setProfessionalId}>
+            <SelectTrigger id="add-professional" className="w-full">
+              <SelectValue placeholder="Escolha" />
+            </SelectTrigger>
+            <SelectContent>
+              {isProduct && <SelectItem value={COUNTER}>Balcão (sem comissão)</SelectItem>}
+              {professionals.map((member) => (
+                <SelectItem key={member.id} value={member.id}>
+                  {member.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button variant="outline" onClick={submit} disabled={add.isPending}>
+          <Plus aria-hidden /> Adicionar
+        </Button>
       </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor="add-professional">Quem atendeu</Label>
-        <Select value={professionalId} onValueChange={setProfessionalId}>
-          <SelectTrigger id="add-professional" className="w-full">
-            <SelectValue placeholder="Escolha" />
-          </SelectTrigger>
-          <SelectContent>
-            {professionals.map((member) => (
-              <SelectItem key={member.id} value={member.id}>
-                {member.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <Button variant="outline" onClick={submit} disabled={add.isPending}>
-        <Plus aria-hidden /> Adicionar
-      </Button>
     </div>
   );
 }

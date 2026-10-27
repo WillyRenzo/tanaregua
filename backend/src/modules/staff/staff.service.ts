@@ -225,6 +225,15 @@ export class StaffService {
     return new Map(rows.map((row) => [row.id, row.user.name]));
   }
 
+  /** Nomes por usuário (ex.: autor de uma movimentação), só de quem tem vínculo nesta barbearia. */
+  async namesByUser(tx: Tx, barbershopId: string, userIds: string[]): Promise<Map<string, string>> {
+    const rows = await tx.membership.findMany({
+      where: { barbershopId, userId: { in: userIds } },
+      select: { userId: true, user: { select: { name: true } } },
+    });
+    return new Map(rows.map((row) => [row.userId, row.user.name]));
+  }
+
   /** Profissional ativo que atende (aparece na agenda). 422 se não puder receber agendamentos. */
   async assertProfessional(tx: Tx, barbershopId: string, membershipId: string) {
     const professional = await tx.membership.findFirst({

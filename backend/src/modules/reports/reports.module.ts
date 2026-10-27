@@ -42,6 +42,7 @@ export class ReportsService {
       const revenueByDay = await this.finance.revenueByDay(tx, auth.barbershopId, settings.timezone, period);
       const byProfessional = await this.orders.revenueByProfessional(tx, auth.barbershopId, from, to);
       const topServices = await this.orders.topServices(tx, auth.barbershopId, from, to);
+      const topProducts = await this.orders.topProducts(tx, auth.barbershopId, from, to);
       const statuses = await this.appointments.statusCounts(tx, auth.barbershopId, from, to);
       const names = await this.staff.names(
         tx,
@@ -61,6 +62,7 @@ export class ReportsService {
         },
         professionals: byProfessional.map((row) => ({ ...row, name: names.get(row.professionalId) ?? '—' })),
         topServices,
+        topProducts,
         appointments: {
           byStatus: statuses,
           // Taxa sobre atendimentos que deveriam ter acontecido (concluídos + faltas).

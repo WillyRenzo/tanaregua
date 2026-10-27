@@ -1,5 +1,6 @@
 // Seed de desenvolvimento: `npm run db:seed`. Cria a "Barbearia Demo" com uma conta por
-// papel. Idempotente: se a demo já existir, só mostra as credenciais.
+// papel. Idempotente: se a demo já existir, só acrescenta os módulos que faltam (criados
+// depois da demo) e mostra as credenciais.
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD, DEMO_SLUG, NEIGHBOR_SLUG, seedDemo } from './seed/demo-seed.js';
@@ -15,7 +16,9 @@ try {
   console.log(
     result.created
       ? '\nDados de demonstração criados.'
-      : `\nA barbearia "${DEMO_SLUG}" já existe: nada foi alterado. Para recriar do zero, apague o banco local (docker compose down -v).`,
+      : result.added.length > 0
+        ? `\nA barbearia "${DEMO_SLUG}" já existia; acrescentei: ${result.added.join(', ')}.`
+        : `\nA barbearia "${DEMO_SLUG}" já existe e está completa: nada foi alterado. Para recriar do zero (com datas atuais), apague o banco local (docker compose down -v).`,
   );
   console.log(`\nSenha de todas as contas: ${DEMO_PASSWORD}\n`);
   console.table(

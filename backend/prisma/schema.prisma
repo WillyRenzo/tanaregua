@@ -39,6 +39,7 @@ model Barbershop {
   roles       Role[]
   clients     Client[]
   services    Service[]
+  products    Product[]
   memberships Membership[]
 
   @@map("barbershops")
@@ -232,6 +233,7 @@ model CommissionRule {
   barbershopId String         @map("barbershop_id") @db.Uuid
   membershipId String?        @map("membership_id") @db.Uuid
   serviceId    String?        @map("service_id") @db.Uuid
+  productId    String?        @map("product_id") @db.Uuid
   type         CommissionType
   /// PERCENT: basis points (4000 = 40%). FIXED: centavos.
   value        Int
@@ -240,11 +242,72 @@ model CommissionRule {
 
   membership Membership? @relation(fields: [barbershopId, membershipId], references: [barbershopId, id], onDelete: Cascade, map: "commission_rules_tenant_membership_fkey")
   service    Service?    @relation(fields: [barbershopId, serviceId], references: [barbershopId, id], onDelete: Cascade, map: "commission_rules_tenant_service_fkey")
+  product    Product?    @relation(fields: [barbershopId, productId], references: [barbershopId, id], onDelete: Cascade, map: "commission_rules_tenant_product_fkey")
 
   /// Criado com NULLS NOT DISTINCT na migration (NULL = "qualquer"), que o Prisma não expressa.
-  @@unique([barbershopId, membershipId, serviceId], map: "commission_rules_target_key")
+  @@unique([barbershopId, membershipId, serviceId, productId], map: "commission_rules_target_key")
   @@index([barbershopId])
   @@map("commission_rules")
+}
+
+// ───────────── Estoque e produtos (business-rules §7) ─────────────
+
+/// Produto vendido na comanda. `stockQuantity` é mantido só pelo trigger das movimentações
+/// (o usuário da aplicação não tem UPDATE nessa coluna) e nunca fica negativo (CHECK).
+model Product {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  barbershopId     String   @map("barbershop_id") @db.Uuid
+  name             String
+  description      String?
+  priceCents       Int      @map("price_cents")
+  /// Custo de referência por unidade (o da última entrada); valoriza vendas e ajustes.
+  costCents        Int      @default(0) @map("cost_cents")
+  stockQuantity    Int      @default(0) @map("stock_quantity")
+  /// Abaixo disso o produto aparece como "repor estoque". Null = sem alerta.
+  minStockQuantity Int?     @map("min_stock_quantity")
+  /// Inativo some da venda, mas continua no histórico (sem DELETE).
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  barbershop      Barbershop       @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "products_barbershop_fkey")
+  movements       StockMovement[]
+  orderItems      OrderItem[]
+  commissionRules CommissionRule[]
+
+  @@unique([barbershopId, id], map: "products_tenant_id_key")
+  @@index([barbershopId, active])
+  @@map("products")
+}
+
+enum StockMovementKind {
+  ENTRY
+  SALE
+  SALE_REVERSAL
+  ADJUSTMENT
+}
+
+/// Histórico de estoque, append-only: entrada (+), venda (−), estorno de venda (+), ajuste (±).
+/// O saldo do produto é a soma destas linhas (aplicada por trigger).
+model StockMovement {
+  id            String            @id @default(uuid(7)) @db.Uuid
+  barbershopId  String            @map("barbershop_id") @db.Uuid
+  productId     String            @map("product_id") @db.Uuid
+  kind          StockMovementKind
+  /// Delta com sinal.
+  quantity      Int
+  /// Custo por unidade (pago na entrada; o de referência nas demais). Valoriza o estoque.
+  unitCostCents Int               @map("unit_cost_cents")
+  reason        String?
+  orderId       String?           @map("order_id") @db.Uuid
+  authorUserId  String            @map("author_user_id") @db.Uuid
+  occurredAt    DateTime          @default(now()) @map("occurred_at") @db.Timestamptz
+
+  product Product @relation(fields: [barbershopId, productId], references: [barbershopId, id], map: "stock_movements_tenant_product_fkey")
+  order   Order?  @relation(fields: [barbershopId, orderId], references: [barbershopId, id], map: "stock_movements_tenant_order_fkey")
+
+  @@index([barbershopId, productId, occurredAt])
+  @@map("stock_movements")
 }
 
 // ───────────── Agenda ─────────────
@@ -266,23 +329,23 @@ enum AppointmentSource {
 /// Regra mais crítica do sistema (business-rules §2): exclusion constraint na migration
 /// impede dois atendimentos ativos sobrepostos para o mesmo profissional.
 model Appointment {
-  id                 String            @id @default(uuid(7)) @db.Uuid
-  barbershopId       String            @map("barbershop_id") @db.Uuid
-  professionalId     String            @map("professional_id") @db.Uuid
-  clientId           String            @map("client_id") @db.Uuid
-  startsAt           DateTime          @map("starts_at") @db.Timestamptz
-  endsAt             DateTime          @map("ends_at") @db.Timestamptz
+  id                  String            @id @default(uuid(7)) @db.Uuid
+  barbershopId        String            @map("barbershop_id") @db.Uuid
+  professionalId      String            @map("professional_id") @db.Uuid
+  clientId            String            @map("client_id") @db.Uuid
+  startsAt            DateTime          @map("starts_at") @db.Timestamptz
+  endsAt              DateTime          @map("ends_at") @db.Timestamptz
   /// endsAt + buffer da barbearia no momento do agendamento; é o que a constraint compara.
-  blockedUntil       DateTime          @map("blocked_until") @db.Timestamptz
-  status             AppointmentStatus @default(SCHEDULED)
-  source             AppointmentSource
-  notes              String?
-  cancellationReason String?           @map("cancellation_reason")
+  blockedUntil        DateTime          @map("blocked_until") @db.Timestamptz
+  status              AppointmentStatus @default(SCHEDULED)
+  source              AppointmentSource
+  notes               String?
+  cancellationReason  String?           @map("cancellation_reason")
   /// Justificativa da falta, registrada pela equipe. Nunca aparece para o cliente.
-  noShowJustification String?          @map("no_show_justification")
-  createdByUserId    String            @map("created_by_user_id") @db.Uuid
-  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+  noShowJustification String?           @map("no_show_justification")
+  createdByUserId     String            @map("created_by_user_id") @db.Uuid
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamptz
 
   professional Membership        @relation(fields: [barbershopId, professionalId], references: [barbershopId, id], map: "appointments_tenant_professional_fkey")
   client       Client            @relation(fields: [barbershopId, clientId], references: [barbershopId, id], map: "appointments_tenant_client_fkey")
@@ -400,6 +463,7 @@ model Order {
   items             OrderItem[]
   commissionEntries CommissionEntry[]
   cashEntries       CashEntry[]
+  stockMovements    StockMovement[]
 
   @@unique([barbershopId, id], map: "orders_tenant_id_key")
   @@unique([barbershopId, appointmentId], map: "orders_appointment_key")
@@ -409,12 +473,21 @@ model Order {
 }
 
 /// Item da comanda com snapshot do preço; a regra de comissão é congelada no fechamento.
+enum OrderItemKind {
+  SERVICE
+  PRODUCT
+}
+
 model OrderItem {
   id              String          @id @default(uuid(7)) @db.Uuid
   barbershopId    String          @map("barbershop_id") @db.Uuid
   orderId         String          @map("order_id") @db.Uuid
-  serviceId       String          @map("service_id") @db.Uuid
-  professionalId  String          @map("professional_id") @db.Uuid
+  kind            OrderItemKind   @default(SERVICE)
+  /// Exatamente um de serviceId/productId, conforme o kind (CHECK na migration).
+  serviceId       String?         @map("service_id") @db.Uuid
+  productId       String?         @map("product_id") @db.Uuid
+  /// Obrigatório em serviço; opcional em produto (venda de balcão, sem comissão).
+  professionalId  String?         @map("professional_id") @db.Uuid
   name            String
   unitPriceCents  Int             @map("unit_price_cents")
   quantity        Int             @default(1)
@@ -426,9 +499,10 @@ model OrderItem {
   commissionCents Int?            @map("commission_cents")
   createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz
 
-  order        Order      @relation(fields: [barbershopId, orderId], references: [barbershopId, id], onDelete: Cascade, map: "order_items_tenant_order_fkey")
-  service      Service    @relation(fields: [barbershopId, serviceId], references: [barbershopId, id], map: "order_items_tenant_service_fkey")
-  professional Membership @relation(fields: [barbershopId, professionalId], references: [barbershopId, id], map: "order_items_tenant_professional_fkey")
+  order        Order       @relation(fields: [barbershopId, orderId], references: [barbershopId, id], onDelete: Cascade, map: "order_items_tenant_order_fkey")
+  service      Service?    @relation(fields: [barbershopId, serviceId], references: [barbershopId, id], map: "order_items_tenant_service_fkey")
+  product      Product?    @relation(fields: [barbershopId, productId], references: [barbershopId, id], map: "order_items_tenant_product_fkey")
+  professional Membership? @relation(fields: [barbershopId, professionalId], references: [barbershopId, id], map: "order_items_tenant_professional_fkey")
 
   @@unique([barbershopId, id], map: "order_items_tenant_id_key")
   @@index([barbershopId, orderId])

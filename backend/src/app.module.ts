@@ -22,6 +22,7 @@ import { OutboxModule } from './modules/notifications/outbox.service.js';
 import { PublicBookingModule } from './modules/public-booking/public-booking.module.js';
 import { FinanceModule } from './modules/finance/finance.module.js';
 import { OrdersModule } from './modules/orders/orders.module.js';
+import { ProductsModule } from './modules/products/products.module.js';
 import { ReportsModule } from './modules/reports/reports.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { ClockModule } from './common/time/clock.js';
@@ -69,6 +70,7 @@ import { StorageModule } from './common/storage/object-storage.js';
     StaffModule,
     ClientsModule,
     CatalogModule,
+    ProductsModule,
     IdempotencyModule,
     OutboxModule,
     AppointmentsModule,

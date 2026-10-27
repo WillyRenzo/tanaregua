@@ -121,6 +121,7 @@ export const commissionRuleSchema = z
     id: z.uuid(),
     membershipId: z.uuid().nullable(),
     serviceId: z.uuid().nullable(),
+    productId: z.uuid().nullable(),
     type: z.enum(['PERCENT', 'FIXED']),
     value: z.int(),
   })
