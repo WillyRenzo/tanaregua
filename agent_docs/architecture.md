@@ -89,6 +89,7 @@ Regras para portas novas:
 - `/painel/*`: client-side (React Query sobre o cliente tipado). A sessão é reconstruída pelo cookie de refresh no `PanelShell`. As páginas exportam `instant = false`, porque são bloqueadas por sessão (validação de navegação instantânea do Next 16.3+).
 - `/[slug]`: Server Component com `'use cache'` (minutos) para os dados públicos; a disponibilidade e a reserva rodam no cliente, sem cache.
 - `proxy.ts` só redireciona quem não tem cookie (UX). A API revalida tudo.
+- **Duas sessões independentes no navegador** (ver `security.md`): `sessionStore` (painel) e `clientSessionStore` (agendamento online), em `lib/session/session-store.ts`. O cliente da API escolhe o token pela rota: `/v1/public/...` usa a sessão do cliente, o resto usa a do painel, e cada uma se renova pelo seu cookie (`refreshSession('panel' | 'client')`). Unificar as duas fazia o F5 do painel cair na página da barbearia quando o dono entrava como cliente no mesmo navegador (teste `e2e/sessions.spec.ts`).
 
 ## AFAs do Z3t@ no MVP
 
