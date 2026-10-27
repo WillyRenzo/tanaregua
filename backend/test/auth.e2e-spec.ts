@@ -142,4 +142,29 @@ describe('Auth (e2e)', () => {
       .expect(400);
     expect(response.body.errors[0]).toMatch(/reservado/);
   });
+
+  it('sessão do painel e sessão de cliente no mesmo navegador são independentes', async () => {
+    const shop = await registerTenant(app);
+    // Agent guarda os cookies entre requisições, como um navegador.
+    const browser = request.agent(app.getHttpServer());
+    await browser.post('/v1/auth/login').send({ email: shop.email, password: shop.password }).expect(200);
+
+    const client = await browser
+      .post(`/v1/public/${shop.slug}/auth/register`)
+      .send({ name: 'Cliente', email: `cliente-${Date.now()}@teste.com`, password: 'senha-forte-123' })
+      .expect(201);
+    const cookies = ([] as string[]).concat(client.headers['set-cookie'] ?? []);
+    expect(cookies.some((value) => value.startsWith('tnr_client_refresh='))).toBe(true);
+    expect(cookies.some((value) => value.startsWith('tnr_refresh='))).toBe(false);
+
+    const panel = await browser.post('/v1/auth/refresh').expect(200);
+    expect(panel.body.profile.membership.role.key).toBe('owner');
+    const booking = await browser.post('/v1/auth/client/refresh').expect(200);
+    expect(booking.body.profile.permissions).toEqual(['bookings:self']);
+
+    // Sair do agendamento online não derruba o painel.
+    await browser.post('/v1/auth/client/logout').expect(204);
+    await browser.post('/v1/auth/client/refresh').expect(401);
+    await browser.post('/v1/auth/refresh').expect(200);
+  });
 });
