@@ -92,7 +92,7 @@ Senha de todas as contas: **`senha-forte-123`**.
 | Recepcionista | `recepcao@demo.tanaregua.test` | [/entrar](http://localhost:3000/entrar) | Agenda de todos, clientes, comandas e caixa. Sem relatórios e sem estorno |
 | Profissional | `bia@demo.tanaregua.test` | [/entrar](http://localhost:3000/entrar) | Só a própria agenda e as próprias comissões |
 | Profissional | `rafa@demo.tanaregua.test` | [/entrar](http://localhost:3000/entrar) | Idem, para comparar com a Bia |
-| Cliente | `cliente@demo.tanaregua.test` | [/barbearia-demo](http://localhost:3000/barbearia-demo) | Agendar online, "Meus agendamentos", cancelar dentro do prazo |
+| Cliente | `cliente@demo.tanaregua.test` | [/barbearia-demo](http://localhost:3000/barbearia-demo) | Agendar online, "Meus agendamentos", reagendar (até 24 h antes) e cancelar (até 2 h antes) |
 | Dona de outra barbearia | `dono@vizinha.tanaregua.test` | [/entrar](http://localhost:3000/entrar) | Isolamento: não enxerga nada da Barbearia Demo |
 
 **O que já vem cadastrado** (dá para navegar por todas as telas com dados):

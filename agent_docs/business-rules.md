@@ -51,6 +51,7 @@ Não invente regra para preencher uma lacuna: pergunte.
   - Percentual em **basis points** (4000 = 40%); valor fixo em centavos. Arredondamento: meio centavo para cima, só em `calculateCommissionCents`.
   - A comissão nunca passa do valor cobrado pelo item (confirmada): um fixo de R$ 15 sobre um item de R$ 10 com desconto gera R$ 10.
   - A comissão é calculada no fechamento da comanda e gravada (snapshot). Mudar a configuração não recalcula o passado.
+  - **Produtos** (fase 2): a venda de produto na comanda também gera comissão configurável, com as mesmas regras e a mesma precedência dos serviços (produto no lugar do serviço). Sem regra aplicável, não há comissão.
 - Salários e comissões de terceiros são dados sensíveis: só o dono/admin vê. O profissional vê apenas as próprias comissões.
 - Relatórios financeiros derivam de comandas fechadas e lançamentos, nunca de agendamentos.
 
@@ -65,6 +66,7 @@ Não invente regra para preencher uma lacuna: pergunte.
 ## 6. Pacotes de serviços
 
 - O cliente compra um pacote com N sessões de um ou mais serviços. Cada uso consome uma sessão, vinculada à comanda.
+- O pacote é vendido como item da comanda e pago no balcão, com as formas de pagamento normais. Isso conta como pagamento antecipado. (Pagamento online do pacote: fase 3.)
 - O saldo de sessões nunca fica negativo.
 - **Validade configurável** por pacote (definida pela barbearia ao criar o pacote). Sessões não usadas até a data de validade expiram e não podem mais ser consumidas.
 - **Intransferível:** o pacote pertence ao cliente que comprou e não pode ser passado para outro cliente.
@@ -108,4 +110,5 @@ Não invente regra para preencher uma lacuna: pergunte.
 
 - Nome, telefone, e-mail e data de nascimento são dados pessoais (LGPD).
 - Mensagens de aniversário ou marketing exigem consentimento registrado (data e canal). Sem consentimento, o aniversário aparece só como lembrete interno.
+- Canais (fase 2): **e-mail e WhatsApp**, cada um por uma porta própria com adapter trocável. A mensagem só sai pelo canal que o cliente consentiu. Provedor de WhatsApp **[PENDENTE]**.
 - O cliente pode pedir exclusão ou anonimização. O histórico financeiro é mantido anonimizado.
