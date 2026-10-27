@@ -543,6 +543,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/appointments/{id}/no-show-justification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Registra, troca ou remove a justificativa de uma falta
+         * @description **Permissões (basta uma):** `appointments:write:any`, `appointments:write:own`
+         */
+        put: operations["AppointmentsController_justifyNoShow"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/clients/{id}/no-shows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Faltas sem justificativa do cliente
+         * @description **Permissões (basta uma):** `clients:read`
+         */
+        get: operations["AppointmentsController_unjustifiedNoShows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/{slug}": {
         parameters: {
             query?: never;
@@ -699,6 +739,26 @@ export interface paths {
          * @description **Permissões (basta uma):** `bookings:self`
          */
         post: operations["PublicBookingController_cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/{slug}/me/appointments/{id}/reschedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reagenda meu agendamento
+         * @description **Permissões (basta uma):** `bookings:self`
+         */
+        post: operations["PublicBookingController_reschedule"];
         delete?: never;
         options?: never;
         head?: never;
@@ -934,6 +994,7 @@ export interface components {
             slug: string;
             timezone: string;
             cancellationMinNoticeMinutes: number;
+            rescheduleMinNoticeMinutes: number;
             bufferMinutes: number;
         };
         Role: {
@@ -1062,6 +1123,7 @@ export interface components {
                 id: string;
                 name: string;
                 phone: string | null;
+                unjustifiedNoShows: number;
             };
             items: {
                 /** Format: uuid */
@@ -1071,6 +1133,7 @@ export interface components {
                 durationMinutes: number;
             }[];
             totalCents: number;
+            noShowJustification: string | null;
         };
         Availability: {
             date: string;
@@ -1083,11 +1146,24 @@ export interface components {
                 starts: string[];
             }[];
         };
+        UnjustifiedNoShow: {
+            /** Format: uuid */
+            appointmentId: string;
+            /** Format: date-time */
+            startsAt: string;
+            professional: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            };
+            services: string[];
+        };
         PublicBarbershop: {
             name: string;
             slug: string;
             timezone: string;
             cancellationMinNoticeMinutes: number;
+            rescheduleMinNoticeMinutes: number;
         };
         PublicProfessional: {
             /** Format: uuid */
@@ -1104,6 +1180,39 @@ export interface components {
                 name: string;
                 starts: string[];
             }[];
+        };
+        ClientAppointment: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "SCHEDULED" | "CONFIRMED" | "IN_SERVICE" | "COMPLETED" | "CANCELLED" | "NO_SHOW";
+            /** @enum {string} */
+            source: "PANEL" | "ONLINE";
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            notes: string | null;
+            cancellationReason: string | null;
+            professional: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            };
+            client: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                phone: string | null;
+            };
+            items: {
+                /** Format: uuid */
+                serviceId: string;
+                name: string;
+                priceCents: number;
+                durationMinutes: number;
+            }[];
+            totalCents: number;
         };
         CashDay: {
             date: string;
@@ -1667,6 +1776,7 @@ export interface operations {
                     name?: string;
                     timezone?: string;
                     cancellationMinNoticeMinutes?: number;
+                    rescheduleMinNoticeMinutes?: number;
                     bufferMinutes?: number;
                 };
             };
@@ -3283,6 +3393,128 @@ export interface operations {
             };
         };
     };
+    AppointmentsController_justifyNoShow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    justification: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Appointment"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not-a-no-show`: O agendamento não está marcado como falta. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AppointmentsController_unjustifiedNoShows: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnjustifiedNoShow"][];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     PublicBookingController_info: {
         parameters: {
             query?: never;
@@ -3598,7 +3830,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Appointment"][];
+                    "application/json": components["schemas"]["ClientAppointment"][];
                 };
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
@@ -3660,7 +3892,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Appointment"];
+                    "application/json": components["schemas"]["ClientAppointment"];
                 };
             };
             /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
@@ -3728,7 +3960,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Appointment"];
+                    "application/json": components["schemas"]["ClientAppointment"];
                 };
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
@@ -3759,6 +3991,92 @@ export interface operations {
                 };
             };
             /** @description `cancellation-window-closed`: Fora do prazo de cancelamento online. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PublicBookingController_reschedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    startsAt: string;
+                    /** Format: uuid */
+                    professionalId?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientAppointment"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `slot-unavailable`: O novo horário não está disponível. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `reschedule-window-closed | not-reschedulable`: Fora do prazo de reagendamento online, ou o atendimento já começou, terminou ou foi cancelado. */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -41,6 +41,7 @@ export type UpdateAppointmentInput = z.infer<typeof updateAppointmentSchema>;
 /** COMPLETED não entra aqui: só o fechamento da comanda conclui um atendimento. */
 export const changeStatusSchema = z.strictObject({
   status: z.enum(['CONFIRMED', 'IN_SERVICE', 'CANCELLED', 'NO_SHOW']),
+  /** Motivo do cancelamento ou, em NO_SHOW, justificativa da falta (opcional, só a equipe vê). */
   reason: z.string().trim().max(200).optional(),
 });
 export type ChangeStatusInput = z.infer<typeof changeStatusSchema>;
@@ -70,3 +71,22 @@ export const availabilityQuerySchema = z.strictObject({
   professionalId: z.uuid().optional(),
 });
 export type AvailabilityQuery = z.infer<typeof availabilityQuerySchema>;
+
+/** Justificativa de uma falta já marcada; `null` remove (volta a contar como sem justificativa). */
+export const noShowJustificationSchema = z
+  .strictObject({ justification: z.string().trim().min(1).max(200).nullable() })
+  .meta({ example: { justification: 'Avisou depois que estava doente' } });
+export type NoShowJustificationInput = z.infer<typeof noShowJustificationSchema>;
+
+export const noShowsQuerySchema = z.strictObject({ clientId: z.uuid() });
+export type NoShowsQuery = z.infer<typeof noShowsQuerySchema>;
+
+/** Reagendamento pelo cliente: só o horário (e, opcionalmente, o profissional) muda. */
+export const clientRescheduleSchema = z
+  .strictObject({
+    startsAt: instantSchema,
+    /** Omitido = mantém o mesmo profissional. */
+    professionalId: z.uuid().optional(),
+  })
+  .meta({ example: { startsAt: '2030-03-05T15:00:00-03:00' } });
+export type ClientRescheduleInput = z.infer<typeof clientRescheduleSchema>;

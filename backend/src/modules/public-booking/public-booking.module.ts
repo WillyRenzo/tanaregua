@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { API_TAGS, ApiProblem, ApiResult, Idempotent } from '../../common/http/openapi.js';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { appointmentViewSchema } from '../appointments/appointments.responses.js';
+import { clientAppointmentViewSchema } from '../appointments/appointments.responses.js';
 import { serviceViewSchema, sessionResponseSchema } from '../registry.responses.js';
 import {
   publicAvailabilityResultSchema,
@@ -27,7 +27,11 @@ import type { Response } from 'express';
 import { Public, RequirePermissions } from '../../common/auth/decorators.js';
 import { slugSchema } from '../auth/auth.schemas.js';
 import { AppointmentsModule } from '../appointments/appointments.module.js';
-import type { AvailabilityQuery } from '../appointments/appointments.schemas.js';
+import {
+  clientRescheduleSchema,
+  type AvailabilityQuery,
+  type ClientRescheduleInput,
+} from '../appointments/appointments.schemas.js';
 import { SessionCookieService, type SessionResponse } from '../auth/session-cookie.service.js';
 import { BarbershopsModule } from '../barbershops/barbershops.module.js';
 import { CatalogModule } from '../catalog/catalog.module.js';
@@ -125,7 +129,7 @@ export class PublicBookingController {
   }
 
   @RequirePermissions('bookings:self')
-  @ApiResult(z.array(appointmentViewSchema))
+  @ApiResult(z.array(clientAppointmentViewSchema))
   @ApiOperation({ summary: 'Meus agendamentos' })
   @Get('me/appointments')
   myAppointments(@Param('slug', { schema: slugSchema }) slug: string) {
@@ -135,7 +139,7 @@ export class PublicBookingController {
   @RequirePermissions('bookings:self')
   @Throttle(BOOKING_THROTTLE)
   @Idempotent()
-  @ApiResult(appointmentViewSchema, 201)
+  @ApiResult(clientAppointmentViewSchema, 201)
   @ApiOperation({ summary: 'Reserva horário' })
   @ApiProblem(409, 'slot-unavailable', 'O horário não está mais disponível.')
   @Post('bookings')
@@ -148,12 +152,32 @@ export class PublicBookingController {
 
   @RequirePermissions('bookings:self')
   @HttpCode(HttpStatus.OK)
-  @ApiResult(appointmentViewSchema)
+  @ApiResult(clientAppointmentViewSchema)
   @ApiOperation({ summary: 'Cancela meu agendamento' })
   @ApiProblem(422, 'cancellation-window-closed', 'Fora do prazo de cancelamento online.')
   @Post('me/appointments/:id/cancel')
   cancel(@Param('slug', { schema: slugSchema }) slug: string, @Param('id', ParseUUIDPipe) id: string) {
     return this.booking.cancel(slug, id);
+  }
+
+  @RequirePermissions('bookings:self')
+  @Throttle(BOOKING_THROTTLE)
+  @HttpCode(HttpStatus.OK)
+  @ApiResult(clientAppointmentViewSchema)
+  @ApiOperation({ summary: 'Reagenda meu agendamento' })
+  @ApiProblem(
+    422,
+    'reschedule-window-closed | not-reschedulable',
+    'Fora do prazo de reagendamento online, ou o atendimento já começou, terminou ou foi cancelado.',
+  )
+  @ApiProblem(409, 'slot-unavailable', 'O novo horário não está disponível.')
+  @Post('me/appointments/:id/reschedule')
+  reschedule(
+    @Param('slug', { schema: slugSchema }) slug: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body({ schema: clientRescheduleSchema }) input: ClientRescheduleInput,
+  ) {
+    return this.booking.reschedule(slug, id, input);
   }
 }
 

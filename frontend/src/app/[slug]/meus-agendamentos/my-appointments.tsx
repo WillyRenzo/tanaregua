@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { errorMessage } from '@/lib/api/errors';
 import { formatDateLong, formatMoney, formatTime } from '@/lib/format';
 import { useCancelBooking, useMyAppointments } from '@/lib/public-queries';
-import type { Appointment } from '@/lib/queries';
+import type { Schemas } from '@/lib/queries';
 import { useNow } from '@/lib/use-now';
 import { ClientAuthForm } from '../client-auth-form';
 import { useClientSession } from '../use-client-session';
@@ -84,7 +84,7 @@ function AppointmentCard({
   canCancel,
   isFuture,
 }: {
-  appointment: Appointment;
+  appointment: Schemas['ClientAppointment'];
   slug: string;
   timezone: string;
   canCancel: boolean;

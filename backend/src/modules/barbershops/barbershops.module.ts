@@ -26,6 +26,12 @@ export const updateBarbershopSchema = z.strictObject({
     .min(0)
     .max(7 * 24 * 60)
     .optional(),
+  rescheduleMinNoticeMinutes: z
+    .number()
+    .int()
+    .min(0)
+    .max(7 * 24 * 60)
+    .optional(),
   bufferMinutes: z.number().int().min(0).max(120).optional(),
 });
 type UpdateBarbershopInput = z.infer<typeof updateBarbershopSchema>;
@@ -36,6 +42,7 @@ const settingsSelect = {
   slug: true,
   timezone: true,
   cancellationMinNoticeMinutes: true,
+  rescheduleMinNoticeMinutes: true,
   bufferMinutes: true,
 } as const;
 

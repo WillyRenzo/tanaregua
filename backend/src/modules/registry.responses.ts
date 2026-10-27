@@ -32,6 +32,7 @@ export const barbershopSettingsSchema = z
     slug: z.string(),
     timezone: z.string(),
     cancellationMinNoticeMinutes: z.int(),
+    rescheduleMinNoticeMinutes: z.int(),
     bufferMinutes: z.int(),
   })
   .meta({ id: 'BarbershopSettings' });

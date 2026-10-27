@@ -46,7 +46,7 @@ export function BookingFlow({
   const [startsAt, setStartsAt] = useState<string | null>(null);
   const [bookingKey, setBookingKey] = useState(() => idempotencyKey());
   const [notice, setNotice] = useState<string | null>(null);
-  const [booked, setBooked] = useState<Schemas['Appointment'] | null>(null);
+  const [booked, setBooked] = useState<Schemas['ClientAppointment'] | null>(null);
   const book = useBook(slug);
 
   const chosen = services.filter((service) => serviceIds.includes(service.id));

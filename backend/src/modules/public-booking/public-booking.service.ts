@@ -3,7 +3,8 @@ import { conflict, notFound, unprocessable } from '../../common/http/domain-erro
 import { TenantDb } from '../../common/tenancy/tenant-db.service.js';
 import { PrismaService, setDbContext, type Tx } from '../../prisma/prisma.service.js';
 import type { AvailabilityQuery } from '../appointments/appointments.schemas.js';
-import { AppointmentsService, type AppointmentView } from '../appointments/appointments.service.js';
+import type { ClientRescheduleInput } from '../appointments/appointments.schemas.js';
+import { AppointmentsService, type ClientAppointmentView } from '../appointments/appointments.service.js';
 import { AuthService, type Session } from '../auth/auth.service.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { DEFAULT_ROLES } from '../auth/permissions.js';
@@ -38,6 +39,7 @@ export class PublicBookingService {
       slug: shop.slug,
       timezone: shop.timezone,
       cancellationMinNoticeMinutes: shop.cancellationMinNoticeMinutes,
+      rescheduleMinNoticeMinutes: shop.rescheduleMinNoticeMinutes,
     };
   }
 
@@ -120,7 +122,7 @@ export class PublicBookingService {
     return this.auth.openSession(user.id, membershipId);
   }
 
-  async myAppointments(slug: string): Promise<AppointmentView[]> {
+  async myAppointments(slug: string): Promise<ClientAppointmentView[]> {
     const shop = await this.assertTokenMatches(slug);
     return this.db.run(async (tx, auth) => {
       const clientId = await this.clients.findIdForUser(tx, shop.id, auth.userId);
@@ -128,7 +130,7 @@ export class PublicBookingService {
     });
   }
 
-  async book(slug: string, input: PublicBookingInput): Promise<AppointmentView> {
+  async book(slug: string, input: PublicBookingInput): Promise<ClientAppointmentView> {
     const shop = await this.assertTokenMatches(slug);
     return this.db.run(async (tx, auth) => {
       const clientId = await this.clients.findIdForUser(tx, shop.id, auth.userId);
@@ -145,7 +147,7 @@ export class PublicBookingService {
   }
 
   /** Política de cancelamento (business-rules §2): até N minutos antes, configurável. */
-  async cancel(slug: string, appointmentId: string): Promise<AppointmentView> {
+  async cancel(slug: string, appointmentId: string): Promise<ClientAppointmentView> {
     const shop = await this.assertTokenMatches(slug);
     return this.db.run(async (tx, auth) => {
       const clientId = await this.clients.findIdForUser(tx, shop.id, auth.userId);
@@ -160,6 +162,29 @@ export class PublicBookingService {
         );
       }
       return this.appointments.cancelByClient(tx, shop.id, appointmentId);
+    });
+  }
+
+  /** Política de reagendamento (business-rules §2): até N minutos antes, configurável (padrão 24 h). */
+  async reschedule(
+    slug: string,
+    appointmentId: string,
+    input: ClientRescheduleInput,
+  ): Promise<ClientAppointmentView> {
+    const shop = await this.assertTokenMatches(slug);
+    return this.db.run(async (tx, auth) => {
+      const clientId = await this.clients.findIdForUser(tx, shop.id, auth.userId);
+      const appointment = await this.appointments.getInTx(tx, shop.id, appointmentId);
+      if (appointment.client.id !== clientId) throw notFound('Agendamento');
+
+      const deadline = appointment.startsAt.getTime() - shop.rescheduleMinNoticeMinutes * 60_000;
+      if (Date.now() > deadline) {
+        throw unprocessable(
+          'reschedule-window-closed',
+          `Reagendamentos online só até ${formatNotice(shop.rescheduleMinNoticeMinutes)} antes do horário. Fale com a barbearia.`,
+        );
+      }
+      return this.appointments.rescheduleByClient(tx, shop.id, appointmentId, input);
     });
   }
 

@@ -635,6 +635,11 @@
                     "minimum": 0,
                     "maximum": 10080
                   },
+                  "rescheduleMinNoticeMinutes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10080
+                  },
                   "bufferMinutes": {
                     "type": "integer",
                     "minimum": 0,
@@ -3195,6 +3200,185 @@
         "description": "**Permissões (basta uma):** `appointments:write:any`, `appointments:write:own`"
       }
     },
+    "/v1/appointments/{id}/no-show-justification": {
+      "put": {
+        "operationId": "AppointmentsController_justifyNoShow",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "justification": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "justification"
+                ],
+                "additionalProperties": false,
+                "example": {
+                  "justification": "Avisou depois que estava doente"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Appointment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso inexistente ou de outra barbearia.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`not-a-no-show`: O agendamento não está marcado como falta.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Registra, troca ou remove a justificativa de uma falta",
+        "tags": [
+          "Agenda"
+        ],
+        "x-required-permissions": [
+          "appointments:write:any",
+          "appointments:write:own"
+        ],
+        "description": "**Permissões (basta uma):** `appointments:write:any`, `appointments:write:own`"
+      }
+    },
+    "/v1/clients/{id}/no-shows": {
+      "get": {
+        "operationId": "AppointmentsController_unjustifiedNoShows",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UnjustifiedNoShow"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso inexistente ou de outra barbearia.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Faltas sem justificativa do cliente",
+        "tags": [
+          "Agenda"
+        ],
+        "x-required-permissions": [
+          "clients:read"
+        ],
+        "description": "**Permissões (basta uma):** `clients:read`"
+      }
+    },
     "/v1/public/{slug}": {
       "get": {
         "operationId": "PublicBookingController_info",
@@ -3700,7 +3884,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Appointment"
+                    "$ref": "#/components/schemas/ClientAppointment"
                   }
                 }
               }
@@ -3822,7 +4006,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Appointment"
+                  "$ref": "#/components/schemas/ClientAppointment"
                 }
               }
             }
@@ -3918,7 +4102,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Appointment"
+                  "$ref": "#/components/schemas/ClientAppointment"
                 }
               }
             }
@@ -3965,6 +4149,141 @@
           }
         },
         "summary": "Cancela meu agendamento",
+        "tags": [
+          "Agendamento online"
+        ],
+        "x-required-permissions": [
+          "bookings:self"
+        ],
+        "description": "**Permissões (basta uma):** `bookings:self`"
+      }
+    },
+    "/v1/public/{slug}/me/appointments/{id}/reschedule": {
+      "post": {
+        "operationId": "PublicBookingController_reschedule",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 50,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "startsAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  "professionalId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                },
+                "required": [
+                  "startsAt"
+                ],
+                "additionalProperties": false,
+                "example": {
+                  "startsAt": "2030-03-05T15:00:00-03:00"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientAppointment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso inexistente ou de outra barbearia.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`slot-unavailable`: O novo horário não está disponível.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`reschedule-window-closed | not-reschedulable`: Fora do prazo de reagendamento online, ou o atendimento já começou, terminou ou foi cancelado.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Reagenda meu agendamento",
         "tags": [
           "Agendamento online"
         ],
@@ -5289,6 +5608,11 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "rescheduleMinNoticeMinutes": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "bufferMinutes": {
             "type": "integer",
             "minimum": -9007199254740991,
@@ -5301,6 +5625,7 @@
           "slug",
           "timezone",
           "cancellationMinNoticeMinutes",
+          "rescheduleMinNoticeMinutes",
           "bufferMinutes"
         ],
         "additionalProperties": false
@@ -5796,12 +6121,18 @@
               "phone": {
                 "nullable": true,
                 "type": "string"
+              },
+              "unjustifiedNoShows": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               }
             },
             "required": [
               "id",
               "name",
-              "phone"
+              "phone",
+              "unjustifiedNoShows"
             ],
             "additionalProperties": false
           },
@@ -5842,6 +6173,10 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "noShowJustification": {
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -5855,7 +6190,8 @@
           "professional",
           "client",
           "items",
-          "totalCents"
+          "totalCents",
+          "noShowJustification"
         ],
         "additionalProperties": false
       },
@@ -5911,6 +6247,51 @@
         ],
         "additionalProperties": false
       },
+      "UnjustifiedNoShow": {
+        "type": "object",
+        "properties": {
+          "appointmentId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "professional": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "appointmentId",
+          "startsAt",
+          "professional",
+          "services"
+        ],
+        "additionalProperties": false
+      },
       "PublicBarbershop": {
         "type": "object",
         "properties": {
@@ -5927,13 +6308,19 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "rescheduleMinNoticeMinutes": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           }
         },
         "required": [
           "name",
           "slug",
           "timezone",
-          "cancellationMinNoticeMinutes"
+          "cancellationMinNoticeMinutes",
+          "rescheduleMinNoticeMinutes"
         ],
         "additionalProperties": false
       },
@@ -6004,6 +6391,143 @@
           "timezone",
           "durationMinutes",
           "professionals"
+        ],
+        "additionalProperties": false
+      },
+      "ClientAppointment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SCHEDULED",
+              "CONFIRMED",
+              "IN_SERVICE",
+              "COMPLETED",
+              "CANCELLED",
+              "NO_SHOW"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "PANEL",
+              "ONLINE"
+            ]
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "notes": {
+            "nullable": true,
+            "type": "string"
+          },
+          "cancellationReason": {
+            "nullable": true,
+            "type": "string"
+          },
+          "professional": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "client": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "phone": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "phone"
+            ],
+            "additionalProperties": false
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "serviceId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "priceCents": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "durationMinutes": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "serviceId",
+                "name",
+                "priceCents",
+                "durationMinutes"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "totalCents": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "source",
+          "startsAt",
+          "endsAt",
+          "notes",
+          "cancellationReason",
+          "professional",
+          "client",
+          "items",
+          "totalCents"
         ],
         "additionalProperties": false
       },
