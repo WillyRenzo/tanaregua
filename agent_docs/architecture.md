@@ -35,13 +35,16 @@ Browser ──► frontend (Next.js 16) ──/api/* (rewrite)──► backend 
 | Sem conflito de horário (com buffer) | `EXCLUDE USING gist` em `tstzrange(starts_at, blocked_until)` parcial por status | migration `*_agenda` |
 | Comanda fechada imutável | triggers `order_items_guard` e `orders_guard` | migration `*_orders_finance` |
 | Lançamentos append-only | `REVOKE UPDATE, DELETE` do usuário da app | migrations `*_orders_finance` e `*_app_role_grants` |
-| Uma regra de comissão por alvo | índice único `NULLS NOT DISTINCT` | migration `*_staff_clients_catalog` |
+| Uma regra de comissão por alvo | índice único `NULLS NOT DISTINCT` (membro, serviço, produto) | migrations `*_staff_clients_catalog` e `*_products_and_stock` |
+| Estoque nunca negativo | CHECK `stock_quantity >= 0`; o saldo só muda pelo trigger `apply_stock_movement` (SECURITY DEFINER) ao inserir movimentação | migration `*_products_and_stock` |
+| Saldo = soma das movimentações | app sem UPDATE em `products.stock_quantity` (grant só nas outras colunas) e sem UPDATE/DELETE em `stock_movements` | migration `*_products_and_stock` |
+| Item de comanda é serviço (com profissional) ou produto | CHECK `order_items_kind_check` | migration `*_products_and_stock` |
 
 A aplicação pré-valida só para dar mensagem amigável. Sob concorrência, o banco decide (há testes e2e com requisições simultâneas).
 
 ## Fluxos não óbvios
 
-- **Fechar comanda** (`orders.service.ts#close`): `SELECT … FOR UPDATE` na comanda, depois congela a comissão em cada item (snapshot), muda o status para CLOSED, lança caixa e comissões (`FinanceService.recordSale`) e conclui o agendamento. Tudo numa transação.
+- **Fechar comanda** (`orders.service.ts#close`): `SELECT … FOR UPDATE` na comanda, baixa dos produtos (`ProductsService.recordSale`: trava os produtos em ordem de id para não haver deadlock entre fechamentos, confere o saldo e lança as vendas), depois congela a comissão em cada item (snapshot), muda o status para CLOSED, lança caixa e comissões (`FinanceService.recordSale`) e conclui o agendamento. Tudo numa transação. O estorno devolve os produtos com `SALE_REVERSAL` ao mesmo custo da venda.
 - **E-mails** (AFA 12): a mudança e o evento (`outbox_events`) são gravados na mesma transação. `OutboxProcessor` reivindica lotes com `FOR UPDATE SKIP LOCKED` (seguro com várias instâncias), envia fora da transação, faz retry com backoff exponencial e, após 5 tentativas, move para FAILED (dead letter). O ID do evento vai como `Idempotency-Key` ao provedor, então reenvio não duplica o e-mail.
 - **Idempotência de POST** (`common/idempotency`): agendar e fechar comanda aceitam `Idempotency-Key`. A mesma chave devolve a resposta original; a mesma chave com outro corpo dá 422.
 - **Fuso:** tudo em UTC no banco; dia, expediente e grade são calculados no fuso da barbearia (`appointments/availability.ts`, função pura testada inclusive com horário de verão).

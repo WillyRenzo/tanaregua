@@ -51,7 +51,7 @@ Não invente regra para preencher uma lacuna: pergunte.
   - Percentual em **basis points** (4000 = 40%); valor fixo em centavos. Arredondamento: meio centavo para cima, só em `calculateCommissionCents`.
   - A comissão nunca passa do valor cobrado pelo item (confirmada): um fixo de R$ 15 sobre um item de R$ 10 com desconto gera R$ 10.
   - A comissão é calculada no fechamento da comanda e gravada (snapshot). Mudar a configuração não recalcula o passado.
-  - **Produtos** (fase 2): a venda de produto na comanda também gera comissão configurável, com as mesmas regras e a mesma precedência dos serviços (produto no lugar do serviço). Sem regra aplicável, não há comissão.
+  - **Produtos** (confirmado): a venda de produto gera comissão configurável (percentual ou fixo), com precedência **profissional+produto > produto**. O **padrão do profissional não vale para produto**: sem regra de produto, não há comissão. Venda de balcão (produto sem profissional) nunca gera comissão.
 - Salários e comissões de terceiros são dados sensíveis: só o dono/admin vê. O profissional vê apenas as próprias comissões.
 - Relatórios financeiros derivam de comandas fechadas e lançamentos, nunca de agendamentos.
 
@@ -80,6 +80,10 @@ Não invente regra para preencher uma lacuna: pergunte.
 - Toda movimentação de estoque gera um registro (entrada, saída, ajuste) com autor e motivo. O saldo é derivado ou conciliável com esse histórico.
 - **A quantidade em estoque nunca fica negativa.** Fechar uma comanda que venderia mais do que o saldo é recusado com erro claro (garantido também no banco, sob concorrência).
 - **O valor total do estoque pode ficar negativo.** A valorização (custo × quantidade, com ajustes e devoluções a custos diferentes) não tem trava; é informativa.
+- Movimentações: **entrada** (soma e vira o custo de referência), **venda** e **estorno de venda** (pela comanda), **ajuste** (±, sempre com motivo: perda, quebra, contagem). Cadastro e edição do produto nunca mexem no saldo.
+- **Venda na comanda:** o produto pode ter o profissional que vendeu (pode gerar comissão) ou ser venda de balcão (sem profissional, sem comissão).
+- **Estoque mínimo** opcional por produto: com saldo **no mínimo ou abaixo**, o produto aparece para repor.
+- **Quem mexe:** dono e recepção cadastram produtos e movimentam o estoque (`products:manage`); o profissional só consulta (`products:read`) e não vê custo nem valor em estoque. Regras de comissão de produto continuam só com o dono (`services:manage`).
 
 ## 10. Identidade visual por barbearia (fase 2)
 
