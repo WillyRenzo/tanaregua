@@ -16,6 +16,9 @@ export type CommissionRule = Schemas['CommissionRule'];
 export type BarbershopSettings = Schemas['BarbershopSettings'];
 export type Product = Schemas['Product'];
 export type StockMovement = Schemas['StockMovement'];
+export type ServicePackage = Schemas['ServicePackage'];
+export type ClientPackage = Schemas['ClientPackage'];
+export type MyPackage = Schemas['MyPackage'];
 export type PaymentMethod = NonNullable<Order['paymentMethod']>;
 
 type Body<P extends keyof paths, M extends 'post' | 'patch' | 'put'> = NonNullable<
@@ -44,6 +47,9 @@ export const queryKeys = {
   report: (from: string, to: string) => ['report', from, to] as const,
   products: (includeInactive: boolean) => ['products', includeInactive] as const,
   productMovements: (id: string) => ['products', id, 'movements'] as const,
+  packages: (includeInactive: boolean) => ['packages', includeInactive] as const,
+  clientPackages: (clientId?: string, status?: string) =>
+    ['client-packages', clientId ?? 'all', status ?? 'all'] as const,
 };
 
 // ───────────── Barbearia ─────────────
@@ -342,6 +348,61 @@ export function useStockAdjustment() {
   );
 }
 
+// ───────────── Pacotes ─────────────
+
+export function usePackages(includeInactive = false, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.packages(includeInactive),
+    enabled,
+    queryFn: () =>
+      unwrap(
+        api.GET('/v1/packages', {
+          params: { query: { includeInactive: includeInactive ? 'true' : 'false' } },
+        }),
+      ),
+  });
+}
+
+export function useCreatePackage() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Body<'/v1/packages', 'post'>) => unwrap(api.POST('/v1/packages', { body })),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['packages'] }),
+  });
+}
+
+export function useUpdatePackage() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: Body<'/v1/packages/{id}', 'patch'> & { id: string }) =>
+      unwrap(api.PATCH('/v1/packages/{id}', { params: { path: { id } }, body })),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['packages'] }),
+  });
+}
+
+export function useClientPackages(
+  query: { clientId?: string; status?: ClientPackage['status'] },
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.clientPackages(query.clientId, query.status),
+    enabled,
+    queryFn: () => unwrap(api.GET('/v1/client-packages', { params: { query } })),
+  });
+}
+
+export function useRefundPackage() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: Body<'/v1/client-packages/{id}/refund', 'post'> & { id: string }) =>
+      unwrap(api.POST('/v1/client-packages/{id}/refund', { params: { path: { id } }, body })),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['client-packages'] });
+      void client.invalidateQueries({ queryKey: ['cash'] });
+    },
+  });
+}
+
 // ───────────── Agenda ─────────────
 
 export function useDayAgenda(date: string) {
@@ -452,8 +513,9 @@ function useOrderMutation<TVariables>(fn: (variables: TVariables) => Promise<Ord
       void client.invalidateQueries({ queryKey: ['orders'] });
       void client.invalidateQueries({ queryKey: ['agenda'] });
       void client.invalidateQueries({ queryKey: ['cash'] });
-      // Fechar e estornar mexem no estoque.
+      // Fechar e estornar mexem no estoque e nos saldos de pacotes.
       void client.invalidateQueries({ queryKey: ['products'] });
+      void client.invalidateQueries({ queryKey: ['client-packages'] });
     },
   });
 }
@@ -490,6 +552,18 @@ export function useCloseOrder(orderId: string) {
         params: { path: { id: orderId } },
         body,
         headers: { 'Idempotency-Key': idempotencyKey() },
+      }),
+    ),
+  );
+}
+
+/** Paga um serviço da comanda com sessão de pacote do cliente (`null` volta a cobrar). */
+export function useApplyPackage(orderId: string) {
+  return useOrderMutation(({ itemId, clientPackageId }: { itemId: string; clientPackageId: string | null }) =>
+    unwrap(
+      api.PUT('/v1/orders/{id}/items/{itemId}/package', {
+        params: { path: { id: orderId, itemId } },
+        body: { clientPackageId },
       }),
     ),
   );

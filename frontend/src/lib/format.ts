@@ -48,6 +48,16 @@ export function formatDateTime(iso: string | Date, timezone: string): string {
   }).format(new Date(iso));
 }
 
+/** "05/11/2026" no fuso da barbearia. */
+export function formatDate(iso: string | Date, timezone: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: timezone,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(new Date(iso));
+}
+
 /** Data local "AAAA-MM-DD" de hoje no fuso da barbearia. */
 export function todayIn(timezone: string): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date());

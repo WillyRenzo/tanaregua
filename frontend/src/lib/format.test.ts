@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addDays,
   formatClock,
+  formatDate,
   formatMoney,
   formatPercent,
   formatPhone,
@@ -37,6 +38,7 @@ describe('format', () => {
 
   it('usa o fuso da barbearia, não o do navegador', () => {
     expect(formatTime('2030-03-04T12:00:00Z', SP)).toBe('09:00');
+    expect(formatDate('2030-03-05T02:00:00Z', SP)).toBe('04/03/2030');
     expect(localInstant('2030-03-04', 9 * 60, SP).toISOString()).toBe('2030-03-04T12:00:00.000Z');
     expect(minuteOfDay('2030-03-04T12:30:00Z', SP)).toBe(570);
   });
