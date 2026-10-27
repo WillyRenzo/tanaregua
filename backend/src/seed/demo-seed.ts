@@ -61,6 +61,8 @@ export const DEMO_ACCOUNTS = {
 export interface SeedResult {
   created: boolean;
   slugs: string[];
+  /** Demo que já existia: módulos acrescentados nesta execução (vazio = já estava completa). */
+  added: string[];
 }
 
 type Clock24 = `${number}:${number}`;
@@ -70,10 +72,25 @@ const minutes = (clock: Clock24) => {
   return hours! * 60 + mins!;
 };
 
+const DEMO_PRIMARY_COLOR = '#1f5f8b';
+const DEMO_SECONDARY_COLOR = '#e3c567';
+const NEIGHBOR_PRIMARY_COLOR = '#7a1f5c';
+
+const pickPayment = weighted<PaymentMethod>([
+  [45, 'PIX'],
+  [20, 'CARD_CREDIT'],
+  [20, 'CARD_DEBIT'],
+  [15, 'CASH'],
+]);
+
+/** Instante de um horário local da demo (fuso da barbearia). */
+const localAt = (date: string, time: Clock24) => localTimeToInstant(date, minutes(time), TIMEZONE);
+const todayLocal = () => new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE }).format(new Date());
+
 export async function seedDemo(app: INestApplicationContext): Promise<SeedResult> {
   const prisma = app.get(PrismaService);
   if (await prisma.barbershop.findUnique({ where: { slug: DEMO_SLUG }, select: { id: true } })) {
-    return { created: false, slugs: [DEMO_SLUG, NEIGHBOR_SLUG] };
+    return { created: false, slugs: [DEMO_SLUG, NEIGHBOR_SLUG], added: await completeDemo(app) };
   }
 
   const cls = app.get<ClsService<RequestContext>>(ClsService);
@@ -160,13 +177,7 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
       reason: 'Férias',
     });
 
-    // ───────────── Identidade visual ─────────────
-
-    // Azul e dourado no lugar do cobre padrão: painel e página pública saem com a marca da
-    // demo. O logo passa pelo mesmo caminho do upload (validação e reprocessamento).
-    await barbershops.update({ brandPrimaryColor: '#1f5f8b', brandSecondaryColor: '#e3c567' });
-    const logo = await demoLogo();
-    await barbershops.replaceLogo({ buffer: logo, size: logo.length });
+    await applyDemoBrand(app);
 
     // ───────────── Serviços e comissões ─────────────
 
@@ -244,54 +255,14 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
 
     // ───────────── Produtos e estoque ─────────────
 
-    // [nome, preço, custo, estoque mínimo, entrada inicial, peso nas vendas]
-    const productSpecs: [string, number, number, number | null, number, number][] = [
-      ['Pomada modeladora', 4500, 2200, 5, 30, 4],
-      ['Óleo para barba', 3500, 1800, 3, 20, 3],
-      ['Shampoo anticaspa', 3000, 1500, 4, 8, 3],
-      ['Cera capilar', 4000, 2000, null, 15, 1],
-    ];
+    const demoProducts = await createDemoProducts(
+      app,
+      at(shiftDate(today, -HISTORY_DAYS - 1), '09:00'),
+      bia.id,
+    );
+    const { pomada, oleo, shampoo, cera } = demoProducts;
     /** Saldo acompanhado aqui para o seed nunca tentar vender o que não tem. */
-    const stock = new Map<string, { id: string; name: string; quantity: number; weight: number }>();
-    const firstDay = at(shiftDate(today, -HISTORY_DAYS - 1), '09:00');
-    for (const [name, priceCents, costCents, minStockQuantity, initial, weight] of productSpecs) {
-      const created = await products.create({ name, priceCents, costCents, minStockQuantity });
-      await clock.at(firstDay, () =>
-        products.addEntry(created.id, {
-          quantity: initial,
-          unitCostCents: costCents,
-          note: 'Estoque inicial',
-        }),
-      );
-      stock.set(created.id, { id: created.id, name, quantity: initial, weight });
-    }
-    const gel = await products.create({
-      name: 'Gel fixador (desativado)',
-      priceCents: 2500,
-      costCents: 1200,
-    });
-    await products.update(gel.id, { active: false });
-    const byName = (name: string) => [...stock.values()].find((product) => product.name === name)!;
-    const pomada = byName('Pomada modeladora');
-    const oleo = byName('Óleo para barba');
-    const shampoo = byName('Shampoo anticaspa');
-    const cera = byName('Cera capilar');
-
-    // Comissão de produto só com regra de produto (o padrão do profissional não vale).
-    await catalog.upsertCommissionRule({
-      membershipId: null,
-      serviceId: null,
-      productId: pomada.id,
-      type: 'FIXED',
-      value: 500,
-    });
-    await catalog.upsertCommissionRule({
-      membershipId: bia.id,
-      serviceId: null,
-      productId: oleo.id,
-      type: 'PERCENT',
-      value: 1000,
-    });
+    const stock = new Map(Object.values(demoProducts).map((product) => [product.id, product]));
 
     // ───────────── Clientes ─────────────
 
@@ -526,12 +497,7 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
       [1, [infantil]],
       [1, [hidratacao, barba]],
     ]);
-    const payments = weighted<PaymentMethod>([
-      [45, 'PIX'],
-      [20, 'CARD_CREDIT'],
-      [20, 'CARD_DEBIT'],
-      [15, 'CASH'],
-    ]);
+    const payments = pickPayment;
     const voidReasons = [
       'Lançado na comanda errada',
       'Cobrança em duplicidade na maquininha',
@@ -653,7 +619,7 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
   await as(neighbor, async () => {
     const marta = neighbor.profile.membership.id;
     // Outra marca (vinho, sem logo): cada barbearia vê só a própria identidade.
-    await barbershops.update({ brandPrimaryColor: '#7a1f5c' });
+    await barbershops.update({ brandPrimaryColor: NEIGHBOR_PRIMARY_COLOR });
     await staff.replaceSchedule(marta, everyDay([['10:00', '20:00']]));
     const corte = await catalog.createService({
       name: 'Corte da Vizinha',
@@ -679,7 +645,223 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
     });
   });
 
-  return { created: true, slugs: [DEMO_SLUG, NEIGHBOR_SLUG] };
+  return { created: true, slugs: [DEMO_SLUG, NEIGHBOR_SLUG], added: [] };
+}
+
+// ───────────── Complemento de uma demo criada por versão anterior do seed ─────────────
+
+/**
+ * Quem já tem a demo no banco não precisa apagar tudo para ver um módulo novo: rodar o seed
+ * de novo acrescenta só o que falta (cada passo confere se já existe), sem duplicar nem
+ * apagar nada. Devolve a descrição do que foi acrescentado.
+ */
+export async function completeDemo(
+  app: INestApplicationContext,
+  slugs: { demo: string; neighbor: string } = { demo: DEMO_SLUG, neighbor: NEIGHBOR_SLUG },
+): Promise<string[]> {
+  const added: string[] = [];
+
+  await asOwnerOf(app, slugs.demo, async (professionalIds) => {
+    const products = app.get(ProductsService);
+    if ((await products.list({ includeInactive: true })).length === 0) {
+      await addProductsToExistingDemo(app, professionalIds);
+      added.push('produtos e estoque (com vendas dos últimos 30 dias)');
+    }
+    const settings = await app.get(BarbershopsService).get();
+    if (!settings.brand.primaryColor && !settings.brand.logoVersion) {
+      await applyDemoBrand(app);
+      added.push('identidade visual (cores e logo)');
+    }
+  });
+
+  await asOwnerOf(app, slugs.neighbor, async () => {
+    const barbershops = app.get(BarbershopsService);
+    if (!(await barbershops.get()).brand.primaryColor) {
+      await barbershops.update({ brandPrimaryColor: NEIGHBOR_PRIMARY_COLOR });
+      added.push('cor da Barbearia Vizinha');
+    }
+  });
+
+  return added;
+}
+
+/**
+ * Executa `fn` como o dono da barbearia (contexto de requisição autenticada), passando os
+ * profissionais ativos. Não faz nada se a barbearia não existir.
+ */
+async function asOwnerOf(
+  app: INestApplicationContext,
+  slug: string,
+  fn: (professionalIds: string[]) => Promise<void>,
+): Promise<void> {
+  const prisma = app.get(PrismaService);
+  const shop = await prisma.barbershop.findUnique({ where: { slug }, select: { id: true } });
+  if (!shop) return;
+  const { owner, professionals } = await prisma.withContext({ barbershopId: shop.id }, async (tx) => ({
+    owner: await tx.membership.findFirst({
+      where: { barbershopId: shop.id, active: true, role: { key: 'owner' } },
+      select: { id: true, userId: true, role: { select: { permissions: true } } },
+    }),
+    professionals: await tx.membership.findMany({
+      where: { barbershopId: shop.id, active: true, isProfessional: true },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+  }));
+  if (!owner) return;
+
+  const cls = app.get<ClsService<RequestContext>>(ClsService);
+  await cls.run(async () => {
+    cls.set('auth', {
+      userId: owner.userId,
+      barbershopId: shop.id,
+      membershipId: owner.id,
+      permissions: owner.role.permissions.filter(isPermission),
+    });
+    await fn(professionals.map((professional) => professional.id));
+  });
+}
+
+/**
+ * Produtos numa demo antiga: o histórico de atendimentos já existe, então as vendas entram
+ * como comandas de balcão nos últimos 30 dias (às vezes com o profissional que indicou).
+ */
+async function addProductsToExistingDemo(app: INestApplicationContext, professionalIds: string[]) {
+  const clock = app.get(Clock);
+  const orders = app.get(OrdersService);
+  const products = app.get(ProductsService);
+  const today = todayLocal();
+  const random = mulberry32(20261027);
+
+  // O segundo profissional (a Bia, na demo) tem regra própria no óleo.
+  const demoProducts = await createDemoProducts(
+    app,
+    localAt(shiftDate(today, -31), '09:00'),
+    professionalIds[1] ?? professionalIds[0] ?? null,
+  );
+  const { pomada, oleo, shampoo, cera } = demoProducts;
+  const pick = weighted(
+    Object.values(demoProducts).map((product): [number, DemoProduct] => [product.weight, product]),
+  );
+
+  for (let offset = -30; offset <= -1; offset++) {
+    const date = shiftDate(today, offset);
+    if (weekdayOf(date) === 0) continue;
+    if (offset === -15) {
+      for (const product of [pomada, oleo, cera]) {
+        await clock.at(localAt(date, '08:30'), () =>
+          products.addEntry(product.id, {
+            quantity: 12,
+            unitCostCents: 2100,
+            note: 'Reposição do distribuidor',
+          }),
+        );
+        product.quantity += 12;
+      }
+    }
+    const sales = Math.floor(random() * 3);
+    for (let i = 0; i < sales; i++) {
+      const product = pick(random());
+      if (product.quantity < 1) continue;
+      product.quantity--;
+      const seller =
+        professionalIds.length > 0 && random() < 0.7
+          ? professionalIds[Math.floor(random() * professionalIds.length)]!
+          : null;
+      await clock.at(localAt(date, `${11 + i * 3}:00`), async () => {
+        const order = await orders.open({
+          items: [{ productId: product.id, professionalId: seller, quantity: 1, discountCents: 0 }],
+        });
+        await orders.close(order.id, { paymentMethod: pickPayment(random()) });
+      });
+    }
+  }
+
+  if (cera.quantity >= 1) {
+    await clock.at(localAt(shiftDate(today, -1), '19:00'), () =>
+      products.adjust(cera.id, { quantity: -1, reason: 'Embalagem danificada' }),
+    );
+  }
+  // O shampoo termina perto do fim: aparece no alerta de reposição.
+  if (shampoo.quantity > 4) {
+    await products.adjust(shampoo.id, { quantity: -(shampoo.quantity - 3), reason: 'Inventário: vencidos' });
+  }
+}
+
+// ───────────── Peças reaproveitadas pelo seed completo e pelo complemento ─────────────
+
+interface DemoProduct {
+  id: string;
+  name: string;
+  /** Saldo acompanhado pelo seed (para nunca tentar vender o que não tem). */
+  quantity: number;
+  /** Peso no sorteio das vendas. */
+  weight: number;
+}
+
+/**
+ * Produtos da demo com a entrada inicial em `firstDay`, um produto desativado e as regras
+ * de comissão de produto (só regra de produto; o padrão do profissional não vale).
+ * Precisa rodar num contexto autenticado de quem gerencia a barbearia.
+ */
+async function createDemoProducts(
+  app: INestApplicationContext,
+  firstDay: Date,
+  oleoSellerId: string | null,
+): Promise<Record<'pomada' | 'oleo' | 'shampoo' | 'cera', DemoProduct>> {
+  const clock = app.get(Clock);
+  const products = app.get(ProductsService);
+  const catalog = app.get(CatalogService);
+
+  // [chave, nome, preço, custo, estoque mínimo, entrada inicial, peso nas vendas]
+  const specs = [
+    ['pomada', 'Pomada modeladora', 4500, 2200, 5, 30, 4],
+    ['oleo', 'Óleo para barba', 3500, 1800, 3, 20, 3],
+    ['shampoo', 'Shampoo anticaspa', 3000, 1500, 4, 8, 3],
+    ['cera', 'Cera capilar', 4000, 2000, null, 15, 1],
+  ] as const;
+  const created = {} as Record<'pomada' | 'oleo' | 'shampoo' | 'cera', DemoProduct>;
+  for (const [key, name, priceCents, costCents, minStockQuantity, initial, weight] of specs) {
+    const product = await products.create({ name, priceCents, costCents, minStockQuantity });
+    await clock.at(firstDay, () =>
+      products.addEntry(product.id, { quantity: initial, unitCostCents: costCents, note: 'Estoque inicial' }),
+    );
+    created[key] = { id: product.id, name, quantity: initial, weight };
+  }
+  const gel = await products.create({ name: 'Gel fixador (desativado)', priceCents: 2500, costCents: 1200 });
+  await products.update(gel.id, { active: false });
+
+  await catalog.upsertCommissionRule({
+    membershipId: null,
+    serviceId: null,
+    productId: created.pomada.id,
+    type: 'FIXED',
+    value: 500,
+  });
+  if (oleoSellerId) {
+    await catalog.upsertCommissionRule({
+      membershipId: oleoSellerId,
+      serviceId: null,
+      productId: created.oleo.id,
+      type: 'PERCENT',
+      value: 1000,
+    });
+  }
+  return created;
+}
+
+/**
+ * Azul e dourado no lugar do cobre padrão: painel e página pública saem com a marca da
+ * demo. O logo passa pelo mesmo caminho do upload (validação e reprocessamento).
+ */
+async function applyDemoBrand(app: INestApplicationContext): Promise<void> {
+  const barbershops = app.get(BarbershopsService);
+  await barbershops.update({
+    brandPrimaryColor: DEMO_PRIMARY_COLOR,
+    brandSecondaryColor: DEMO_SECONDARY_COLOR,
+  });
+  const logo = await demoLogo();
+  await barbershops.replaceLogo({ buffer: logo, size: logo.length });
 }
 
 /**

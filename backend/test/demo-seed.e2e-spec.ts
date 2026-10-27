@@ -1,7 +1,14 @@
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service.js';
-import { DEMO_ACCOUNTS, DEMO_PASSWORD, DEMO_SLUG, NEIGHBOR_SLUG, seedDemo } from '../src/seed/demo-seed.js';
-import { as, createTestApp, type TestApp } from './helpers/app.js';
+import {
+  completeDemo,
+  DEMO_ACCOUNTS,
+  DEMO_PASSWORD,
+  DEMO_SLUG,
+  NEIGHBOR_SLUG,
+  seedDemo,
+} from '../src/seed/demo-seed.js';
+import { as, createTestApp, registerTenant, type TestApp } from './helpers/app.js';
 
 /** O README promete estas credenciais: o seed precisa entregá-las de verdade. */
 describe('Seed de demonstração (e2e)', () => {
@@ -184,10 +191,53 @@ describe('Seed de demonstração (e2e)', () => {
     await request(app.getHttpServer()).get(`/v1/public/${NEIGHBOR_SLUG}`).expect(200);
   });
 
-  it('rodar de novo não duplica nada', async () => {
+  it('rodar de novo não duplica nada: a demo já está completa', async () => {
     const prisma = app.get(PrismaService);
-    const before = await prisma.user.count();
-    expect((await seedDemo(app)).created).toBe(false);
-    expect(await prisma.user.count()).toBe(before);
+    const users = await prisma.user.count();
+    const products = await prisma.product.count();
+    expect(await seedDemo(app)).toMatchObject({ created: false, added: [] });
+    expect(await prisma.user.count()).toBe(users);
+    expect(await prisma.product.count()).toBe(products);
+  });
+
+  it('demo criada por versão anterior do seed ganha só os módulos que faltam', async () => {
+    // Barbearias novas fazem o papel de uma demo antiga: sem produtos e sem marca.
+    const oldDemo = await registerTenant(app);
+    const oldNeighbor = await registerTenant(app);
+    await as(app, oldDemo.token)
+      .post('/v1/staff')
+      .send({
+        name: 'Barbeira',
+        email: `barbeira-${Date.now()}@teste.com`,
+        password: 'senha-forte-123',
+        roleKey: 'professional',
+        isProfessional: true,
+      })
+      .expect(201);
+    const slugs = { demo: oldDemo.slug, neighbor: oldNeighbor.slug };
+
+    expect(await completeDemo(app, slugs)).toEqual([
+      'produtos e estoque (com vendas dos últimos 30 dias)',
+      'identidade visual (cores e logo)',
+      'cor da Barbearia Vizinha',
+    ]);
+
+    const products = await as(app, oldDemo.token).get('/v1/products').expect(200);
+    expect(products.body).toHaveLength(4);
+    expect(products.body.some((product: { lowStock: boolean }) => product.lowStock)).toBe(true);
+    for (const product of products.body as { id: string; name: string; stockQuantity: number }[]) {
+      const movements = await as(app, oldDemo.token).get(`/v1/products/${product.id}/movements`).expect(200);
+      const sum = movements.body.reduce((total: number, m: { quantity: number }) => total + m.quantity, 0);
+      expect(sum, product.name).toBe(product.stockQuantity);
+    }
+    const sales = await app
+      .get(PrismaService)
+      .withContext({ barbershopId: oldDemo.barbershopId }, (tx) =>
+        tx.stockMovement.count({ where: { kind: 'SALE' } }),
+      );
+    expect(sales).toBeGreaterThan(5);
+
+    // Segunda execução: nada mais a acrescentar.
+    expect(await completeDemo(app, slugs)).toEqual([]);
   });
 });
