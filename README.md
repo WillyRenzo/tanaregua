@@ -109,8 +109,10 @@ Senha de todas as contas: **`senha-forte-123`**.
 
 As datas são relativas ao dia em que o seed rodou, e o sorteio do histórico usa semente fixa
 (o mesmo dia gera os mesmos dados). Leva cerca de um minuto. O comando é idempotente: se a demo já
-existir, ele só mostra as credenciais. Para recriar com datas atuais, apague o banco local
-(`docker compose down -v`) e refaça os passos. O seed se recusa a rodar em produção.
+existir, ele **só acrescenta os módulos que ela ainda não tem** (por exemplo, produtos e estoque numa
+demo criada antes desse módulo) e nunca sobrescreve o que você personalizou, como cores e logo.
+Para recriar tudo com datas atuais, apague o banco local (`docker compose down -v`) e refaça os
+passos. O seed se recusa a rodar em produção.
 
 ### Migrations e seed depois da primeira instalação
 
@@ -129,7 +131,7 @@ docker compose run --rm --no-deps backend sh -c "npx prisma migrate deploy && np
 docker compose restart backend   # a API precisa recarregar o client do Prisma
 ```
 
-**Popular com os dados de demonstração** (se o banco ainda não tem a Barbearia Demo):
+**Popular com os dados de demonstração** (banco sem a Barbearia Demo, ou demo antiga que ainda não tem os módulos novos; rode depois de aplicar as migrations):
 
 ```bash
 docker compose run --rm --no-deps backend npm run db:seed
