@@ -33,6 +33,14 @@ export function useMyAppointments(slug: string, enabled: boolean) {
   });
 }
 
+export function useMyPackages(slug: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['my-packages', slug],
+    enabled,
+    queryFn: () => unwrap(api.GET('/v1/public/{slug}/me/packages', { params: { path: { slug } } })),
+  });
+}
+
 export function useBook(slug: string) {
   const client = useQueryClient();
   return useMutation({
