@@ -1,6 +1,6 @@
 import { api, unwrap } from '@/lib/api/client';
 import type { components } from '@/lib/api/schema';
-import { sessionStore } from './session-store';
+import { clientSessionStore, sessionStore } from './session-store';
 
 type Body<T extends keyof components['schemas']> = components['schemas'][T];
 
@@ -33,7 +33,7 @@ export async function clientLogin(slug: string, body: { email: string; password:
   const session = await unwrap(
     api.POST('/v1/public/{slug}/auth/login', { params: { path: { slug } }, body }),
   );
-  sessionStore.fromResponse(session);
+  clientSessionStore.fromResponse(session);
   return session;
 }
 
@@ -44,7 +44,7 @@ export async function clientRegister(
   const session = await unwrap(
     api.POST('/v1/public/{slug}/auth/register', { params: { path: { slug } }, body }),
   );
-  sessionStore.fromResponse(session);
+  clientSessionStore.fromResponse(session);
   return session;
 }
 
