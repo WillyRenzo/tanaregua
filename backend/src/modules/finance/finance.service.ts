@@ -34,6 +34,7 @@ export interface SaleRecord {
   method: PaymentMethod;
   totalCents: number;
   commissions: { orderItemId: string; professionalId: string; amountCents: number }[];
+  occurredAt: Date;
 }
 
 /**
@@ -55,6 +56,7 @@ export class FinanceService {
           barbershopId,
           orderId: sale.orderId,
           kind: 'ENTRY' as const,
+          occurredAt: sale.occurredAt,
           ...commission,
         })),
       });
@@ -66,12 +68,13 @@ export class FinanceService {
         method: sale.method,
         kind: 'ENTRY',
         amountCents: sale.totalCents,
+        occurredAt: sale.occurredAt,
       },
     });
   }
 
   /** Estorno: espelha cada lançamento original com o valor negativo. */
-  async recordReversal(tx: Tx, barbershopId: string, orderId: string): Promise<void> {
+  async recordReversal(tx: Tx, barbershopId: string, orderId: string, occurredAt: Date): Promise<void> {
     const commissions = await tx.commissionEntry.findMany({
       where: { barbershopId, orderId, kind: 'ENTRY' },
     });
@@ -85,6 +88,7 @@ export class FinanceService {
           professionalId: entry.professionalId,
           kind: 'REVERSAL' as const,
           amountCents: -entry.amountCents,
+          occurredAt,
         })),
       });
     }
@@ -96,6 +100,7 @@ export class FinanceService {
           method: entry.method,
           kind: 'REVERSAL' as const,
           amountCents: -entry.amountCents,
+          occurredAt,
         })),
       });
     }

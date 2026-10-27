@@ -24,6 +24,7 @@ import { FinanceModule } from './modules/finance/finance.module.js';
 import { OrdersModule } from './modules/orders/orders.module.js';
 import { ReportsModule } from './modules/reports/reports.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { ClockModule } from './common/time/clock.js';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
     }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    ClockModule,
     HealthModule,
     AuthModule,
     BarbershopsModule,
