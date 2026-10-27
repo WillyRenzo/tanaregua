@@ -81,7 +81,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Renova o access token usando o cookie de refresh */
+        /** Renova o access token do painel usando o cookie de refresh */
         post: operations["AuthController_refresh"];
         delete?: never;
         options?: never;
@@ -98,8 +98,42 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Sai e revoga a sessão */
+        /** Sai do painel e revoga a sessão */
         post: operations["AuthController_logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/client/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Renova o access token do cliente (agendamento online) */
+        post: operations["AuthController_refreshClient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/client/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sai do agendamento online e revoga a sessão do cliente */
+        post: operations["AuthController_logoutClient"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1562,6 +1596,61 @@ export interface operations {
         };
     };
     AuthController_logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Muitas requisições do mesmo IP (rate limit). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AuthController_refreshClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            /** @description Muitas requisições do mesmo IP (rate limit). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    AuthController_logoutClient: {
         parameters: {
             query?: never;
             header?: never;
