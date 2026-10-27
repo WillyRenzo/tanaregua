@@ -13,6 +13,7 @@ import { ClientsService } from '../modules/clients/clients.service.js';
 import type { PaymentMethod } from '../modules/finance/finance.service.js';
 import { OrdersService } from '../modules/orders/orders.service.js';
 import type { OrderItemInput } from '../modules/orders/orders.schemas.js';
+import { PackagesService } from '../modules/packages/packages.service.js';
 import { ProductsService } from '../modules/products/products.service.js';
 import { PublicBookingService } from '../modules/public-booking/public-booking.service.js';
 import { StaffService } from '../modules/staff/staff.service.js';
@@ -602,6 +603,20 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
       shampoo.quantity--;
     }
 
+    // ───────────── Pacotes ─────────────
+
+    await createDemoPackages(app, {
+      corteId: corte.id,
+      barbaId: barba.id,
+      professionalId: bia.id,
+      clients: {
+        carlos: client.Carlos!,
+        marcos: client.Marcos!,
+        lucas: client.Lucas!,
+        paula: paulaId ?? null,
+      },
+    });
+
     // LGPD: cliente que pediu exclusão. Some da lista, o histórico fica como "Cliente anonimizado".
     await clients.anonymize(client.Ricardo!);
   });
@@ -671,6 +686,11 @@ export async function completeDemo(
     if (!settings.brand.primaryColor && !settings.brand.logoVersion) {
       await applyDemoBrand(app);
       added.push('identidade visual (cores e logo)');
+    }
+    if ((await app.get(PackagesService).list({ includeInactive: true })).length === 0) {
+      if (await addPackagesToExistingDemo(app, professionalIds)) {
+        added.push('pacotes (vendidos, em uso, reembolsado e vencido)');
+      }
     }
   });
 
@@ -788,7 +808,115 @@ async function addProductsToExistingDemo(app: INestApplicationContext, professio
   }
 }
 
+/**
+ * Pacotes numa demo antiga: acha os serviços e clientes da demo pelo nome. Se a demo foi
+ * mexida a ponto de não ter corte/barba ou clientes, não inventa nada (devolve false).
+ */
+async function addPackagesToExistingDemo(app: INestApplicationContext, professionalIds: string[]) {
+  const catalog = app.get(CatalogService);
+  const clients = app.get(ClientsService);
+  const services = await catalog.listServices({ includeInactive: false });
+  const corte = services.find((service) => service.name === 'Corte masculino') ?? services[0];
+  const barba = services.find((service) => service.name === 'Barba') ?? services[1] ?? corte;
+  const professionalId = professionalIds[1] ?? professionalIds[0];
+  if (!corte || !barba || !professionalId) return false;
+
+  const byName = async (name: string) =>
+    (await clients.list({ search: name, limit: 1 })).items[0]?.id ?? null;
+  const list = (await clients.list({ limit: 4 })).items.map((item) => item.id);
+  const carlos = (await byName('Carlos Souza')) ?? list[0];
+  const marcos = (await byName('Marcos Oliveira')) ?? list[1];
+  const lucas = (await byName('Lucas Ferreira')) ?? list[2];
+  if (!carlos || !marcos || !lucas) return false;
+
+  await createDemoPackages(app, {
+    corteId: corte.id,
+    barbaId: barba.id,
+    professionalId,
+    clients: { carlos, marcos, lucas, paula: await byName(DEMO_ACCOUNTS.client.name) },
+  });
+  return true;
+}
+
 // ───────────── Peças reaproveitadas pelo seed completo e pelo complemento ─────────────
+
+/**
+ * Pacotes da demo (business-rules §6), com histórico nas datas certas: um combo em uso,
+ * um pacote da cliente online (ela vê o saldo em "Meus agendamentos"), um reembolsado e
+ * um vencido com sessão sobrando. Precisa de contexto autenticado de quem gerencia.
+ */
+async function createDemoPackages(
+  app: INestApplicationContext,
+  demo: {
+    corteId: string;
+    barbaId: string;
+    professionalId: string;
+    clients: { carlos: string; marcos: string; lucas: string; paula: string | null };
+  },
+): Promise<void> {
+  const clock = app.get(Clock);
+  const orders = app.get(OrdersService);
+  const packages = app.get(PackagesService);
+  const today = todayLocal();
+  const on = (days: number, time: Clock24) => localAt(shiftDate(today, days), time);
+
+  const combo = await packages.create({
+    name: 'Combo do mês',
+    description: '4 cortes + 2 barbas',
+    priceCents: 22000,
+    validityDays: 60,
+    commissionOnSessions: true,
+    items: [
+      { serviceId: demo.corteId, quantity: 4 },
+      { serviceId: demo.barbaId, quantity: 2 },
+    ],
+  });
+  const barbaMensal = await packages.create({
+    name: 'Barba mensal',
+    description: '4 barbas (sessões sem comissão)',
+    priceCents: 12000,
+    validityDays: 30,
+    commissionOnSessions: false,
+    items: [{ serviceId: demo.barbaId, quantity: 4 }],
+  });
+
+  /** Vende na comanda do cliente, na data dada; devolve o pacote comprado. */
+  const sell = (clientId: string, packageId: string, at: Date) =>
+    clock.at(at, async () => {
+      const order = await orders.open({ clientId, items: [{ packageId, quantity: 1, discountCents: 0 }] });
+      await orders.close(order.id, { paymentMethod: 'PIX' });
+      const sold = await packages.listSold({ clientId });
+      return sold.find((row) => row.orderId === order.id)!.id;
+    });
+  /** Atendimento avulso pago com uma sessão do pacote, na data dada. */
+  const use = (clientId: string, clientPackageId: string, serviceId: string, at: Date) =>
+    clock.at(at, async () => {
+      const order = await orders.open({
+        clientId,
+        items: [{ serviceId, professionalId: demo.professionalId, quantity: 1, discountCents: 0 }],
+      });
+      await orders.applyPackage(order.id, order.items[0]!.id, { clientPackageId });
+      await orders.close(order.id, { paymentMethod: 'PIX' });
+    });
+
+  const carlos = await sell(demo.clients.carlos, combo.id, on(-20, '10:30'));
+  await use(demo.clients.carlos, carlos, demo.corteId, on(-13, '10:30'));
+  await use(demo.clients.carlos, carlos, demo.barbaId, on(-6, '10:30'));
+
+  if (demo.clients.paula) {
+    const paula = await sell(demo.clients.paula, combo.id, on(-10, '18:30'));
+    await use(demo.clients.paula, paula, demo.corteId, on(-3, '18:30'));
+  }
+
+  const marcos = await sell(demo.clients.marcos, barbaMensal.id, on(-25, '11:30'));
+  await clock.at(on(-5, '17:00'), () =>
+    packages.refund(marcos, { amountCents: 7200, paymentMethod: 'PIX', reason: 'Cliente mudou de cidade' }),
+  );
+
+  // Vencido: comprado há 40 dias com validade de 30, uma sessão usada e três perdidas.
+  const lucas = await sell(demo.clients.lucas, barbaMensal.id, on(-40, '12:00'));
+  await use(demo.clients.lucas, lucas, demo.barbaId, on(-35, '12:00'));
+}
 
 interface DemoProduct {
   id: string;
