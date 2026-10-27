@@ -14,6 +14,8 @@ export type Service = Schemas['Service'];
 export type StaffMember = Schemas['StaffMember'];
 export type CommissionRule = Schemas['CommissionRule'];
 export type BarbershopSettings = Schemas['BarbershopSettings'];
+export type Product = Schemas['Product'];
+export type StockMovement = Schemas['StockMovement'];
 export type PaymentMethod = NonNullable<Order['paymentMethod']>;
 
 type Body<P extends keyof paths, M extends 'post' | 'patch' | 'put'> = NonNullable<
@@ -40,6 +42,8 @@ export const queryKeys = {
   cash: (date: string) => ['cash', date] as const,
   commissions: (from: string, to: string) => ['commissions', from, to] as const,
   report: (from: string, to: string) => ['report', from, to] as const,
+  products: (includeInactive: boolean) => ['products', includeInactive] as const,
+  productMovements: (id: string) => ['products', id, 'movements'] as const,
 };
 
 // ───────────── Barbearia ─────────────
@@ -281,6 +285,63 @@ export function useDeleteCommissionRule() {
   });
 }
 
+// ───────────── Produtos e estoque ─────────────
+
+export function useProducts(includeInactive = false) {
+  return useQuery({
+    queryKey: queryKeys.products(includeInactive),
+    queryFn: () =>
+      unwrap(
+        api.GET('/v1/products', {
+          params: { query: { includeInactive: includeInactive ? 'true' : 'false' } },
+        }),
+      ),
+  });
+}
+
+export function useProductMovements(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.productMovements(id ?? ''),
+    enabled: Boolean(id),
+    queryFn: () => unwrap(api.GET('/v1/products/{id}/movements', { params: { path: { id: id! } } })),
+  });
+}
+
+/** Qualquer mudança de produto (cadastro, entrada, ajuste) recarrega listas e histórico. */
+function useProductMutation<TVariables>(fn: (variables: TVariables) => Promise<Product>) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSettled: () => client.invalidateQueries({ queryKey: ['products'] }),
+  });
+}
+
+export function useCreateProduct() {
+  return useProductMutation((body: Body<'/v1/products', 'post'>) =>
+    unwrap(api.POST('/v1/products', { body })),
+  );
+}
+
+export function useUpdateProduct() {
+  return useProductMutation(({ id, ...body }: Body<'/v1/products/{id}', 'patch'> & { id: string }) =>
+    unwrap(api.PATCH('/v1/products/{id}', { params: { path: { id } }, body })),
+  );
+}
+
+export function useStockEntry() {
+  return useProductMutation(
+    ({ id, ...body }: Body<'/v1/products/{id}/stock-entries', 'post'> & { id: string }) =>
+      unwrap(api.POST('/v1/products/{id}/stock-entries', { params: { path: { id } }, body })),
+  );
+}
+
+export function useStockAdjustment() {
+  return useProductMutation(
+    ({ id, ...body }: Body<'/v1/products/{id}/stock-adjustments', 'post'> & { id: string }) =>
+      unwrap(api.POST('/v1/products/{id}/stock-adjustments', { params: { path: { id } }, body })),
+  );
+}
+
 // ───────────── Agenda ─────────────
 
 export function useDayAgenda(date: string) {
@@ -391,6 +452,8 @@ function useOrderMutation<TVariables>(fn: (variables: TVariables) => Promise<Ord
       void client.invalidateQueries({ queryKey: ['orders'] });
       void client.invalidateQueries({ queryKey: ['agenda'] });
       void client.invalidateQueries({ queryKey: ['cash'] });
+      // Fechar e estornar mexem no estoque.
+      void client.invalidateQueries({ queryKey: ['products'] });
     },
   });
 }
