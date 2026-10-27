@@ -498,7 +498,7 @@
             }
           }
         },
-        "summary": "Renova o access token usando o cookie de refresh",
+        "summary": "Renova o access token do painel usando o cookie de refresh",
         "tags": [
           "Autenticação"
         ],
@@ -525,7 +525,68 @@
             }
           }
         },
-        "summary": "Sai e revoga a sessão",
+        "summary": "Sai do painel e revoga a sessão",
+        "tags": [
+          "Autenticação"
+        ],
+        "x-public": true,
+        "security": []
+      }
+    },
+    "/v1/auth/client/refresh": {
+      "post": {
+        "operationId": "AuthController_refreshClient",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Muitas requisições do mesmo IP (rate limit).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Renova o access token do cliente (agendamento online)",
+        "tags": [
+          "Autenticação"
+        ],
+        "x-public": true,
+        "security": []
+      }
+    },
+    "/v1/auth/client/logout": {
+      "post": {
+        "operationId": "AuthController_logoutClient",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "429": {
+            "description": "Muitas requisições do mesmo IP (rate limit).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Sai do agendamento online e revoga a sessão do cliente",
         "tags": [
           "Autenticação"
         ],

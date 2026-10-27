@@ -6,7 +6,17 @@ import type { Session } from './auth.service.js';
 import type { SessionResponse } from '../registry.responses.js';
 import { RefreshTokenService } from './refresh-token.service.js';
 
-export const REFRESH_COOKIE = 'tnr_refresh';
+/**
+ * Painel e agendamento online são sessões independentes, cada uma no seu cookie: entrar
+ * como cliente na página pública não pode sobrescrever a sessão do painel (e vice-versa)
+ * no mesmo navegador.
+ */
+export type SessionAudience = 'panel' | 'client';
+
+export const REFRESH_COOKIES: Record<SessionAudience, string> = {
+  panel: 'tnr_refresh',
+  client: 'tnr_client_refresh',
+};
 
 export type { SessionResponse };
 
@@ -30,17 +40,17 @@ export class SessionCookieService {
     };
   }
 
-  respond(session: Session, response: Response): SessionResponse {
-    response.cookie(REFRESH_COOKIE, session.refreshToken, this.options);
+  respond(session: Session, response: Response, audience: SessionAudience = 'panel'): SessionResponse {
+    response.cookie(REFRESH_COOKIES[audience], session.refreshToken, this.options);
     return { accessToken: session.accessToken, expiresIn: session.expiresIn, profile: session.profile };
   }
 
-  clear(response: Response): void {
-    response.clearCookie(REFRESH_COOKIE, { ...this.options, maxAge: undefined });
+  clear(response: Response, audience: SessionAudience = 'panel'): void {
+    response.clearCookie(REFRESH_COOKIES[audience], { ...this.options, maxAge: undefined });
   }
 
-  read(request: Request): string | undefined {
+  read(request: Request, audience: SessionAudience = 'panel'): string | undefined {
     const cookies = request.cookies as Record<string, string | undefined> | undefined;
-    return cookies?.[REFRESH_COOKIE];
+    return cookies?.[REFRESH_COOKIES[audience]];
   }
 }

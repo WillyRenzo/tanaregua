@@ -111,7 +111,7 @@ export class PublicBookingController {
     @Body({ schema: publicRegisterSchema }) input: PublicRegisterInput,
     @Res({ passthrough: true }) response: Response,
   ): Promise<SessionResponse> {
-    return this.cookies.respond(await this.booking.register(slug, input), response);
+    return this.cookies.respond(await this.booking.register(slug, input), response, 'client');
   }
 
   @Public()
@@ -125,7 +125,7 @@ export class PublicBookingController {
     @Body({ schema: publicLoginSchema }) input: PublicLoginInput,
     @Res({ passthrough: true }) response: Response,
   ): Promise<SessionResponse> {
-    return this.cookies.respond(await this.booking.login(slug, input), response);
+    return this.cookies.respond(await this.booking.login(slug, input), response, 'client');
   }
 
   @RequirePermissions('bookings:self')
