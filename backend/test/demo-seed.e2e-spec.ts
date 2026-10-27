@@ -76,6 +76,51 @@ describe('Seed de demonstração (e2e)', () => {
     }
   });
 
+  it('o histórico cai nos dias dos atendimentos: caixa, comissões e relatórios têm o que mostrar', async () => {
+    const owner = await loginPanel(DEMO_ACCOUNTS.owner.email);
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const shift = (days: number) => {
+      const date = new Date(`${today}T12:00:00Z`);
+      date.setUTCDate(date.getUTCDate() + days);
+      return date.toISOString().slice(0, 10);
+    };
+    const period = { from: shift(-29), to: today };
+
+    const cash = await as(app, owner.accessToken)
+      .get('/v1/cash/day')
+      .query({ date: shift(-1) })
+      .expect(200);
+    expect(cash.body.netCents).toBeGreaterThan(0);
+
+    const report = await as(app, owner.accessToken).get('/v1/reports/summary').query(period).expect(200);
+    const daysWithRevenue = report.body.revenue.byDay.filter((day: { netCents: number }) => day.netCents > 0);
+    expect(daysWithRevenue.length).toBeGreaterThanOrEqual(20);
+    expect(report.body.professionals).toHaveLength(3);
+    expect(report.body.topServices.length).toBeGreaterThanOrEqual(5);
+    expect(report.body.appointments.noShowRate).toBeGreaterThan(0);
+
+    const commissions = await as(app, owner.accessToken).get('/v1/commissions').query(period).expect(200);
+    expect(commissions.body.professionals).toHaveLength(3);
+
+    const voided = await as(app, owner.accessToken).get('/v1/orders').query({ status: 'VOIDED' }).expect(200);
+    expect(voided.body.items.length).toBeGreaterThan(1);
+  });
+
+  it('a cliente online vê passado e futuro, inclusive o que ela cancelou', async () => {
+    const login = await request(app.getHttpServer())
+      .post(`/v1/public/${DEMO_SLUG}/auth/login`)
+      .send({ email: DEMO_ACCOUNTS.client.email, password: DEMO_PASSWORD })
+      .expect(200);
+    const mine = await as(app, login.body.accessToken)
+      .get(`/v1/public/${DEMO_SLUG}/me/appointments`)
+      .expect(200);
+    const statuses = new Set(mine.body.map((appointment: { status: string }) => appointment.status));
+    expect(statuses).toEqual(new Set(['COMPLETED', 'CANCELLED', 'SCHEDULED']));
+    const now = Date.now();
+    expect(mine.body.some((a: { startsAt: string }) => Date.parse(a.startsAt) > now)).toBe(true);
+    expect(mine.body.some((a: { startsAt: string }) => Date.parse(a.startsAt) < now)).toBe(true);
+  });
+
   it('a barbearia vizinha é isolada da demo', async () => {
     const neighbor = await loginPanel(DEMO_ACCOUNTS.neighborOwner.email);
     const clients = await as(app, neighbor.accessToken).get('/v1/clients').expect(200);

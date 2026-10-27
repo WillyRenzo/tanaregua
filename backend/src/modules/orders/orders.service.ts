@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { conflict, notFound, unprocessable } from '../../common/http/domain-error.js';
 import { cursorArgs, toPage, type Page } from '../../common/http/pagination.js';
 import { TenantDb } from '../../common/tenancy/tenant-db.service.js';
+import { Clock } from '../../common/time/clock.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import type { Tx } from '../../prisma/prisma.service.js';
 import type { OrderView } from '../finance/finance.responses.js';
@@ -47,6 +48,7 @@ export class OrdersService {
     @Inject(StaffService) private readonly staff: StaffService,
     @Inject(ClientsService) private readonly clients: ClientsService,
     @Inject(FinanceService) private readonly finance: FinanceService,
+    @Inject(Clock) private readonly clock: Clock,
   ) {}
 
   list(query: ListOrdersQuery): Promise<Page<OrderView>> {
@@ -92,6 +94,7 @@ export class OrdersService {
             appointmentId: appointment.id,
             clientId: appointment.client.id,
             openedByUserId: auth.userId,
+            createdAt: this.clock.now(),
           },
         });
         // Copia os serviços agendados (com o preço do snapshot do agendamento).
@@ -111,7 +114,12 @@ export class OrdersService {
 
       if (input.clientId) await this.clients.assertExists(tx, auth.barbershopId, input.clientId);
       const order = await tx.order.create({
-        data: { barbershopId: auth.barbershopId, clientId: input.clientId, openedByUserId: auth.userId },
+        data: {
+          barbershopId: auth.barbershopId,
+          clientId: input.clientId,
+          openedByUserId: auth.userId,
+          createdAt: this.clock.now(),
+        },
       });
       for (const item of input.items) {
         await this.insertItem(tx, auth.barbershopId, order.id, item);
@@ -190,13 +198,14 @@ export class OrdersService {
       }
 
       const totalCents = items.reduce((sum, item) => sum + item.totalCents, 0);
+      const closedAt = this.clock.now();
       await tx.order.update({
         where: { id: orderId },
         data: {
           status: 'CLOSED',
           paymentMethod: input.paymentMethod,
           totalCents,
-          closedAt: new Date(),
+          closedAt,
           closedByUserId: auth.userId,
         },
       });
@@ -205,6 +214,7 @@ export class OrdersService {
         method: input.paymentMethod,
         totalCents,
         commissions,
+        occurredAt: closedAt,
       });
       if (order.appointmentId) {
         await this.appointments.completeFromOrder(tx, auth.barbershopId, order.appointmentId);
@@ -220,12 +230,13 @@ export class OrdersService {
       if (order.status === 'VOIDED') {
         throw unprocessable('order-already-voided', 'Esta comanda já foi estornada.');
       }
+      const voidedAt = this.clock.now();
       if (order.status === 'CLOSED') {
-        await this.finance.recordReversal(tx, auth.barbershopId, orderId);
+        await this.finance.recordReversal(tx, auth.barbershopId, orderId, voidedAt);
       }
       await tx.order.update({
         where: { id: orderId },
-        data: { status: 'VOIDED', voidedAt: new Date(), voidReason: input.reason },
+        data: { status: 'VOIDED', voidedAt, voidReason: input.reason },
       });
       return this.view(tx, auth.barbershopId, orderId);
     });
