@@ -455,7 +455,11 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
                 await appointments.changeStatus(appointment.id, { status: 'CONFIRMED' });
               }
             } else if (outcome < 0.06) {
-              await appointments.changeStatus(appointment.id, { status: 'NO_SHOW' });
+              // Cerca de um terço das faltas tem justificativa; as demais contam como "sem justificativa".
+              await appointments.changeStatus(appointment.id, {
+                status: 'NO_SHOW',
+                reason: outcome < 0.02 ? 'Avisou depois que estava doente' : undefined,
+              });
             } else if (outcome < 0.11) {
               await appointments.changeStatus(appointment.id, {
                 status: 'CANCELLED',
