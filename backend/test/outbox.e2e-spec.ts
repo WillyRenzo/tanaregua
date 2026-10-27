@@ -18,8 +18,9 @@ describe('Outbox (e2e)', () => {
     await app.close();
   });
 
-  const drain = async () => {
-    while ((await processor.processBatch()) > 0) {
+  /** Só os eventos da barbearia do teste: outros arquivos rodam em paralelo no mesmo banco. */
+  const drain = async (barbershopId: string) => {
+    while ((await processor.processBatch({ barbershopId })) > 0) {
       // processa tudo o que estiver elegível
     }
   };
@@ -30,7 +31,7 @@ describe('Outbox (e2e)', () => {
       data: { barbershopId: tenant.barbershopId, type: 'EventoInexistente', payload: {} },
     });
 
-    await drain();
+    await drain(tenant.barbershopId);
     const failed = await prisma.outboxEvent.findUniqueOrThrow({ where: { id: event.id } });
     expect(failed).toMatchObject({ status: 'PENDING', attempts: 1 });
     expect(failed.lastError).toMatch(/desconhecido/);
@@ -44,12 +45,12 @@ describe('Outbox (e2e)', () => {
       data: { barbershopId: tenant.barbershopId, type: 'EventoInexistente', payload: {}, attempts: 4 },
     });
 
-    await drain();
+    await drain(tenant.barbershopId);
     const dead = await prisma.outboxEvent.findUniqueOrThrow({ where: { id: event.id } });
     expect(dead).toMatchObject({ status: 'FAILED', attempts: 5 });
 
     // Dead letter não é mais reivindicado.
-    await drain();
+    await drain(tenant.barbershopId);
     expect((await prisma.outboxEvent.findUniqueOrThrow({ where: { id: event.id } })).attempts).toBe(5);
   });
 
@@ -59,10 +60,28 @@ describe('Outbox (e2e)', () => {
     const event = await prisma.outboxEvent.create({
       data: { barbershopId: tenant.barbershopId, type: 'AppointmentBooked', payload: { appointmentId } },
     });
-    await drain();
+    await drain(tenant.barbershopId);
     // Agendamento inexistente: erro de domínio vira retry, não derruba o worker.
     const result = await prisma.outboxEvent.findUniqueOrThrow({ where: { id: event.id } });
     expect(result.status).toBe('PENDING');
     expect(result.lastError).toMatch(/não encontrado/);
+  });
+
+  it('lote com escopo de barbearia não reivindica eventos de outra', async () => {
+    const mine = await registerTenant(app);
+    const other = await registerTenant(app);
+    const otherEvent = await prisma.outboxEvent.create({
+      data: { barbershopId: other.barbershopId, type: 'EventoInexistente', payload: {} },
+    });
+    const myEvent = await prisma.outboxEvent.create({
+      data: { barbershopId: mine.barbershopId, type: 'EventoInexistente', payload: {} },
+    });
+
+    await drain(mine.barbershopId);
+    expect((await prisma.outboxEvent.findUniqueOrThrow({ where: { id: myEvent.id } })).attempts).toBe(1);
+    expect(await prisma.outboxEvent.findUniqueOrThrow({ where: { id: otherEvent.id } })).toMatchObject({
+      status: 'PENDING',
+      attempts: 0,
+    });
   });
 });

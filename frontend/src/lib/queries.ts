@@ -28,6 +28,7 @@ export const queryKeys = {
   timeOffs: (id: string, from: string, to: string) => ['staff', id, 'time-offs', from, to] as const,
   clients: (search: string) => ['clients', search] as const,
   client: (id: string) => ['client', id] as const,
+  clientNoShows: (id: string) => ['client', id, 'no-shows'] as const,
   services: (includeInactive: boolean) => ['services', includeInactive] as const,
   commissionRules: ['commission-rules'] as const,
   agenda: (date: string) => ['agenda', date] as const,
@@ -299,7 +300,38 @@ export function useChangeAppointmentStatus() {
   return useMutation({
     mutationFn: ({ id, ...body }: Body<'/v1/appointments/{id}/status', 'post'> & { id: string }) =>
       unwrap(api.POST('/v1/appointments/{id}/status', { params: { path: { id } }, body })),
-    onSettled: () => client.invalidateQueries({ queryKey: ['agenda'] }),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: ['agenda'] });
+      // Falta muda a contagem de faltas sem justificativa do cliente.
+      void client.invalidateQueries({ queryKey: ['client'] });
+    },
+  });
+}
+
+/** Justificativa de uma falta (só a equipe vê); `null` remove. */
+export function useJustifyNoShow() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, justification }: { id: string; justification: string | null }) =>
+      unwrap(
+        api.PUT('/v1/appointments/{id}/no-show-justification', {
+          params: { path: { id } },
+          body: { justification },
+        }),
+      ),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: ['agenda'] });
+      void client.invalidateQueries({ queryKey: ['client'] });
+    },
+  });
+}
+
+/** Faltas sem justificativa do cliente (informação para a equipe; não bloqueia nada). */
+export function useClientNoShows(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.clientNoShows(id ?? ''),
+    enabled: Boolean(id),
+    queryFn: () => unwrap(api.GET('/v1/clients/{id}/no-shows', { params: { path: { id: id! } } })),
   });
 }
 

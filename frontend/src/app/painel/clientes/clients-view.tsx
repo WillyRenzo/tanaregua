@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Search, ShieldOff } from 'lucide-react';
+import { Plus, Search, ShieldOff, TriangleAlert } from 'lucide-react';
 import { Controller, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -17,10 +17,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { errorMessage } from '@/lib/api/errors';
-import { formatPhone } from '@/lib/format';
+import { formatDateLong, formatPhone, formatTime } from '@/lib/format';
 import { zodResolver } from '@/lib/forms/zod-resolver';
 import { can } from '@/lib/permissions';
-import { useAnonymizeClient, useClients, useCreateClient, useUpdateClient, type Client } from '@/lib/queries';
+import {
+  useAnonymizeClient,
+  useBarbershop,
+  useClientNoShows,
+  useClients,
+  useCreateClient,
+  useUpdateClient,
+  type Client,
+} from '@/lib/queries';
 import { useAuthenticatedSession } from '@/lib/session/use-session';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 
@@ -230,6 +238,7 @@ function ClientForm({ client, onDone }: { client?: Client; onDone: () => void })
           <AlertDescription>{errors.root.message}</AlertDescription>
         </Alert>
       )}
+      {client && <NoShowHistory clientId={client.id} />}
       <Field label="Nome" error={errors.name?.message}>
         <Input autoFocus {...form.register('name')} />
       </Field>
@@ -308,5 +317,37 @@ function ClientForm({ client, onDone }: { client?: Client; onDone: () => void })
         </div>
       )}
     </form>
+  );
+}
+
+/** Faltas sem justificativa (business-rules §2): informação para a equipe, não bloqueia nada. */
+function NoShowHistory({ clientId }: { clientId: string }) {
+  const noShows = useClientNoShows(clientId);
+  const barbershop = useBarbershop();
+  const timezone = barbershop.data?.timezone;
+  if (!noShows.data || noShows.data.length === 0 || !timezone) return null;
+
+  const total = noShows.data.length;
+  return (
+    <Alert>
+      <TriangleAlert aria-hidden />
+      <AlertDescription>
+        <p className="text-foreground font-medium">
+          {total === 1 ? '1 falta sem justificativa' : `${total} faltas sem justificativa`}
+        </p>
+        <ul className="mt-1 grid gap-0.5 text-xs">
+          {noShows.data.slice(0, 5).map((noShow) => (
+            <li key={noShow.appointmentId}>
+              {formatDateLong(
+                new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date(noShow.startsAt)),
+                timezone,
+              )}{' '}
+              às {formatTime(noShow.startsAt, timezone)} · {noShow.services.join(', ')} com{' '}
+              {noShow.professional.name}
+            </li>
+          ))}
+        </ul>
+      </AlertDescription>
+    </Alert>
   );
 }

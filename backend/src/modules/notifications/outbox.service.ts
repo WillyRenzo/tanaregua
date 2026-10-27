@@ -4,7 +4,8 @@ import type { Tx } from '../../prisma/prisma.service.js';
 /** Eventos de domínio (passado, imutáveis). O payload só carrega IDs — nunca PII. */
 export type DomainEvent =
   | { type: 'AppointmentBooked'; payload: { appointmentId: string } }
-  | { type: 'AppointmentCancelled'; payload: { appointmentId: string } };
+  | { type: 'AppointmentCancelled'; payload: { appointmentId: string } }
+  | { type: 'AppointmentRescheduled'; payload: { appointmentId: string } };
 
 @Injectable()
 export class OutboxService {

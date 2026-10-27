@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Interval } from '@nestjs/schedule';
 import type { Env } from '../../config/env.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
-import { AppointmentsService, type AppointmentView } from '../appointments/appointments.service.js';
+import { AppointmentsService, type ClientAppointmentView } from '../appointments/appointments.service.js';
 import { BarbershopsService } from '../barbershops/barbershops.module.js';
 import { ClientsService } from '../clients/clients.service.js';
 import { MailSender, type MailMessage } from './mail-sender.js';
@@ -58,8 +58,13 @@ export class OutboxProcessor {
     }
   }
 
-  /** Retorna quantos eventos foram reivindicados neste lote. */
-  async processBatch(): Promise<number> {
+  /**
+   * Retorna quantos eventos foram reivindicados neste lote. O worker processa todas as
+   * barbearias; o escopo por barbearia existe para os testes e2e, que rodam em paralelo
+   * no mesmo banco e não podem despachar os eventos uns dos outros.
+   */
+  async processBatch(scope: { barbershopId?: string } = {}): Promise<number> {
+    const barbershopId = scope.barbershopId ?? null;
     // PROCESSING com next_attempt_at no futuro funciona como lease: se o processo morrer
     // no meio, o evento volta a ser elegível depois de 5 minutos.
     const events = await this.prisma.$queryRaw<ClaimedEvent[]>`
@@ -68,6 +73,7 @@ export class OutboxProcessor {
        WHERE id IN (
          SELECT id FROM outbox_events
           WHERE status IN ('PENDING', 'PROCESSING') AND next_attempt_at <= now()
+            AND (${barbershopId}::uuid IS NULL OR barbershop_id = ${barbershopId}::uuid)
           ORDER BY created_at
           LIMIT ${BATCH_SIZE}
           FOR UPDATE SKIP LOCKED)
@@ -93,12 +99,14 @@ export class OutboxProcessor {
         return this.notifyClient(event, 'booked');
       case 'AppointmentCancelled':
         return this.notifyClient(event, 'cancelled');
+      case 'AppointmentRescheduled':
+        return this.notifyClient(event, 'rescheduled');
       default:
         throw new Error(`Tipo de evento desconhecido: ${event.type}`);
     }
   }
 
-  private async notifyClient(event: ClaimedEvent, kind: 'booked' | 'cancelled'): Promise<void> {
+  private async notifyClient(event: ClaimedEvent, kind: MessageKind): Promise<void> {
     const appointmentId = event.payload.appointmentId;
     if (!appointmentId) throw new Error('Evento sem appointmentId');
 
@@ -146,10 +154,12 @@ interface MessageContext {
   barbershopName: string;
   timezone: string;
   manageUrl: string;
-  appointment: AppointmentView;
+  appointment: ClientAppointmentView;
 }
 
-function composeMessage(kind: 'booked' | 'cancelled', context: MessageContext): MailMessage {
+type MessageKind = 'booked' | 'cancelled' | 'rescheduled';
+
+function composeMessage(kind: MessageKind, context: MessageContext): MailMessage {
   const when = new Intl.DateTimeFormat('pt-BR', {
     timeZone: context.timezone,
     weekday: 'long',
@@ -178,6 +188,22 @@ function composeMessage(kind: 'booked' | 'cancelled', context: MessageContext): 
     };
   }
 
+  if (kind === 'rescheduled') {
+    return {
+      to: context.to,
+      subject: `Agendamento remarcado — ${context.barbershopName}`,
+      text: [
+        `Olá, ${context.clientName}!`,
+        '',
+        `Seu horário foi remarcado para ${when}.`,
+        `Profissional: ${context.appointment.professional.name}`,
+        `Serviços: ${services}`,
+        '',
+        `Para ver, reagendar ou cancelar: ${context.manageUrl}`,
+      ].join('\n'),
+    };
+  }
+
   return {
     to: context.to,
     subject: `Agendamento confirmado — ${context.barbershopName}`,
@@ -189,7 +215,7 @@ function composeMessage(kind: 'booked' | 'cancelled', context: MessageContext): 
       `Serviços: ${services}`,
       `Total: ${total}`,
       '',
-      `Para ver ou cancelar: ${context.manageUrl}`,
+      `Para ver, reagendar ou cancelar: ${context.manageUrl}`,
     ].join('\n'),
   };
 }

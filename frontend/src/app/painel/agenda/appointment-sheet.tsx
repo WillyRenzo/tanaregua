@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
+import { TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { StatusBadge } from '@/components/appointment-status';
@@ -34,6 +35,7 @@ import {
   useAvailability,
   useChangeAppointmentStatus,
   useCreateAppointment,
+  useJustifyNoShow,
   useOpenOrder,
   useServices,
   useUpdateAppointment,
@@ -312,7 +314,8 @@ function AppointmentDetails({
   const session = useAuthenticatedSession();
   const changeStatus = useChangeAppointmentStatus();
   const openOrder = useOpenOrder();
-  const [panel, setPanel] = useState<'none' | 'cancel' | 'reschedule'>('none');
+  const justifyNoShow = useJustifyNoShow();
+  const [panel, setPanel] = useState<'none' | 'cancel' | 'reschedule' | 'no-show' | 'justify'>('none');
   const [reason, setReason] = useState('');
 
   const canWrite =
@@ -328,6 +331,16 @@ function AppointmentDetails({
     try {
       await changeStatus.mutateAsync({ id: appointment.id, status, reason: reason || undefined });
       toast.success('Agendamento atualizado.');
+      onDone();
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  };
+
+  const saveJustification = async (justification: string | null) => {
+    try {
+      await justifyNoShow.mutateAsync({ id: appointment.id, justification });
+      toast.success(justification ? 'Justificativa registrada.' : 'Justificativa removida.');
       onDone();
     } catch (error) {
       toast.error(errorMessage(error));
@@ -360,6 +373,17 @@ function AppointmentDetails({
         <StatusBadge status={appointment.status} className="mt-1 w-fit" />
       </SheetHeader>
 
+      {appointment.client.unjustifiedNoShows > 0 && (
+        <Alert>
+          <TriangleAlert aria-hidden />
+          <AlertDescription>
+            {appointment.client.unjustifiedNoShows === 1
+              ? 'Este cliente tem 1 falta sem justificativa.'
+              : `Este cliente tem ${appointment.client.unjustifiedNoShows} faltas sem justificativa.`}
+          </AlertDescription>
+        </Alert>
+      )}
+
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
         <dt className="text-muted-foreground">Profissional</dt>
         <dd>{appointment.professional.name}</dd>
@@ -388,6 +412,12 @@ function AppointmentDetails({
           <>
             <dt className="text-muted-foreground">Motivo</dt>
             <dd>{appointment.cancellationReason}</dd>
+          </>
+        )}
+        {appointment.status === 'NO_SHOW' && (
+          <>
+            <dt className="text-muted-foreground">Justificativa</dt>
+            <dd>{appointment.noShowJustification ?? 'Sem justificativa'}</dd>
           </>
         )}
       </dl>
@@ -436,8 +466,19 @@ function AppointmentDetails({
             </Button>
           )}
           {pending && (
-            <Button variant="outline" onClick={() => setStatus('NO_SHOW')} disabled={changeStatus.isPending}>
+            <Button variant="outline" onClick={() => setPanel('no-show')}>
               Não compareceu
+            </Button>
+          )}
+          {appointment.status === 'NO_SHOW' && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReason(appointment.noShowJustification ?? '');
+                setPanel('justify');
+              }}
+            >
+              {appointment.noShowJustification ? 'Editar justificativa' : 'Justificar falta'}
             </Button>
           )}
           {pending && (
@@ -471,6 +512,57 @@ function AppointmentDetails({
           >
             Confirmar cancelamento
           </Button>
+        </div>
+      )}
+
+      {panel === 'no-show' && (
+        <div className="grid gap-2">
+          <Separator />
+          <Label htmlFor="no-show-reason">Justificativa da falta (opcional)</Label>
+          <Textarea
+            id="no-show-reason"
+            rows={2}
+            maxLength={200}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+          />
+          <p className="text-muted-foreground text-xs">
+            Sem justificativa, a falta aparece para a equipe no cadastro do cliente. O cliente não vê.
+          </p>
+          <Button onClick={() => setStatus('NO_SHOW')} disabled={changeStatus.isPending}>
+            Confirmar falta
+          </Button>
+        </div>
+      )}
+
+      {panel === 'justify' && (
+        <div className="grid gap-2">
+          <Separator />
+          <Label htmlFor="no-show-justification">Justificativa da falta</Label>
+          <Textarea
+            id="no-show-justification"
+            rows={2}
+            maxLength={200}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => saveJustification(reason.trim())}
+              disabled={justifyNoShow.isPending || !reason.trim()}
+            >
+              Salvar justificativa
+            </Button>
+            {appointment.noShowJustification && (
+              <Button
+                variant="ghost"
+                onClick={() => saveJustification(null)}
+                disabled={justifyNoShow.isPending}
+              >
+                Remover justificativa
+              </Button>
+            )}
+          </div>
         </div>
       )}
 

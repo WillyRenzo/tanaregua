@@ -6,6 +6,7 @@ export const publicBarbershopSchema = z
     slug: z.string(),
     timezone: z.string(),
     cancellationMinNoticeMinutes: z.int(),
+    rescheduleMinNoticeMinutes: z.int(),
   })
   .meta({ id: 'PublicBarbershop' });
 

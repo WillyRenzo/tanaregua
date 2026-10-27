@@ -24,6 +24,8 @@ model Barbershop {
   timezone                     String   @default("America/Sao_Paulo")
   /// Antecedência mínima para o cliente cancelar online (business-rules §2).
   cancellationMinNoticeMinutes Int      @default(120) @map("cancellation_min_notice_minutes")
+  /// Antecedência mínima para o cliente reagendar online (business-rules §2).
+  rescheduleMinNoticeMinutes   Int      @default(1440) @map("reschedule_min_notice_minutes")
   /// Intervalo obrigatório entre atendimentos do mesmo profissional.
   bufferMinutes                Int      @default(0) @map("buffer_minutes")
   createdAt                    DateTime @default(now()) @map("created_at") @db.Timestamptz
@@ -271,6 +273,8 @@ model Appointment {
   source             AppointmentSource
   notes              String?
   cancellationReason String?           @map("cancellation_reason")
+  /// Justificativa da falta, registrada pela equipe. Nunca aparece para o cliente.
+  noShowJustification String?          @map("no_show_justification")
   createdByUserId    String            @map("created_by_user_id") @db.Uuid
   createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz

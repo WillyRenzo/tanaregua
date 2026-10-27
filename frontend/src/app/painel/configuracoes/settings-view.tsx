@@ -35,6 +35,7 @@ const schema = z.object({
   name: z.string().trim().min(2, 'Informe o nome.'),
   timezone: z.string(),
   cancellationHours: z.coerce.number<string>().min(0).max(168, 'Máximo de 7 dias.'),
+  rescheduleHours: z.coerce.number<string>().min(0).max(168, 'Máximo de 7 dias.'),
   bufferMinutes: z.coerce.number<string>().int().min(0).max(120, 'Máximo de 120 minutos.'),
 });
 
@@ -46,6 +47,7 @@ function SettingsForm({ settings }: { settings: BarbershopSettings }) {
       name: settings.name,
       timezone: settings.timezone,
       cancellationHours: String(settings.cancellationMinNoticeMinutes / 60),
+      rescheduleHours: String(settings.rescheduleMinNoticeMinutes / 60),
       bufferMinutes: String(settings.bufferMinutes),
     },
   });
@@ -57,6 +59,7 @@ function SettingsForm({ settings }: { settings: BarbershopSettings }) {
         name: values.name,
         timezone: values.timezone,
         cancellationMinNoticeMinutes: Math.round(values.cancellationHours * 60),
+        rescheduleMinNoticeMinutes: Math.round(values.rescheduleHours * 60),
         bufferMinutes: values.bufferMinutes,
       });
       toast.success('Configurações salvas.');
@@ -113,6 +116,13 @@ function SettingsForm({ settings }: { settings: BarbershopSettings }) {
           hint="Depois desse prazo, o cliente precisa falar com a barbearia."
         >
           <Input type="number" min={0} max={168} step={0.5} {...form.register('cancellationHours')} />
+        </Field>
+        <Field
+          label="Antecedência mínima para o cliente reagendar online (horas)"
+          error={errors.rescheduleHours?.message}
+          hint="Padrão de 24 horas. Depois desse prazo, só a barbearia reagenda."
+        >
+          <Input type="number" min={0} max={168} step={0.5} {...form.register('rescheduleHours')} />
         </Field>
         <Field
           label="Intervalo entre atendimentos (minutos)"

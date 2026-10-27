@@ -55,6 +55,7 @@ escrever um adapter novo e mudar a configuração, sem migration e sem mexer em 
 | Porta | Uso | Adapters | Status |
 |---|---|---|---|
 | `MailSender` | e-mails do outbox | `LogMailSender` (dev), `ResendMailSender` | implementada |
+| `WhatsAppSender` | aniversários e campanhas (com consentimento) | log (dev) + adapter do provedor escolhido | fase 2; provedor **[PENDENTE]** |
 | `PaymentGateway` | cobrança online, reembolso e webhooks | `MercadoPagoGateway` (inicial) + fake para testes; outros gateways (Asaas, Stripe…) entram como adapters novos | fase 3 |
 | `ObjectStorage` | logos da identidade visual (e futuros anexos) | disco local/volume (dev e VPS), S3-compatível | fase 2 |
 | `LlmProvider` | assistente de IA | `ClaudeProvider` (inicial, API da Anthropic) + fake para testes; outro provedor = adapter novo + `LLM_PROVIDER` | fase 4 |

@@ -16,12 +16,14 @@ import {
   isReschedulable,
   type AppointmentStatus,
 } from './appointment-status.js';
-import type { AppointmentView } from './appointments.responses.js';
+import type { AppointmentView, ClientAppointmentView, UnjustifiedNoShow } from './appointments.responses.js';
 import type {
   AvailabilityQuery,
   ChangeStatusInput,
+  ClientRescheduleInput,
   CreateAppointmentInput,
   DayQuery,
+  NoShowJustificationInput,
   RangeQuery,
   UpdateAppointmentInput,
 } from './appointments.schemas.js';
@@ -47,9 +49,10 @@ const appointmentInclude = {
 
 type AppointmentRow = Prisma.AppointmentGetPayload<{ include: typeof appointmentInclude }>;
 
-export type { AppointmentView };
+export type { AppointmentView, ClientAppointmentView };
 
-export const toAppointmentView = (row: AppointmentRow): AppointmentView => ({
+/** Visão do cliente final: nada interno da equipe (justificativa e contagem de faltas). */
+export const toClientAppointmentView = (row: AppointmentRow): ClientAppointmentView => ({
   id: row.id,
   status: row.status,
   source: row.source,
@@ -101,7 +104,7 @@ export class AppointmentsService {
       // Sequencial de propósito: numa transação todas as queries usam a mesma conexão.
       const intervals = await this.staff.workIntervals(tx, auth.barbershopId, ids);
       const timeOffs = await this.staff.timeOffsBetween(tx, auth.barbershopId, ids, from, to);
-      const appointments = await tx.appointment.findMany({
+      const rows = await tx.appointment.findMany({
         where: {
           barbershopId: auth.barbershopId,
           professionalId: { in: ids },
@@ -112,6 +115,7 @@ export class AppointmentsService {
         include: appointmentInclude,
         orderBy: { startsAt: 'asc' },
       });
+      const appointments = await this.toStaffViews(tx, auth.barbershopId, rows);
 
       return {
         date: query.date,
@@ -124,9 +128,7 @@ export class AppointmentsService {
             .sort((a, b) => a.startMinute - b.startMinute)
             .map(({ startMinute, endMinute }) => ({ startMinute, endMinute })),
           timeOffs: timeOffs.filter((timeOff) => timeOff.membershipId === professional.id),
-          appointments: appointments
-            .filter((appointment) => appointment.professionalId === professional.id)
-            .map(toAppointmentView),
+          appointments: appointments.filter((appointment) => appointment.professional.id === professional.id),
         })),
       };
     });
@@ -150,7 +152,7 @@ export class AppointmentsService {
         include: appointmentInclude,
         orderBy: { startsAt: 'asc' },
       });
-      return rows.map(toAppointmentView);
+      return this.toStaffViews(tx, auth.barbershopId, rows);
     });
   }
 
@@ -158,7 +160,30 @@ export class AppointmentsService {
     return this.db.run(async (tx, auth) => {
       const row = await this.find(tx, auth.barbershopId, appointmentId);
       if (!this.canRead(auth, row.professionalId)) throw notFound('Agendamento');
-      return toAppointmentView(row);
+      const [view] = await this.toStaffViews(tx, auth.barbershopId, [row]);
+      return view!;
+    });
+  }
+
+  /**
+   * Faltas sem justificativa do cliente (business-rules §2): informação para a equipe,
+   * não bloqueia nada. Inclui faltas com qualquer profissional da barbearia.
+   */
+  unjustifiedNoShows(clientId: string): Promise<UnjustifiedNoShow[]> {
+    return this.db.run(async (tx, auth) => {
+      await this.clients.assertExists(tx, auth.barbershopId, clientId);
+      const rows = await tx.appointment.findMany({
+        where: { barbershopId: auth.barbershopId, clientId, status: 'NO_SHOW', noShowJustification: null },
+        include: appointmentInclude,
+        orderBy: { startsAt: 'desc' },
+        take: 50,
+      });
+      return rows.map((row) => ({
+        appointmentId: row.id,
+        startsAt: row.startsAt,
+        professional: { id: row.professional.id, name: row.professional.user.name },
+        services: row.items.map((item) => item.name),
+      }));
     });
   }
 
@@ -191,60 +216,7 @@ export class AppointmentsService {
   }> {
     const settings = await this.barbershops.settings(tx, barbershopId);
     const services = await this.catalog.servicesForBooking(tx, barbershopId, serviceIds);
-    const durationMinutes = totalDuration(services);
-    const { from, to } = dayBounds(date, settings.timezone);
-
-    const professionals = (await this.staff.listProfessionals(tx, barbershopId)).filter(
-      (professional) => !professionalIds || professionalIds.includes(professional.id),
-    );
-    const ids = professionals.map((professional) => professional.id);
-    const weekday = weekdayOf(date);
-
-    const intervals = await this.staff.workIntervals(tx, barbershopId, ids);
-    const timeOffs = await this.staff.timeOffsBetween(tx, barbershopId, ids, from, to);
-    // Busca desde o dia anterior: um atendimento das 23h com buffer pode invadir este dia.
-    const appointments = await this.blockingAppointments(
-      tx,
-      barbershopId,
-      ids,
-      new Date(from.getTime() - 24 * 3600_000),
-      to,
-    );
-
-    const slots = availableSlots({
-      date,
-      timezone: settings.timezone,
-      durationMinutes,
-      bufferMinutes: settings.bufferMinutes,
-      stepMinutes: SLOT_STEP_MINUTES,
-      notBefore: new Date(),
-      professionals: professionals.map((professional) => ({
-        id: professional.id,
-        intervals: intervals.filter(
-          (interval) => interval.membershipId === professional.id && interval.weekday === weekday,
-        ),
-      })),
-      busy: [
-        ...timeOffs.map((timeOff) => ({
-          professionalId: timeOff.membershipId,
-          start: timeOff.startsAt,
-          end: timeOff.endsAt,
-        })),
-        ...appointments.map((appointment) => ({
-          professionalId: appointment.professionalId,
-          start: appointment.startsAt,
-          end: appointment.blockedUntil,
-        })),
-      ],
-    });
-
-    const names = new Map(professionals.map((professional) => [professional.id, professional.user.name]));
-    return {
-      date,
-      timezone: settings.timezone,
-      durationMinutes,
-      professionals: slots.map((slot) => ({ ...slot, name: names.get(slot.professionalId)! })),
-    };
+    return this.availabilityFor(tx, barbershopId, settings, date, totalDuration(services), professionalIds);
   }
 
   // ───────────── Escrita ─────────────
@@ -252,11 +224,12 @@ export class AppointmentsService {
   create(input: CreateAppointmentInput): Promise<AppointmentView> {
     return this.db.run(async (tx, auth) => {
       this.assertCanWrite(auth, input.professionalId);
-      return this.book(tx, auth.barbershopId, {
+      const booked = await this.book(tx, auth.barbershopId, {
         ...input,
         source: 'PANEL',
         createdByUserId: auth.userId,
       });
+      return this.staffView(tx, auth.barbershopId, booked.id);
     });
   }
 
@@ -265,16 +238,21 @@ export class AppointmentsService {
    * Painel: aceita encaixe fora do expediente, mas nunca em folga nem sobreposto.
    * Online: só aceita um horário que esteja na grade de disponibilidade.
    */
-  async book(tx: Tx, barbershopId: string, request: BookingRequest): Promise<AppointmentView> {
+  async book(tx: Tx, barbershopId: string, request: BookingRequest): Promise<ClientAppointmentView> {
     const settings = await this.barbershops.settings(tx, barbershopId);
     await this.staff.assertProfessional(tx, barbershopId, request.professionalId);
     await this.clients.assertExists(tx, barbershopId, request.clientId);
     const services = await this.catalog.servicesForBooking(tx, barbershopId, request.serviceIds);
 
-    const window = bookingWindow(request.startsAt, totalDuration(services), settings.bufferMinutes);
+    const durationMinutes = totalDuration(services);
+    const window = bookingWindow(request.startsAt, durationMinutes, settings.bufferMinutes);
 
     if (request.source === 'ONLINE') {
-      await this.assertSlotOffered(tx, barbershopId, request, settings);
+      await this.assertSlotOffered(tx, barbershopId, settings, {
+        professionalId: request.professionalId,
+        startsAt: request.startsAt,
+        durationMinutes,
+      });
     } else {
       await this.assertNoTimeOff(tx, barbershopId, request.professionalId, window);
     }
@@ -298,7 +276,7 @@ export class AppointmentsService {
       type: 'AppointmentBooked',
       payload: { appointmentId: appointment.id },
     });
-    return toAppointmentView(await this.find(tx, barbershopId, appointment.id));
+    return toClientAppointmentView(await this.find(tx, barbershopId, appointment.id));
   }
 
   update(appointmentId: string, input: UpdateAppointmentInput): Promise<AppointmentView> {
@@ -342,24 +320,89 @@ export class AppointmentsService {
         },
       });
       if (services) await this.replaceItems(tx, auth.barbershopId, appointmentId, services);
-      return toAppointmentView(await this.find(tx, auth.barbershopId, appointmentId));
+      return this.staffView(tx, auth.barbershopId, appointmentId);
     });
   }
 
+  /**
+   * Reagendamento pelo próprio cliente (prazo já validado pela política da barbearia).
+   * Mantém os serviços e as durações do snapshot; o novo horário precisa estar na grade
+   * do agendamento online, desconsiderando o próprio agendamento que está sendo movido.
+   */
+  async rescheduleByClient(
+    tx: Tx,
+    barbershopId: string,
+    appointmentId: string,
+    input: ClientRescheduleInput,
+  ): Promise<ClientAppointmentView> {
+    const current = await this.find(tx, barbershopId, appointmentId);
+    if (!isReschedulable(current.status)) {
+      throw unprocessable('not-reschedulable', 'Este agendamento não pode mais ser reagendado.');
+    }
+    const settings = await this.barbershops.settings(tx, barbershopId);
+    const professionalId = input.professionalId ?? current.professionalId;
+    if (input.professionalId) await this.staff.assertProfessional(tx, barbershopId, professionalId);
+
+    const durationMinutes = totalDuration(current.items);
+    const window = bookingWindow(input.startsAt, durationMinutes, settings.bufferMinutes);
+    await this.assertSlotOffered(
+      tx,
+      barbershopId,
+      settings,
+      { professionalId, startsAt: input.startsAt, durationMinutes },
+      appointmentId,
+    );
+    await this.assertNoConflict(tx, barbershopId, professionalId, window, settings, appointmentId);
+
+    await tx.appointment.update({
+      where: { id: appointmentId },
+      data: {
+        professionalId,
+        startsAt: window.startsAt,
+        endsAt: window.endsAt,
+        blockedUntil: window.blockedUntil,
+      },
+    });
+    await this.outbox.publish(tx, barbershopId, {
+      type: 'AppointmentRescheduled',
+      payload: { appointmentId },
+    });
+    return toClientAppointmentView(await this.find(tx, barbershopId, appointmentId));
+  }
+
+  /** Em NO_SHOW, o `reason` vira a justificativa da falta (opcional, só a equipe vê). */
   changeStatus(appointmentId: string, input: ChangeStatusInput): Promise<AppointmentView> {
     return this.db.run(async (tx, auth) => {
       const current = await this.find(tx, auth.barbershopId, appointmentId);
       this.assertCanWrite(auth, current.professionalId);
       assertTransition(current.status, input.status);
-      return this.setStatus(tx, auth.barbershopId, appointmentId, input.status, input.reason);
+      await this.setStatus(tx, auth.barbershopId, appointmentId, input.status, input.reason);
+      return this.staffView(tx, auth.barbershopId, appointmentId);
+    });
+  }
+
+  /** Registra, troca ou remove (null) a justificativa de uma falta já marcada. */
+  justifyNoShow(appointmentId: string, input: NoShowJustificationInput): Promise<AppointmentView> {
+    return this.db.run(async (tx, auth) => {
+      const current = await this.find(tx, auth.barbershopId, appointmentId);
+      this.assertCanWrite(auth, current.professionalId);
+      if (current.status !== 'NO_SHOW') {
+        throw unprocessable('not-a-no-show', 'Só é possível justificar um agendamento marcado como falta.');
+      }
+      await tx.appointment.update({
+        where: { id: appointmentId },
+        data: { noShowJustification: input.justification },
+      });
+      return this.staffView(tx, auth.barbershopId, appointmentId);
     });
   }
 
   /** Cancelamento pelo próprio cliente (agendamento online), já validado pela política. */
-  async cancelByClient(tx: Tx, barbershopId: string, appointmentId: string): Promise<AppointmentView> {
+  async cancelByClient(tx: Tx, barbershopId: string, appointmentId: string): Promise<ClientAppointmentView> {
     const current = await this.find(tx, barbershopId, appointmentId);
     assertTransition(current.status, 'CANCELLED');
-    return this.setStatus(tx, barbershopId, appointmentId, 'CANCELLED', 'Cancelado pelo cliente');
+    await this.setStatus(tx, barbershopId, appointmentId, 'CANCELLED', 'Cancelado pelo cliente');
+    return toClientAppointmentView(await this.find(tx, barbershopId, appointmentId));
   }
 
   /**
@@ -387,19 +430,19 @@ export class AppointmentsService {
   }
 
   /** Histórico do cliente (área "Meus agendamentos" do agendamento online). */
-  async listForClient(tx: Tx, barbershopId: string, clientId: string): Promise<AppointmentView[]> {
+  async listForClient(tx: Tx, barbershopId: string, clientId: string): Promise<ClientAppointmentView[]> {
     const rows = await tx.appointment.findMany({
       where: { barbershopId, clientId },
       include: appointmentInclude,
       orderBy: { startsAt: 'desc' },
       take: 50,
     });
-    return rows.map(toAppointmentView);
+    return rows.map(toClientAppointmentView);
   }
 
-  /** Para outros módulos (comanda, notificações), dentro da transação deles. */
-  async getInTx(tx: Tx, barbershopId: string, appointmentId: string): Promise<AppointmentView> {
-    return toAppointmentView(await this.find(tx, barbershopId, appointmentId));
+  /** Para outros módulos (comanda, notificações, agendamento online), dentro da transação deles. */
+  async getInTx(tx: Tx, barbershopId: string, appointmentId: string): Promise<ClientAppointmentView> {
+    return toClientAppointmentView(await this.find(tx, barbershopId, appointmentId));
   }
 
   // ───────────── Regras internas ─────────────
@@ -410,10 +453,14 @@ export class AppointmentsService {
     appointmentId: string,
     status: AppointmentStatus,
     reason?: string,
-  ): Promise<AppointmentView> {
+  ): Promise<void> {
     await tx.appointment.update({
       where: { id: appointmentId },
-      data: { status, ...(status === 'CANCELLED' ? { cancellationReason: reason ?? null } : {}) },
+      data: {
+        status,
+        ...(status === 'CANCELLED' ? { cancellationReason: reason ?? null } : {}),
+        ...(status === 'NO_SHOW' ? { noShowJustification: reason ?? null } : {}),
+      },
     });
     if (status === 'CANCELLED') {
       await this.outbox.publish(tx, barbershopId, {
@@ -421,7 +468,95 @@ export class AppointmentsService {
         payload: { appointmentId },
       });
     }
-    return toAppointmentView(await this.find(tx, barbershopId, appointmentId));
+  }
+
+  /** Visão da equipe: soma a justificativa e as faltas sem justificativa de cada cliente. */
+  private async toStaffViews(
+    tx: Tx,
+    barbershopId: string,
+    rows: AppointmentRow[],
+  ): Promise<AppointmentView[]> {
+    const clientIds = [...new Set(rows.map((row) => row.clientId))];
+    const counts = new Map<string, number>();
+    if (clientIds.length > 0) {
+      const groups = await tx.appointment.groupBy({
+        by: ['clientId'],
+        where: { barbershopId, clientId: { in: clientIds }, status: 'NO_SHOW', noShowJustification: null },
+        _count: { _all: true },
+      });
+      for (const group of groups) counts.set(group.clientId, group._count._all);
+    }
+    return rows.map((row) => ({
+      ...toClientAppointmentView(row),
+      noShowJustification: row.noShowJustification,
+      client: { ...row.client, unjustifiedNoShows: counts.get(row.clientId) ?? 0 },
+    }));
+  }
+
+  private async staffView(tx: Tx, barbershopId: string, appointmentId: string): Promise<AppointmentView> {
+    const [view] = await this.toStaffViews(tx, barbershopId, [
+      await this.find(tx, barbershopId, appointmentId),
+    ]);
+    return view!;
+  }
+
+  private async availabilityFor(
+    tx: Tx,
+    barbershopId: string,
+    settings: BarbershopSettings,
+    date: string,
+    durationMinutes: number,
+    professionalIds?: string[],
+    ignoreAppointmentId?: string,
+  ) {
+    const { from, to } = dayBounds(date, settings.timezone);
+    const professionals = (await this.staff.listProfessionals(tx, barbershopId)).filter(
+      (professional) => !professionalIds || professionalIds.includes(professional.id),
+    );
+    const ids = professionals.map((professional) => professional.id);
+    const weekday = weekdayOf(date);
+
+    const intervals = await this.staff.workIntervals(tx, barbershopId, ids);
+    const timeOffs = await this.staff.timeOffsBetween(tx, barbershopId, ids, from, to);
+    // Busca desde o dia anterior: um atendimento das 23h com buffer pode invadir este dia.
+    const appointments = (
+      await this.blockingAppointments(tx, barbershopId, ids, new Date(from.getTime() - 24 * 3600_000), to)
+    ).filter((appointment) => appointment.id !== ignoreAppointmentId);
+
+    const slots = availableSlots({
+      date,
+      timezone: settings.timezone,
+      durationMinutes,
+      bufferMinutes: settings.bufferMinutes,
+      stepMinutes: SLOT_STEP_MINUTES,
+      notBefore: new Date(),
+      professionals: professionals.map((professional) => ({
+        id: professional.id,
+        intervals: intervals.filter(
+          (interval) => interval.membershipId === professional.id && interval.weekday === weekday,
+        ),
+      })),
+      busy: [
+        ...timeOffs.map((timeOff) => ({
+          professionalId: timeOff.membershipId,
+          start: timeOff.startsAt,
+          end: timeOff.endsAt,
+        })),
+        ...appointments.map((appointment) => ({
+          professionalId: appointment.professionalId,
+          start: appointment.startsAt,
+          end: appointment.blockedUntil,
+        })),
+      ],
+    });
+
+    const names = new Map(professionals.map((professional) => [professional.id, professional.user.name]));
+    return {
+      date,
+      timezone: settings.timezone,
+      durationMinutes,
+      professionals: slots.map((slot) => ({ ...slot, name: names.get(slot.professionalId)! })),
+    };
   }
 
   private blockingAppointments(
@@ -488,18 +623,26 @@ export class AppointmentsService {
     }
   }
 
+  /** Online (reserva e reagendamento): o horário precisa estar na grade de disponibilidade. */
   private async assertSlotOffered(
     tx: Tx,
     barbershopId: string,
-    request: BookingRequest,
     settings: BarbershopSettings,
+    slot: { professionalId: string; startsAt: Date; durationMinutes: number },
+    ignoreAppointmentId?: string,
   ): Promise<void> {
-    const { date } = instantToLocal(request.startsAt, settings.timezone);
-    const availability = await this.computeAvailability(tx, barbershopId, date, request.serviceIds, [
-      request.professionalId,
-    ]);
+    const { date } = instantToLocal(slot.startsAt, settings.timezone);
+    const availability = await this.availabilityFor(
+      tx,
+      barbershopId,
+      settings,
+      date,
+      slot.durationMinutes,
+      [slot.professionalId],
+      ignoreAppointmentId,
+    );
     const offered = availability.professionals[0]?.starts.some(
-      (start) => start.getTime() === request.startsAt.getTime(),
+      (start) => start.getTime() === slot.startsAt.getTime(),
     );
     if (!offered) {
       throw conflict('slot-unavailable', 'Este horário não está mais disponível. Escolha outro.');

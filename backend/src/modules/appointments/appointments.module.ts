@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import { API_TAGS, ApiProblem, ApiResult, Idempotent } from '../../common/http/openapi.js';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { appointmentViewSchema, availabilitySchema, dayAgendaSchema } from './appointments.responses.js';
+import {
+  appointmentViewSchema,
+  availabilitySchema,
+  dayAgendaSchema,
+  unjustifiedNoShowSchema,
+} from './appointments.responses.js';
 import {
   Body,
   Controller,
@@ -14,6 +19,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { RequirePermissions } from '../../common/auth/decorators.js';
@@ -26,12 +32,14 @@ import {
   changeStatusSchema,
   createAppointmentSchema,
   dayQuerySchema,
+  noShowJustificationSchema,
   rangeQuerySchema,
   updateAppointmentSchema,
   type AvailabilityQuery,
   type ChangeStatusInput,
   type CreateAppointmentInput,
   type DayQuery,
+  type NoShowJustificationInput,
   type RangeQuery,
   type UpdateAppointmentInput,
 } from './appointments.schemas.js';
@@ -114,6 +122,27 @@ export class AppointmentsController {
     @Body({ schema: changeStatusSchema }) input: ChangeStatusInput,
   ) {
     return this.appointments.changeStatus(id, input);
+  }
+
+  @RequirePermissions('appointments:write:any', 'appointments:write:own')
+  @ApiResult(appointmentViewSchema)
+  @ApiOperation({ summary: 'Registra, troca ou remove a justificativa de uma falta' })
+  @ApiProblem(422, 'not-a-no-show', 'O agendamento não está marcado como falta.')
+  @Put('appointments/:id/no-show-justification')
+  justifyNoShow(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body({ schema: noShowJustificationSchema }) input: NoShowJustificationInput,
+  ) {
+    return this.appointments.justifyNoShow(id, input);
+  }
+
+  /** Faltas sem justificativa do cliente: só informação para a equipe, não bloqueia. */
+  @RequirePermissions('clients:read')
+  @ApiResult(z.array(unjustifiedNoShowSchema))
+  @ApiOperation({ summary: 'Faltas sem justificativa do cliente' })
+  @Get('clients/:id/no-shows')
+  unjustifiedNoShows(@Param('id', ParseUUIDPipe) id: string) {
+    return this.appointments.unjustifiedNoShows(id);
   }
 }
 
