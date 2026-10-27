@@ -95,16 +95,18 @@ Senha de todas as contas: **`senha-forte-123`**.
 | Cliente | `cliente@demo.tanaregua.test` | [/barbearia-demo](http://localhost:3000/barbearia-demo) | Agendar online, "Meus agendamentos", cancelar dentro do prazo |
 | Dona de outra barbearia | `dono@vizinha.tanaregua.test` | [/entrar](http://localhost:3000/entrar) | Isolamento: não enxerga nada da Barbearia Demo |
 
-**O que já vem cadastrado:**
-- três profissionais (o dono, a Bia e o Rafa);
-- cinco serviços, um deles desativado;
-- regras de comissão em todos os níveis de precedência;
-- doze clientes, alguns com consentimento de marketing e um aniversariante do mês;
-- agenda de ontem, hoje e amanhã com todos os status: agendado, confirmado, em atendimento, concluído, não compareceu e cancelado;
-- comandas fechadas, abertas e estornadas, com caixa e comissões já lançados;
-- uma folga da Bia amanhã à tarde.
+**O que já vem cadastrado** (dá para navegar por todas as telas com dados):
+- **Equipe:** três profissionais (o dono, a Bia e o Rafa) e a recepcionista, com expediente; folga da Bia amanhã à tarde e férias do Rafa na semana seguinte.
+- **Serviços:** sete serviços (um desativado) e regras de comissão em todos os níveis de precedência.
+- **Clientes:** vinte clientes, alguns com consentimento de marketing, aniversariantes no mês e um cliente anonimizado (LGPD), que some da lista mas continua no histórico.
+- **Histórico de ~5 semanas:** atendimentos concluídos, faltas, cancelamentos e estornos, com as comandas fechadas no dia do atendimento. Caixa (escolha um dia passado), comissões e relatórios ("7 dias", "Este mês", "30 dias") mostram o movimento real do período.
+- **Hoje:** agenda com todos os status (agendado, confirmado, em atendimento, concluído, não compareceu, cancelado) e comandas aberta, fechada, estornada e avulsa.
+- **Próximos 7 dias:** agenda parcialmente preenchida, com confirmados nos primeiros dias.
+- **Cliente online (Paula):** "Meus agendamentos" com atendimentos passados, uma reserva que ela mesma cancelou e reservas futuras.
+- **Barbearia Vizinha:** um cliente, um atendimento de ontem e um de amanhã, para conferir o isolamento.
 
-As datas são relativas ao dia em que o seed rodou. O comando é idempotente: se a demo já
+As datas são relativas ao dia em que o seed rodou, e o sorteio do histórico usa semente fixa
+(o mesmo dia gera os mesmos dados). Leva cerca de um minuto. O comando é idempotente: se a demo já
 existir, ele só mostra as credenciais. Para recriar com datas atuais, apague o banco local
 (`docker compose down -v`) e refaça os passos. O seed se recusa a rodar em produção.
 
