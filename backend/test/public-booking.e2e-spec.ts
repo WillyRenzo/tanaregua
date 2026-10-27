@@ -88,11 +88,12 @@ describe('Agendamento online (e2e)', () => {
       .expect(201);
     expect(booked.body).toMatchObject({ source: 'ONLINE', professional: { id: shop.membershipId } });
 
-    // O e-mail não é enviado na requisição: sai do outbox, pelo worker. Outros arquivos de
-    // teste compartilham o banco, então esvaziamos a fila inteira (lotes de 20).
+    // O e-mail não é enviado na requisição: sai do outbox, pelo worker. Só os eventos desta
+    // barbearia: outros arquivos de teste rodam em paralelo no mesmo banco e, sem escopo,
+    // o worker deles podia despachar este e-mail (e ele não apareceria aqui).
     const mail = app.get(MailSender) as LogMailSender;
     const processor = app.get(OutboxProcessor);
-    while ((await processor.processBatch()) > 0) {
+    while ((await processor.processBatch({ barbershopId: shop.barbershopId })) > 0) {
       // drena
     }
     const confirmation = mail.sent.find((message) => message.to === client.email);
@@ -101,7 +102,7 @@ describe('Agendamento online (e2e)', () => {
     expect(confirmation?.text).toContain(`/${shop.slug}/meus-agendamentos`);
 
     // Reprocessar não reenvia: o evento já está PROCESSED.
-    await app.get(OutboxProcessor).processBatch();
+    await processor.processBatch({ barbershopId: shop.barbershopId });
     expect(
       mail.sent.filter((message) => message.idempotencyKey === confirmation?.idempotencyKey),
     ).toHaveLength(1);

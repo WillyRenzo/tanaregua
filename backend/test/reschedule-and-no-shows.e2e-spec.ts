@@ -44,9 +44,10 @@ describe('Reagendamento pelo cliente e faltas (e2e)', () => {
   const reschedule = (token: string, id: string, body: object) =>
     as(app, token).post(`/v1/public/${shop.slug}/me/appointments/${id}/reschedule`).send(body);
 
+  /** Só os eventos desta barbearia: outros arquivos rodam em paralelo no mesmo banco. */
   const drainOutbox = async () => {
     const processor = app.get(OutboxProcessor);
-    while ((await processor.processBatch()) > 0) {
+    while ((await processor.processBatch({ barbershopId: shop.barbershopId })) > 0) {
       // drena
     }
   };
@@ -112,13 +113,13 @@ describe('Reagendamento pelo cliente e faltas (e2e)', () => {
       });
       expect(events).toHaveLength(2);
 
-      // Outros arquivos de teste dividem o banco e podem despachar parte dos eventos com o
-      // worker deles; aqui conferimos o conteúdo do que este processo enviou.
       await drainOutbox();
       const mail = app.get(MailSender) as LogMailSender;
-      for (const message of mail.sent.filter(
+      const rescheduled = mail.sent.filter(
         (sent) => sent.to === client.email && /remarcado/.test(sent.subject),
-      )) {
+      );
+      expect(rescheduled).toHaveLength(2);
+      for (const message of rescheduled) {
         expect(message.text).toContain('Seu horário foi remarcado');
         expect(message.text).toContain('Corte');
       }

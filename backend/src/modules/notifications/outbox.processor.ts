@@ -58,8 +58,13 @@ export class OutboxProcessor {
     }
   }
 
-  /** Retorna quantos eventos foram reivindicados neste lote. */
-  async processBatch(): Promise<number> {
+  /**
+   * Retorna quantos eventos foram reivindicados neste lote. O worker processa todas as
+   * barbearias; o escopo por barbearia existe para os testes e2e, que rodam em paralelo
+   * no mesmo banco e não podem despachar os eventos uns dos outros.
+   */
+  async processBatch(scope: { barbershopId?: string } = {}): Promise<number> {
+    const barbershopId = scope.barbershopId ?? null;
     // PROCESSING com next_attempt_at no futuro funciona como lease: se o processo morrer
     // no meio, o evento volta a ser elegível depois de 5 minutos.
     const events = await this.prisma.$queryRaw<ClaimedEvent[]>`
@@ -68,6 +73,7 @@ export class OutboxProcessor {
        WHERE id IN (
          SELECT id FROM outbox_events
           WHERE status IN ('PENDING', 'PROCESSING') AND next_attempt_at <= now()
+            AND (${barbershopId}::uuid IS NULL OR barbershop_id = ${barbershopId}::uuid)
           ORDER BY created_at
           LIMIT ${BATCH_SIZE}
           FOR UPDATE SKIP LOCKED)
