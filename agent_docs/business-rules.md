@@ -73,6 +73,15 @@ Não invente regra para preencher uma lacuna: pergunte.
 - **Reembolso só quando o pacote foi pago antecipadamente.** O reembolso gera lançamento negativo no caixa (nunca apaga a venda) e encerra o pacote.
 - **O valor do reembolso é definido pela barbearia** a cada reembolso (até o valor pago pelo pacote), com motivo registrado.
 - **Pacote vencido não pode ser reembolsado.**
+- **Sessões por serviço** (confirmado): o pacote define quantas sessões de cada serviço inclui (ex.: 4 cortes + 2 barbas). Cada serviço aparece uma vez no pacote.
+- **Validade em dias a partir da compra** (confirmado): `expiresAt = compra + N dias`. Vencido é derivado da data, não precisa de job.
+- **Venda:** o pacote é um item `PACKAGE` (quantidade 1) numa comanda **com cliente identificado**; o pacote do cliente só nasce quando a comanda fecha. A venda do pacote não gera comissão.
+- **Uso:** na comanda aberta, um item de serviço do mesmo cliente pode ser pago com sessão de pacote (o item fica R$ 0, sem desconto). A sessão só é consumida quando a comanda fecha; antes disso, nada muda no saldo. O pacote precisa estar ativo, dentro da validade, incluir o serviço e ter saldo, inclusive somando os outros itens da mesma comanda.
+- **Valor da sessão:** o preço pago é dividido entre as sessões proporcionalmente ao preço de tabela de cada serviço na hora da compra, arredondando para baixo (nunca distribui mais do que foi pago). Ex.: R$ 220 por 4 cortes de R$ 50 e 2 barbas de R$ 35 → corte vale R$ 40,74 e barba R$ 28,51. O valor fica congelado no pacote do cliente.
+- **Comissão por sessão usada** (confirmado): quem atende ganha a comissão normal do serviço (§4), calculada sobre o valor da sessão. A barbearia pode desligar isso por pacote ("Sessões geram comissão"); a escolha é congelada na venda.
+- **Estorno:** estornar a comanda de uso devolve as sessões. Estornar a comanda de venda só é permitido se nenhuma sessão foi usada e o pacote não foi reembolsado (o pacote vira estornado); senão, estorne antes as comandas de uso.
+- **Quem faz:** dono e recepção cadastram pacotes (`packages:manage`); o profissional só consulta. Reembolsar exige a permissão de estorno (`orders:void`), porque tira dinheiro do caixa. O reembolso sai no caixa do dia em que é feito, na forma de pagamento escolhida.
+- **Cliente:** vê o saldo dos pacotes ativos e vencidos em "Meus agendamentos", só para consulta.
 
 ## 7. Estoque e produtos
 

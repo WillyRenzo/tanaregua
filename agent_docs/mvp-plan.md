@@ -308,7 +308,7 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
 - **Faltas sem justificativa:** justificativa opcional ao marcar "não compareceu"; contagem visível para a equipe no cliente e no agendamento.
 - **Identidade visual por barbearia:** logo (porta `ObjectStorage`) e cores principal e secundária com contraste AA garantido, aplicados na página pública e no painel.
 - **Estoque e produtos:** venda na comanda, movimentações com autor e motivo, quantidade nunca negativa (garantida no banco), valor total do estoque pode ficar negativo.
-- **Pacotes de serviços:** validade configurável por pacote, intransferível, reembolso só se pago antecipadamente e dentro da validade, com valor definido pela barbearia.
+- **Pacotes de serviços** (feito): sessões por serviço vendidas na comanda, validade em dias a partir da compra, intransferível, comissão por sessão usada (desligável por pacote), saldo garantido no banco, reembolso dentro da validade com valor definido pela barbearia, saldo visível ao cliente na página pública.
 - **Aniversários e campanhas** com consentimento (LGPD).
 
 ### Fase 3 · Dinheiro

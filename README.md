@@ -4,7 +4,7 @@ Gestão completa para barbearias e salões: agenda integrada, agendamento online
 comandas, comissões, caixa e relatórios, num SaaS multi-tenant pensado para
 pequenos negócios.
 
-> **Status:** MVP funcional. Estoque, pacotes de serviços, aniversários,
+> **Status:** MVP funcional, com estoque e pacotes de serviços. Aniversários,
 > pagamento online e folha de salários estão no roadmap.
 
 ## Funcionalidades
@@ -14,6 +14,8 @@ pequenos negócios.
 - **Agenda integrada:** uma coluna por profissional, com expediente, folgas e atendimentos do dia. O sistema não deixa marcar dois atendimentos no mesmo horário para o mesmo profissional.
 - **Comandas:** abertas a partir do agendamento ou avulsas, com desconto por item. Ao fechar, a comissão de cada profissional é calculada e congelada.
 - **Comissões configuráveis:** por serviço, por profissional ou pela combinação dos dois, em percentual ou valor fixo.
+- **Produtos e estoque:** venda na comanda, entradas e ajustes com histórico, alerta de reposição. O estoque nunca fica negativo.
+- **Pacotes de serviços:** sessões antecipadas (ex.: 4 cortes + 2 barbas) vendidas na comanda, com validade em dias, saldo por serviço e reembolso pela barbearia.
 - **Caixa do dia e relatórios:** faturamento por dia, por profissional e por serviço, além da taxa de não comparecimento.
 - **Equipe e papéis:** dono, recepcionista e profissional, com permissões granulares (o profissional vê só a própria agenda e as próprias comissões).
 - **Clientes com LGPD:** consentimento registrado para mensagens e exclusão de dados pessoais sob pedido, preservando o histórico financeiro.
@@ -22,6 +24,7 @@ pequenos negócios.
 
 - O cliente escolhe serviço, profissional (ou "qualquer um") e horário livre, e cria a conta em poucos segundos.
 - Confirmação por e-mail, "Meus agendamentos" e cancelamento online dentro do prazo definido pela barbearia.
+- Saldo dos pacotes comprados ("Meus pacotes").
 
 ## Stack
 
@@ -101,6 +104,7 @@ Senha de todas as contas: **`senha-forte-123`**.
 - **Clientes:** vinte clientes, alguns com consentimento de marketing, aniversariantes no mês e um cliente anonimizado (LGPD), que some da lista mas continua no histórico.
 - **Identidade visual:** a Barbearia Demo tem cores próprias (azul e dourado) e logo no painel e na página pública; veja e mude em Configurações → Identidade visual.
 - **Produtos e estoque:** quatro produtos ativos e um desativado, com entradas, reposição, vendas na comanda (pelo barbeiro e no balcão), um ajuste por avaria, comissões de produto e o shampoo abaixo do mínimo (alerta de reposição em Produtos).
+- **Pacotes:** "Combo do mês" (4 cortes + 2 barbas) e "Barba mensal" (sessões sem comissão). O Carlos e a Paula têm combos em uso, o Marcos foi reembolsado e o pacote do Lucas venceu. Veja em Pacotes → Vendidos; numa comanda aberta do Carlos ou da Paula, o serviço oferece "Usar sessão de pacote". A Paula vê o saldo em "Meus agendamentos".
 - **Histórico de ~5 semanas:** atendimentos concluídos (alguns com produto), faltas com e sem justificativa, cancelamentos e estornos, com as comandas fechadas no dia do atendimento. Caixa (escolha um dia passado), comissões e relatórios ("7 dias", "Este mês", "30 dias") mostram o movimento real do período.
 - **Hoje:** agenda com todos os status (agendado, confirmado, em atendimento, concluído, não compareceu, cancelado), comandas aberta, fechada, estornada e avulsa, e uma venda de balcão. Clientes que faltaram sem justificativa aparecem com alerta na ficha do agendamento.
 - **Próximos 7 dias:** agenda parcialmente preenchida, com confirmados nos primeiros dias.
@@ -251,8 +255,8 @@ agent_docs/        regras de negócio, segurança, arquitetura e fluxo de trabal
 ## Roadmap
 
 - [x] Agenda integrada, agendamento online, comandas, comissões, caixa e relatórios
-- [ ] Estoque e venda de produtos
-- [ ] Pacotes de serviços
+- [x] Estoque e venda de produtos
+- [x] Pacotes de serviços
 - [ ] Lembretes de aniversário (com consentimento)
 - [ ] Pagamento online (Pix e cartão)
 - [ ] Salários e folha
