@@ -60,6 +60,34 @@ export function useUpdateBarbershop() {
   });
 }
 
+/** Envia o logo (multipart). A API valida o conteúdo e reprocessa a imagem. */
+export function useUploadLogo() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) =>
+      unwrap(
+        api.PUT('/v1/barbershop/logo', {
+          // O tipo gerado descreve o campo como string binária; quem vai no corpo é o FormData.
+          body: { file: '' },
+          bodySerializer: () => {
+            const form = new FormData();
+            form.append('file', file);
+            return form;
+          },
+        }),
+      ),
+    onSuccess: (data) => client.setQueryData(queryKeys.barbershop, data),
+  });
+}
+
+export function useRemoveLogo() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(api.DELETE('/v1/barbershop/logo')),
+    onSuccess: (data) => client.setQueryData(queryKeys.barbershop, data),
+  });
+}
+
 // ───────────── Equipe ─────────────
 
 export function useStaff() {

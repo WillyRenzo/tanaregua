@@ -12,6 +12,9 @@ coverage/
 # Prisma 7 gera o client dentro do projeto
 backend/src/generated/
 
+# Arquivos enviados em desenvolvimento (STORAGE_LOCAL_DIR)
+backend/storage/
+
 # Claude Code: configurações pessoais
 .claude/settings.local.json
 

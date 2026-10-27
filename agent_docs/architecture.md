@@ -57,7 +57,7 @@ escrever um adapter novo e mudar a configuração, sem migration e sem mexer em 
 | `MailSender` | e-mails do outbox | `LogMailSender` (dev), `ResendMailSender` | implementada |
 | `WhatsAppSender` | aniversários e campanhas (com consentimento) | log (dev) + adapter do provedor escolhido | fase 2; provedor **[PENDENTE]** |
 | `PaymentGateway` | cobrança online, reembolso e webhooks | `MercadoPagoGateway` (inicial) + fake para testes; outros gateways (Asaas, Stripe…) entram como adapters novos | fase 3 |
-| `ObjectStorage` | logos da identidade visual (e futuros anexos) | disco local/volume (dev e VPS), S3-compatível | fase 2 |
+| `ObjectStorage` | logos da identidade visual (e futuros anexos) | `LocalDiskStorage` (dev e VPS com volume; `STORAGE_LOCAL_DIR`); S3-compatível depois | implementada (`common/storage`) |
 | `LlmProvider` | assistente de IA | `ClaudeProvider` (inicial, API da Anthropic) + fake para testes; outro provedor = adapter novo + `LLM_PROVIDER` | fase 4 |
 
 Regras para portas novas:
@@ -89,6 +89,7 @@ Regras para portas novas:
 - `/painel/*`: client-side (React Query sobre o cliente tipado). A sessão é reconstruída pelo cookie de refresh no `PanelShell`. As páginas exportam `instant = false`, porque são bloqueadas por sessão (validação de navegação instantânea do Next 16.3+).
 - `/[slug]`: Server Component com `'use cache'` (minutos) para os dados públicos; a disponibilidade e a reserva rodam no cliente, sem cache.
 - `proxy.ts` só redireciona quem não tem cookie (UX). A API revalida tudo.
+- **Identidade visual:** a API guarda só as cores escolhidas (hex) e o logo; quem deriva o tema é `lib/brand.ts` (função pura e testada), que ajusta as cores até o contraste AA e gera um `<style>` com os tokens no `:root` (vale também para diálogos em portal). Os tokens base em hex ali espelham o `globals.css`: mudou o tema, atualize os dois. O logo é servido pela API em `/v1/public/{slug}/logo?v=<versão>`.
 - **Duas sessões independentes no navegador** (ver `security.md`): `sessionStore` (painel) e `clientSessionStore` (agendamento online), em `lib/session/session-store.ts`. O cliente da API escolhe o token pela rota: `/v1/public/...` usa a sessão do cliente, o resto usa a do painel, e cada uma se renova pelo seu cookie (`refreshSession('panel' | 'client')`). Unificar as duas fazia o F5 do painel cair na página da barbearia quando o dono entrava como cliente no mesmo navegador (teste `e2e/sessions.spec.ts`).
 
 ## AFAs do Z3t@ no MVP

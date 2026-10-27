@@ -32,6 +32,11 @@ export const envSchema = z.object({
   OTEL_ENABLED: booleanFromString,
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
 
+  /** Armazenamento de arquivos (logos). Só 'local' por enquanto; S3-compatível vem depois. */
+  STORAGE_DRIVER: z.enum(['local']).default('local'),
+  /** Diretório do disco local (volume na VPS). */
+  STORAGE_LOCAL_DIR: z.string().min(1).default('./storage'),
+
   MAIL_PROVIDER: z.enum(['log', 'resend']).default('log'),
   MAIL_FROM: z.string().min(1),
   RESEND_API_KEY: z.string().optional(),

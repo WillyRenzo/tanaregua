@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
@@ -138,6 +138,16 @@ function CreateAppointment({
     },
   });
   const { errors, isSubmitting } = form.formState;
+
+  // A lista de profissionais pode chegar depois de o formulário abrir (agenda ainda
+  // carregando): com um profissional só, ele continua vindo escolhido.
+  const onlyProfessional = professionals.length === 1 ? professionals[0]!.id : undefined;
+  useEffect(() => {
+    if (onlyProfessional && !form.getValues('professionalId')) {
+      form.setValue('professionalId', onlyProfessional, { shouldValidate: form.formState.isSubmitted });
+    }
+  }, [onlyProfessional, form]);
+
   const [professionalId, serviceIds, date] = useWatch({
     control: form.control,
     name: ['professionalId', 'serviceIds', 'date'],

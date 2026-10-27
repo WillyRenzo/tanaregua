@@ -25,6 +25,17 @@ export const sessionResponseSchema = z
   .meta({ id: 'Session' });
 export type SessionResponse = z.infer<typeof sessionResponseSchema>;
 
+/** Identidade visual (business-rules §10). O frontend deriva as cores de contraste. */
+export const brandSchema = z
+  .object({
+    primaryColor: z.string().nullable(),
+    secondaryColor: z.string().nullable(),
+    /** Muda a cada logo novo: vai na URL da imagem para furar o cache. `null` = sem logo. */
+    logoVersion: z.string().nullable(),
+  })
+  .meta({ id: 'Brand' });
+export type Brand = z.infer<typeof brandSchema>;
+
 export const barbershopSettingsSchema = z
   .object({
     id: z.uuid(),
@@ -34,6 +45,7 @@ export const barbershopSettingsSchema = z
     cancellationMinNoticeMinutes: z.int(),
     rescheduleMinNoticeMinutes: z.int(),
     bufferMinutes: z.int(),
+    brand: brandSchema,
   })
   .meta({ id: 'BarbershopSettings' });
 export type BarbershopSettings = z.infer<typeof barbershopSettingsSchema>;

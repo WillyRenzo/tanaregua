@@ -5,11 +5,13 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { LogOut, Menu } from 'lucide-react';
 import { Brand } from '@/components/brand';
+import { BarbershopLogo, BrandStyle } from '@/components/barbershop-brand';
 import { LoadingRows } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { refreshSession } from '@/lib/api/client';
 import { can } from '@/lib/permissions';
+import { useBarbershop } from '@/lib/queries';
 import { logout } from '@/lib/session/auth';
 import type { SessionState } from '@/lib/session/session-store';
 import { useSession } from '@/lib/session/use-session';
@@ -50,6 +52,7 @@ export function PanelShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="lg:grid lg:min-h-dvh lg:grid-cols-[15rem_1fr]">
+      <PanelBrandStyle />
       <aside className="bg-sidebar text-sidebar-foreground hidden flex-col lg:flex">
         <SidebarContent session={session} pathname={pathname} />
       </aside>
@@ -86,7 +89,7 @@ function SidebarContent({
   return (
     <div className="flex h-full flex-col gap-6 p-5">
       <Brand href="/painel" onDark />
-      <p className="text-sidebar-foreground/70 -mt-3 truncate text-xs">{session.profile.barbershop.name}</p>
+      <BarbershopIdentity name={session.profile.barbershop.name} slug={session.profile.barbershop.slug} />
 
       <nav aria-label="Painel" className="flex-1">
         <ul className="grid gap-0.5">
@@ -154,5 +157,22 @@ function MobileBar({
         </SheetContent>
       </Sheet>
     </header>
+  );
+}
+
+/** Cores da barbearia no painel (só monta com sessão: a consulta precisa do token). */
+function PanelBrandStyle() {
+  const barbershop = useBarbershop();
+  return barbershop.data ? <BrandStyle brand={barbershop.data.brand} /> : null;
+}
+
+/** Logo (quando houver) e nome da barbearia no topo do menu. */
+function BarbershopIdentity({ name, slug }: { name: string; slug: string }) {
+  const logoVersion = useBarbershop().data?.brand.logoVersion;
+  return (
+    <div className="-mt-3 grid gap-2">
+      {logoVersion && <BarbershopLogo slug={slug} name={name} logoVersion={logoVersion} className="h-12" />}
+      <p className="text-sidebar-foreground/70 truncate text-xs">{name}</p>
+    </div>
   );
 }
