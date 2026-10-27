@@ -1,11 +1,13 @@
 import type { INestApplicationContext } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
+import sharp from 'sharp';
 import type { AuthContext, RequestContext } from '../common/tenancy/request-context.js';
 import { Clock } from '../common/time/clock.js';
 import { localTimeToInstant, nextDate } from '../modules/appointments/availability.js';
 import { AppointmentsService } from '../modules/appointments/appointments.service.js';
 import { AuthService, type Session } from '../modules/auth/auth.service.js';
 import { isPermission } from '../modules/auth/permissions.js';
+import { BarbershopsService } from '../modules/barbershops/barbershops.module.js';
 import { CatalogService } from '../modules/catalog/catalog.service.js';
 import { ClientsService } from '../modules/clients/clients.service.js';
 import type { PaymentMethod } from '../modules/finance/finance.service.js';
@@ -24,8 +26,12 @@ import { PrismaService } from '../prisma/prisma.service.js';
  *   com comandas fechadas na data do atendimento: caixa, comissões e relatórios por período;
  * - hoje com todos os status na agenda e comandas aberta/fechada/estornada;
  * - a próxima semana parcialmente agendada, folga e férias na equipe;
- * - uma cliente com conta no agendamento online, com histórico e reservas futuras;
- * - uma segunda barbearia para testar o isolamento entre tenants.
+ * - uma cliente com conta no agendamento online, com histórico, reservas futuras, uma
+ *   reserva cancelada e outra reagendada por ela mesma;
+ * - faltas com e sem justificativa;
+ * - identidade visual própria (cores e logo) no painel e na página pública;
+ * - produtos com entradas, vendas (com profissional e no balcão), ajuste e um abaixo do mínimo;
+ * - uma segunda barbearia, com outra cor, para testar o isolamento entre tenants.
  *
  * Tudo passa pelos services de domínio (não por SQL): snapshots de preço, comissões,
  * conflito de horário e outbox seguem as regras reais. O histórico é gerado com sorteio
@@ -80,6 +86,7 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
   const orders = app.get(OrdersService);
   const publicBooking = app.get(PublicBookingService);
   const products = app.get(ProductsService);
+  const barbershops = app.get(BarbershopsService);
 
   /** Executa `fn` como se fosse uma requisição autenticada desta sessão. */
   const as = <T>(session: Session, fn: () => Promise<T>) =>
@@ -152,6 +159,14 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
       endsAt: at(shiftDate(today, UPCOMING_DAYS + 6), '00:00'),
       reason: 'Férias',
     });
+
+    // ───────────── Identidade visual ─────────────
+
+    // Azul e dourado no lugar do cobre padrão: painel e página pública saem com a marca da
+    // demo. O logo passa pelo mesmo caminho do upload (validação e reprocessamento).
+    await barbershops.update({ brandPrimaryColor: '#1f5f8b', brandSecondaryColor: '#e3c567' });
+    const logo = await demoLogo();
+    await barbershops.replaceLogo({ buffer: logo, size: logo.length });
 
     // ───────────── Serviços e comissões ─────────────
 
@@ -406,9 +421,28 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
         return booked;
       });
 
+    /** Reagendamento pela própria cliente (até 24 h antes), para o primeiro horário a partir de `from`. */
+    const rescheduleOnline = (appointmentId: string, date: string, from: Clock24, serviceIds: string[]) =>
+      as(paula, async () => {
+        const availability = await publicBooking.availability(DEMO_SLUG, {
+          date,
+          serviceIds,
+          professionalId: bia.id,
+        });
+        const slot = availability.professionals[0]?.starts.find((start) => start >= at(date, from));
+        if (!slot) return null;
+        const moved = await publicBooking.reschedule(DEMO_SLUG, appointmentId, { startsAt: slot });
+        markBusy(bia.id, date, localHour(moved.startsAt), Math.ceil(localHour(moved.endsAt, true)));
+        return moved;
+      });
+
     const paulaTomorrow = await bookOnline(tomorrow, '10:00', [corte.id]);
     const paulaId = paulaTomorrow?.client.id;
-    await bookOnline(shiftDate(today, 6), '16:00', [corte.id, sobrancelha.id]);
+    // Marcou às 16h de daqui a 6 dias e depois ela mesma passou para a manhã (e-mail de remarcação no outbox).
+    const toReschedule = await bookOnline(shiftDate(today, 6), '16:00', [corte.id, sobrancelha.id]);
+    if (toReschedule) {
+      await rescheduleOnline(toReschedule.id, shiftDate(today, 6), '09:00', [corte.id, sobrancelha.id]);
+    }
     const toCancel = await bookOnline(shiftDate(today, 5), '11:00', [hidratacao.id]);
     if (toCancel) await as(paula, () => publicBooking.cancel(DEMO_SLUG, toCancel.id));
 
@@ -618,6 +652,8 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
   });
   await as(neighbor, async () => {
     const marta = neighbor.profile.membership.id;
+    // Outra marca (vinho, sem logo): cada barbearia vê só a própria identidade.
+    await barbershops.update({ brandPrimaryColor: '#7a1f5c' });
     await staff.replaceSchedule(marta, everyDay([['10:00', '20:00']]));
     const corte = await catalog.createService({
       name: 'Corte da Vizinha',
@@ -644,6 +680,29 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
   });
 
   return { created: true, slugs: [DEMO_SLUG, NEIGHBOR_SLUG] };
+}
+
+/**
+ * Logo da demo (poste de barbearia nas cores da marca), desenhado aqui para não versionar
+ * binário. Sai em PNG porque o upload aceita só PNG, JPEG ou WebP (SVG é recusado).
+ */
+async function demoLogo(): Promise<Buffer> {
+  const stripes = [0, 1, 2, 3, 4, 5, 6]
+    .map((i) => {
+      const y = 40 + i * 28;
+      return `<path d="M96 ${y + 20} L160 ${y - 12} L160 ${y + 2} L96 ${y + 34} Z" fill="#c0392b"/>`;
+    })
+    .join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+    <circle cx="128" cy="128" r="124" fill="#e3c567"/>
+    <circle cx="128" cy="128" r="108" fill="#1f5f8b"/>
+    <defs><clipPath id="pole"><rect x="100" y="64" width="56" height="128" rx="10"/></clipPath></defs>
+    <rect x="100" y="64" width="56" height="128" rx="10" fill="#ffffff"/>
+    <g clip-path="url(#pole)">${stripes}</g>
+    <rect x="90" y="50" width="76" height="18" rx="8" fill="#e3c567"/>
+    <rect x="90" y="188" width="76" height="18" rx="8" fill="#e3c567"/>
+  </svg>`;
+  return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
 function toAuth(session: Session): AuthContext {

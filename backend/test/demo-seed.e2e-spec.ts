@@ -148,6 +148,35 @@ describe('Seed de demonstração (e2e)', () => {
     expect(report.body.topProducts.length).toBeGreaterThanOrEqual(3);
   });
 
+  it('cada barbearia tem a própria identidade visual; a demo tem logo servido pela API', async () => {
+    const demo = await request(app.getHttpServer()).get(`/v1/public/${DEMO_SLUG}`).expect(200);
+    expect(demo.body.brand).toMatchObject({ primaryColor: '#1f5f8b', secondaryColor: '#e3c567' });
+    expect(demo.body.brand.logoVersion).toEqual(expect.any(String));
+    const logo = await request(app.getHttpServer()).get(`/v1/public/${DEMO_SLUG}/logo`).expect(200);
+    expect(logo.headers['content-type']).toBe('image/webp');
+
+    const neighbor = await request(app.getHttpServer()).get(`/v1/public/${NEIGHBOR_SLUG}`).expect(200);
+    expect(neighbor.body.brand).toEqual({ primaryColor: '#7a1f5c', secondaryColor: null, logoVersion: null });
+  });
+
+  it('a cliente online tem uma reserva reagendada por ela mesma e faltas aparecem com e sem justificativa', async () => {
+    const prisma = app.get(PrismaService);
+    const shop = await prisma.barbershop.findUniqueOrThrow({
+      where: { slug: DEMO_SLUG },
+      select: { id: true },
+    });
+    const rescheduled = await prisma.outboxEvent.count({
+      where: { barbershopId: shop.id, type: 'AppointmentRescheduled' },
+    });
+    expect(rescheduled).toBeGreaterThanOrEqual(1);
+
+    const noShows = await prisma.withContext({ barbershopId: shop.id }, (tx) =>
+      tx.appointment.findMany({ where: { status: 'NO_SHOW' }, select: { noShowJustification: true } }),
+    );
+    expect(noShows.some((noShow) => noShow.noShowJustification === null)).toBe(true);
+    expect(noShows.some((noShow) => noShow.noShowJustification !== null)).toBe(true);
+  });
+
   it('a barbearia vizinha é isolada da demo', async () => {
     const neighbor = await loginPanel(DEMO_ACCOUNTS.neighborOwner.email);
     const clients = await as(app, neighbor.accessToken).get('/v1/clients').expect(200);

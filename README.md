@@ -99,11 +99,13 @@ Senha de todas as contas: **`senha-forte-123`**.
 - **Equipe:** três profissionais (o dono, a Bia e o Rafa) e a recepcionista, com expediente; folga da Bia amanhã à tarde e férias do Rafa na semana seguinte.
 - **Serviços:** sete serviços (um desativado) e regras de comissão em todos os níveis de precedência.
 - **Clientes:** vinte clientes, alguns com consentimento de marketing, aniversariantes no mês e um cliente anonimizado (LGPD), que some da lista mas continua no histórico.
-- **Histórico de ~5 semanas:** atendimentos concluídos, faltas, cancelamentos e estornos, com as comandas fechadas no dia do atendimento. Caixa (escolha um dia passado), comissões e relatórios ("7 dias", "Este mês", "30 dias") mostram o movimento real do período.
-- **Hoje:** agenda com todos os status (agendado, confirmado, em atendimento, concluído, não compareceu, cancelado) e comandas aberta, fechada, estornada e avulsa.
+- **Identidade visual:** a Barbearia Demo tem cores próprias (azul e dourado) e logo no painel e na página pública; veja e mude em Configurações → Identidade visual.
+- **Produtos e estoque:** quatro produtos ativos e um desativado, com entradas, reposição, vendas na comanda (pelo barbeiro e no balcão), um ajuste por avaria, comissões de produto e o shampoo abaixo do mínimo (alerta de reposição em Produtos).
+- **Histórico de ~5 semanas:** atendimentos concluídos (alguns com produto), faltas com e sem justificativa, cancelamentos e estornos, com as comandas fechadas no dia do atendimento. Caixa (escolha um dia passado), comissões e relatórios ("7 dias", "Este mês", "30 dias") mostram o movimento real do período.
+- **Hoje:** agenda com todos os status (agendado, confirmado, em atendimento, concluído, não compareceu, cancelado), comandas aberta, fechada, estornada e avulsa, e uma venda de balcão. Clientes que faltaram sem justificativa aparecem com alerta na ficha do agendamento.
 - **Próximos 7 dias:** agenda parcialmente preenchida, com confirmados nos primeiros dias.
-- **Cliente online (Paula):** "Meus agendamentos" com atendimentos passados, uma reserva que ela mesma cancelou e reservas futuras.
-- **Barbearia Vizinha:** um cliente, um atendimento de ontem e um de amanhã, para conferir o isolamento.
+- **Cliente online (Paula):** "Meus agendamentos" com atendimentos passados, uma reserva que ela mesma cancelou, uma que ela mesma reagendou e reservas futuras (o botão Reagendar aparece até 24 h antes).
+- **Barbearia Vizinha:** outra cor (vinho, sem logo), um cliente, um atendimento de ontem e um de amanhã, para conferir o isolamento.
 
 As datas são relativas ao dia em que o seed rodou, e o sorteio do histórico usa semente fixa
 (o mesmo dia gera os mesmos dados). Leva cerca de um minuto. O comando é idempotente: se a demo já
