@@ -88,7 +88,7 @@ Não invente regra para preencher uma lacuna: pergunte.
 ## 10. Identidade visual por barbearia (fase 2)
 
 - Cada barbearia pode enviar o **logo** e escolher as **cores da marca**, aplicados na página pública de agendamento **e** no painel da equipe dela. Sem configuração, vale a identidade TaNaRegua.
-- **Duas cores, cada uma opcional:** a **principal** vai para botões, links, foco e o destaque do menu; a **secundária**, para fundos de seleção e o item ativo do menu. Sem uma delas, aquela parte segue o padrão TaNaRegua.
+- **Duas cores, cada uma opcional:** a **principal** vai para botões, links, foco, o destaque do menu e o **fundo do menu** (e da barra do topo da página pública), escurecida só o necessário para o texto claro do menu ficar legível; a **secundária**, para fundos de seleção e o item ativo do menu. Sem uma delas, aquela parte segue o padrão TaNaRegua.
 - Logo: PNG, JPEG ou WebP até 1 MB, reprocessado para no máximo 512 px. A página pública pode levar alguns minutos para refletir a mudança (cache).
 - A personalização nunca quebra a acessibilidade: o sistema deriva as cores de texto e destaque garantindo contraste WCAG AA; se a cor escolhida não permitir, ela é ajustada (e o dono vê a prévia).
 - Só quem tem permissão de configurações da barbearia altera a identidade visual.

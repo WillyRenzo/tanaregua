@@ -153,7 +153,7 @@ function ColorsForm({ settings }: { settings: BarbershopSettings }) {
       <div className="grid gap-4 sm:grid-cols-2">
         <ColorField
           label="Cor principal"
-          hint="Botões, links e destaques do menu."
+          hint="Botões, links e fundo do menu (escurecido se preciso para a leitura)."
           value={primary}
           onChange={setPrimary}
         />
