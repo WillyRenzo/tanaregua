@@ -1,5 +1,9 @@
+import { brandTheme } from '../src/lib/brand';
 import { expectNoSeriousViolations } from './axe';
 import { expect, open, test } from './fixtures';
+
+/** "#1a5d3a" → "rgb(26, 93, 58)", como o navegador devolve a cor calculada. */
+const rgb = (hex: string) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
 
 /** PNG 1×1 válido: a API reprocessa e grava em WebP. */
 const PNG_1PX =
@@ -18,6 +22,15 @@ test('dono personaliza logo e cores; a página pública mostra a marca e continu
   await expect(page.getByText(/ajustamos o tom/)).toBeVisible();
   await page.getByRole('button', { name: 'Salvar cores' }).click();
   await expect(page.getByText('Cores salvas.')).toBeVisible();
+
+  // O fundo do menu do painel segue a cor principal (escurecida para o texto do menu ler bem).
+  const menuBackground = rgb(
+    brandTheme({ primaryColor: '#ffff00', secondaryColor: null }).vars['--sidebar']!,
+  );
+  const menu = page.locator('aside').first();
+  await expect
+    .poll(() => menu.evaluate((element) => getComputedStyle(element).backgroundColor))
+    .toBe(menuBackground);
 
   await page.getByLabel('Logo', { exact: true }).setInputFiles({
     name: 'logo.png',
@@ -38,6 +51,9 @@ test('dono personaliza logo e cores; a página pública mostra a marca e continu
   );
   expect(primary).toMatch(/^#[0-9a-f]{6}$/);
   expect(primary).not.toBe('#ffff00');
+  // O topo da página pública usa o mesmo fundo do menu.
+  const header = visitor.locator('header').first();
+  expect(await header.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(menuBackground);
 
   await visitor.waitForLoadState('networkidle');
   await expectNoSeriousViolations(visitor);

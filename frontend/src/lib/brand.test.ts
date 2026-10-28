@@ -6,6 +6,16 @@ const MUTED_FOREGROUND = '#645850';
 const SIDEBAR = '#211813';
 const SIDEBAR_FOREGROUND = '#f7f5f1';
 
+/** Cor vista quando `color` com a opacidade dada é desenhada sobre `surface`. */
+function blend(color: string, surface: string, opacity: number): string {
+  const channels = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const [top, bottom] = [channels(color), channels(surface)];
+  return `#${top
+    .map((channel, i) => Math.round(channel * opacity + bottom[i]! * (1 - opacity)))
+    .map((channel) => channel.toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
 /** Cores difíceis: claras demais, escuras demais, saturadas e tons médios. */
 const SAMPLES = [
   '#ffffff',
@@ -41,7 +51,29 @@ describe('brandTheme', () => {
     const { vars } = brandTheme({ primaryColor: color, secondaryColor: null });
     expect(contrast(vars['--primary']!, BACKGROUND)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(vars['--primary-foreground']!, vars['--primary']!)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(vars['--sidebar-primary']!, SIDEBAR)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(vars['--sidebar-primary']!, vars['--sidebar']!)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(SAMPLES)('cor principal %s: o fundo do menu segue a marca, com texto legível', (color) => {
+    const { vars } = brandTheme({ primaryColor: color, secondaryColor: null });
+    expect(vars['--sidebar']).toMatch(/^#[0-9a-f]{6}$/);
+    expect(vars['--sidebar']).not.toBe(SIDEBAR);
+    expect(contrast(SIDEBAR_FOREGROUND, vars['--sidebar']!)).toBeGreaterThanOrEqual(4.5);
+    // Textos secundários da barra usam o texto claro a 70% de opacidade.
+    expect(
+      contrast(blend(SIDEBAR_FOREGROUND, vars['--sidebar']!, 0.7), vars['--sidebar']!),
+    ).toBeGreaterThanOrEqual(4.5);
+    // Hover e item ativo sem cor secundária: um tom acima do fundo, com o texto ainda legível.
+    expect(vars['--sidebar-accent']).not.toBe(vars['--sidebar']);
+    expect(contrast(SIDEBAR_FOREGROUND, vars['--sidebar-accent']!)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('menu usa a cor principal como está quando o texto do menu já é legível nela', () => {
+    expect(brandTheme({ primaryColor: '#2c3e50', secondaryColor: null }).vars['--sidebar']).toBe('#2c3e50');
+    // Clara demais para o texto claro do menu: escurece mantendo o tom.
+    expect(brandTheme({ primaryColor: '#87ceeb', secondaryColor: null }).vars['--sidebar']).not.toBe(
+      '#87ceeb',
+    );
   });
 
   it.each(SAMPLES)('cor secundária %s: destaques e item ativo do menu legíveis', (color) => {

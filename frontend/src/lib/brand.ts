@@ -13,10 +13,12 @@ const HEX = /^#[0-9a-f]{6}$/;
 const BACKGROUND = '#f9f6f2';
 const FOREGROUND = '#211813';
 const MUTED_FOREGROUND = '#645850';
-const SIDEBAR = '#211813';
 const SIDEBAR_FOREGROUND = '#f7f5f1';
 const WHITE = '#ffffff';
 const BLACK = '#000000';
+
+/** Menor opacidade de texto sobre a barra escura (`text-sidebar-foreground/70`). */
+const FADED_TEXT_OPACITY = 0.7;
 
 /** AA: 4,5:1 para texto; 3:1 para elementos que não são texto (ícones, bordas). */
 const TEXT = 4.5;
@@ -96,12 +98,31 @@ export function brandTheme(brand: BrandColors): BrandTheme {
       BLACK,
       (c) => contrast(c, BACKGROUND) >= TEXT && contrast(readableOn(c), c) >= TEXT,
     );
-    // Na barra escura (menu e topo da página pública) a cor precisa ser clara.
-    const onDark = adjustUntil(brand.primaryColor, WHITE, (c) => contrast(c, SIDEBAR) >= TEXT);
+    // Fundo do menu e do topo da página pública no tom da marca, escurecido só o necessário
+    // para o texto claro do menu continuar legível.
+    // A condição usa o texto mais fraco da barra: o claro a 70% de opacidade.
+    const sidebar = adjustUntil(
+      brand.primaryColor,
+      BLACK,
+      (c) => contrast(mix(SIDEBAR_FOREGROUND, c, 1 - FADED_TEXT_OPACITY), c) >= TEXT,
+    );
+    // Hover (e item ativo, sem cor secundária): um tom acima do fundo, com o texto legível.
+    const sidebarAccent = adjustUntil(
+      mix(sidebar, WHITE, 0.12),
+      BLACK,
+      (c) => contrast(SIDEBAR_FOREGROUND, c) >= TEXT,
+    );
+    // Sobre a barra, a cor da marca precisa ser clara (ícone ativo, foco).
+    const onDark = adjustUntil(brand.primaryColor, WHITE, (c) => contrast(c, sidebar) >= TEXT);
     Object.assign(vars, {
       '--primary': primary,
       '--primary-foreground': readableOn(primary),
       '--ring': primary,
+      '--sidebar': sidebar,
+      '--sidebar-foreground': SIDEBAR_FOREGROUND,
+      '--sidebar-accent': sidebarAccent,
+      '--sidebar-accent-foreground': SIDEBAR_FOREGROUND,
+      '--sidebar-border': mix(sidebar, WHITE, 0.15),
       '--sidebar-primary': onDark,
       '--sidebar-primary-foreground': readableOn(onDark),
       '--sidebar-ring': onDark,
