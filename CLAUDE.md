@@ -79,6 +79,7 @@ frontend/src/app/painel/  painel da barbearia (client-side, protegido por sessã
 frontend/src/app/[slug]/  página pública de agendamento de cada barbearia (SSR)
 frontend/src/lib/         cliente da API (gerado), sessão, queries React Query, formatação
 frontend/e2e/             Playwright
+deploy/                   produção: compose, Caddy, backup cifrado e runbook (README.md)
 agent_docs/               contexto aprofundado (regras de negócio, segurança, arquitetura…)
 .claude/                  settings.json (hooks), hooks/, rules/ com escopo por caminho
 ```
