@@ -241,6 +241,21 @@ describe('Seed de demonstração (e2e)', () => {
     expect(await prisma.product.count()).toBe(products);
   });
 
+  it('a demo está no plano mais completo (mostra tudo) e a vizinha no básico (mostra o upgrade)', async () => {
+    const plan = async (email: string) => {
+      const response = await request(app.getHttpServer())
+        .post('/v1/auth/login')
+        .send({ email, password: DEMO_PASSWORD })
+        .expect(200);
+      return response.body.profile.subscription as { plan: { key: string }; features: string[] };
+    };
+    const demo = await plan(DEMO_ACCOUNTS.owner.email);
+    expect(demo.plan.key).toBe('premium');
+    expect(demo.features).toContain('assistant');
+    const neighbor = await plan(DEMO_ACCOUNTS.neighborOwner.email);
+    expect(neighbor).toMatchObject({ plan: { key: 'essential' }, features: [] });
+  });
+
   it('demo criada por versão anterior do seed ganha só os módulos que faltam', async () => {
     // Barbearias novas fazem o papel de uma demo antiga: sem produtos e sem marca.
     const oldDemo = await registerTenant(app);
@@ -277,6 +292,7 @@ describe('Seed de demonstração (e2e)', () => {
       // Os clientes da demo antiga não têm consentimento: sem campanha, só o aniversário.
       'mensagem automática de aniversário',
       'cor da Barbearia Vizinha',
+      'plano Premium na demo',
     ]);
     const sold = await as(app, oldDemo.token).get('/v1/client-packages').expect(200);
     expect(new Set(sold.body.map((row: { status: string }) => row.status))).toEqual(
