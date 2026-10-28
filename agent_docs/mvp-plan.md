@@ -330,7 +330,7 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
   3. cobrança recorrente pela porta `PaymentGateway` (Mercado Pago), com webhook verificado e idempotente. Desenho previsto:
      - checkout hospedado do Mercado Pago (assinatura `preapproval` com `init_point`), sem cartão passando pelo TaNaRegua;
      - o webhook só avisa: o estado vem de uma consulta ao Mercado Pago com o token da plataforma, e a assinatura `x-signature` é conferida;
-     - o valor contratado fica gravado na assinatura;
+     - o reajuste de preço vale para todas as assinaturas (business-rules §12): salvar um preço novo repassa o valor às assinaturas ativas no gateway (`PUT /preapproval/{id}` com o novo `transaction_amount`), de forma assíncrona e idempotente, pelo outbox;
   4. inadimplência, teste grátis e troca de plano, conforme as decisões pendentes em `business-rules.md` §12.
   - A verificação de recursos precisa estar pronta **antes** de liberar qualquer recurso da fase 3 ou 4, senão o plano básico já nasceria com eles.
 - **Pagamento online** pela porta `PaymentGateway` (Mercado Pago como adapter inicial, trocável por configuração), webhook verificado e idempotente, reembolso de pacote pago antecipadamente.

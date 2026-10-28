@@ -144,7 +144,9 @@ Não invente regra para preencher uma lacuna: pergunte.
   - o plano **mais caro** inclui o **assistente de IA** (fase 4).
   - **[PROPOSTA]** três planos: **Essencial** (fases 1 e 2), **Profissional** (+ fase 3: pagamento online, salários e relatórios avançados) e **Premium** (+ assistente de IA). Nomes, preços e o conteúdo exato de cada um ainda serão definidos. Já estão cadastrados assim; mudar é dado, não código.
 - **Ciclos mensal e anual** (confirmado em 28/10/2026). Cada plano tem um preço por ciclo, em centavos, **configurado na administração da plataforma** (sem código nem migration). Sem preço num ciclo, o plano não é vendido nele; o desconto do anual é só a diferença entre os dois preços.
-  - **[PROPOSTA]** mudar o preço vale para as **próximas contratações**; quem já assina mantém o valor contratado.
+  - **Reajuste vale para todos** (confirmado em 28/10/2026): mudar o preço de um plano num ciclo reajusta **todas as assinaturas** daquele plano e ciclo, a partir da próxima cobrança de cada uma (o mensal na próxima mensalidade, o anual na próxima renovação). Não existe "preço antigo" guardado por assinatura.
+  - **[PENDENTE]** aviso prévio ao assinante antes do reajuste (prazo e canal);
+  - **[PENDENTE]** o que acontece com quem assina num ciclo que saiu de venda (preço apagado): segue no último preço, migra de ciclo ou é cancelado.
 - **Administração da plataforma** (`/admin`): quem administra o TaNaRegua entra com conta e login próprios, separados das barbearias, e não vê dados de nenhuma barbearia. As contas são criadas só por comando no servidor (`deploy/README.md`), nunca pela aplicação.
   - **[PROPOSTA]** senha com no mínimo 12 caracteres e sessão de 12 horas.
 - **[PROPOSTA] Plano de quem chega:** a barbearia nova começa no plano padrão (hoje o Essencial), com a assinatura ativa; as que já existiam entraram nele. Vale até a decisão sobre o teste grátis.
