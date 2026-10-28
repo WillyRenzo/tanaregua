@@ -25,3 +25,20 @@ updates:
     directory: /
     schedule:
       interval: weekly
+
+  # Imagens base dos Dockerfiles e do compose de produção (node, postgres, caddy).
+  # As correções de segurança dentro de uma tag (ex.: node:24-alpine) chegam pelo
+  # `docker build --pull` do job `images` a cada push no main.
+  - package-ecosystem: docker
+    directories: [/backend, /frontend, /deploy/backup]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+
+  - package-ecosystem: docker-compose
+    directory: /deploy
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3

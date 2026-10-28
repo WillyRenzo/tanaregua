@@ -1,0 +1,51 @@
+name: Deploy
+
+# Deploy manual de uma versão já publicada pelo CI (job `images`): copia deploy/ daquele
+# commit para a VPS e roda deploy.sh. Rollback = rodar de novo com o SHA anterior.
+# Segredos (Settings → Environments → production): DEPLOY_HOST, DEPLOY_USER,
+# DEPLOY_SSH_KEY (chave privada só para o deploy) e DEPLOY_KNOWN_HOSTS
+# (saída de `ssh-keyscan <host>`, conferida à mão). Runbook em deploy/README.md.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: SHA completo do commit no main (imagens publicadas pelo CI)
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Valida o SHA
+        env:
+          SHA: ${{ inputs.sha }}
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::informe o SHA completo (40 caracteres)"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+          sparse-checkout: deploy
+      - name: Copia deploy/ e roda o deploy por SSH
+        env:
+          SHA: ${{ inputs.sha }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          target="$DEPLOY_USER@$DEPLOY_HOST"
+          # Só os arquivos versionados: o .env da VPS nunca é tocado.
+          tar -C deploy -czf - . | ssh -i ~/.ssh/deploy_key "$target" 'mkdir -p ~/tanaregua && tar -C ~/tanaregua -xzf -'
+          ssh -i ~/.ssh/deploy_key "$target" "~/tanaregua/deploy.sh $SHA"
