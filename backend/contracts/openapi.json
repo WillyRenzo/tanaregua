@@ -453,6 +453,16 @@
               }
             }
           },
+          "403": {
+            "description": "`about:blank`: A conta só tem cadastro de cliente: não tem acesso ao painel.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Muitas requisições do mesmo IP (rate limit).",
             "content": {

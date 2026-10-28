@@ -58,6 +58,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiResult(sessionResponseSchema)
   @ApiOperation({ summary: 'Entra no painel' })
+  @ApiProblem(403, 'about:blank', 'A conta só tem cadastro de cliente: não tem acesso ao painel.')
   @Post('login')
   async login(
     @Body({ schema: loginSchema }) input: LoginInput,

@@ -1,4 +1,4 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../config/env.js';
 import { conflict } from '../../common/http/domain-error.js';
@@ -7,7 +7,7 @@ import { PrismaService, setDbContext, type Tx } from '../../prisma/prisma.servic
 import { AccessTokenService } from './access-token.service.js';
 import type { LoginInput, RegisterBarbershopInput } from './auth.schemas.js';
 import { hashPassword, verifyPassword } from './password.js';
-import { DEFAULT_ROLES, isPermission } from './permissions.js';
+import { canUsePanel, DEFAULT_ROLES, isPermission } from './permissions.js';
 import { RefreshTokenService } from './refresh-token.service.js';
 import type { SessionProfile } from '../registry.responses.js';
 
@@ -22,6 +22,7 @@ export type { SessionProfile };
 
 const INVALID_CREDENTIALS = 'E-mail ou senha inválidos.';
 const SESSION_EXPIRED = 'Sessão expirada. Entre novamente.';
+const NO_PANEL_ACCESS = 'Esta conta não tem acesso ao painel. Para agendar, use a página da barbearia.';
 
 @Injectable()
 export class AuthService {
@@ -90,21 +91,30 @@ export class AuthService {
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
 
-    const memberships = await this.prisma.withContext({ userId: user.id }, (tx) =>
-      tx.membership.findMany({
-        where: { userId: user.id, active: true },
-        include: { barbershop: { select: { slug: true } } },
+    const membershipId = await this.prisma.withContext({ userId: user.id }, async (tx) => {
+      const memberships = await tx.membership.findMany({
+        where: {
+          userId: user.id,
+          active: true,
+          ...(input.barbershopSlug ? { barbershop: { slug: input.barbershopSlug } } : {}),
+        },
+        select: { id: true, barbershopId: true, roleId: true },
         orderBy: { createdAt: 'asc' },
-      }),
-    );
-    const membership = input.barbershopSlug
-      ? memberships.find((candidate) => candidate.barbershop.slug === input.barbershopSlug)
-      : memberships[0];
-    if (!membership) {
-      throw new UnauthorizedException(INVALID_CREDENTIALS);
-    }
+      });
+      if (memberships.length === 0) throw new UnauthorizedException(INVALID_CREDENTIALS);
 
-    return this.openSession(user.id, membership.id);
+      // A mesma conta pode ser cliente de uma barbearia e equipe de outra: o painel entra
+      // pelo primeiro vínculo cujo papel dá acesso a ele, não pelo mais antigo.
+      for (const membership of memberships) {
+        // O papel é isolado por tenant: só fica visível depois de definir a barbearia.
+        await setDbContext(tx, { userId: user.id, barbershopId: membership.barbershopId });
+        const role = await this.findRole(tx, membership.roleId);
+        if (role && canUsePanel(role.permissions)) return membership.id;
+      }
+      throw new ForbiddenException(NO_PANEL_ACCESS);
+    });
+
+    return this.openSession(user.id, membershipId);
   }
 
   async refresh(refreshToken: string): Promise<Session> {

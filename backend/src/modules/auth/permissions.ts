@@ -36,6 +36,11 @@ export function isPermission(value: string): value is Permission {
   return (PERMISSIONS as readonly string[]).includes(value);
 }
 
+/** Só agendar a si mesmo (cliente final) não dá acesso ao painel; qualquer outra permissão dá. */
+export function canUsePanel(permissions: readonly string[]): boolean {
+  return permissions.some((permission) => isPermission(permission) && permission !== 'bookings:self');
+}
+
 export interface DefaultRole {
   key: string;
   name: string;
