@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { INestApplication } from '@nestjs/common';
+import type { INestApplication, Type } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
@@ -8,8 +8,12 @@ import { configureApp } from '../../src/app.setup.js';
 
 export type TestApp = INestApplication<App>;
 
-export async function createTestApp(): Promise<TestApp> {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+/** `controllers`: rotas só de teste (ex.: sondar um decorator que nenhuma rota real usa ainda). */
+export async function createTestApp(options: { controllers?: Type[] } = {}): Promise<TestApp> {
+  const moduleRef = await Test.createTestingModule({
+    imports: [AppModule],
+    controllers: options.controllers ?? [],
+  }).compile();
   const app = moduleRef.createNestApplication<INestApplication<App>>({ logger: false });
   configureApp(app);
   await app.init();

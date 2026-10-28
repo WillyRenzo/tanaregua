@@ -102,5 +102,9 @@ export const API_TAGS = {
     'Aniversários e campanhas',
     'Mensagem automática de aniversário e campanhas por e-mail ou WhatsApp (modelos aprovados da Meta), só para quem consentiu no canal.',
   ],
+  subscription: [
+    'Assinatura e planos',
+    'Planos da plataforma e os recursos de cada um. Recurso fora do plano responde 403 `plan-upgrade-required`.',
+  ],
   health: ['Saúde', 'Probes de liveness e readiness.'],
 } as const;

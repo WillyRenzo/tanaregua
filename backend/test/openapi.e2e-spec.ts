@@ -13,6 +13,7 @@ type Operation = {
   parameters?: { name: string; in: string }[];
   'x-public'?: boolean;
   'x-required-permissions'?: string[];
+  'x-required-feature'?: string;
 };
 
 const METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
@@ -70,6 +71,11 @@ describe('Documentação OpenAPI (e2e)', () => {
       }
       for (const permission of operation['x-required-permissions'] ?? []) {
         expect(operation.description, key).toContain(`\`${permission}\``);
+      }
+      const feature = operation['x-required-feature'];
+      if (feature) {
+        expect(operation.description, key).toContain(`**Recurso do plano:** \`${feature}\``);
+        expect(operation.responses['403'], key).toBeDefined();
       }
     }
   });

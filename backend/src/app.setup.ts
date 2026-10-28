@@ -124,6 +124,7 @@ interface Operation {
   responses?: Record<string, unknown>;
   'x-public'?: boolean;
   'x-required-permissions'?: string[];
+  'x-required-feature'?: string;
 }
 
 const problem = (description: string) => ({
@@ -133,8 +134,8 @@ const problem = (description: string) => ({
 
 /**
  * Completa cada operação a partir do que os decorators de acesso declararam (x-public,
- * x-required-permissions): rota pública sem cadeado, permissões na descrição e as
- * respostas de erro genéricas que toda rota daquele tipo pode devolver.
+ * x-required-permissions, x-required-feature): rota pública sem cadeado, permissões e
+ * recurso do plano na descrição e as respostas de erro genéricas daquele tipo de rota.
  */
 function enrichOperations(document: OpenAPIObject): void {
   for (const [path, item] of Object.entries(document.paths)) {
@@ -143,6 +144,7 @@ function enrichOperations(document: OpenAPIObject): void {
       if (!operation) continue;
       const isPublic = operation['x-public'] === true;
       const permissions = operation['x-required-permissions'];
+      const feature = operation['x-required-feature'];
       const responses = (operation.responses ??= {});
 
       if (isPublic) operation.security = [];
@@ -151,6 +153,14 @@ function enrichOperations(document: OpenAPIObject): void {
         operation.description = [operation.description, `**Permissões (basta uma):** ${list}`]
           .filter(Boolean)
           .join('\n\n');
+      }
+      if (feature) {
+        operation.description = [operation.description, `**Recurso do plano:** \`${feature}\``]
+          .filter(Boolean)
+          .join('\n\n');
+        responses['403'] = problem(
+          'O papel não tem as permissões exigidas ou o recurso não está no plano da barbearia (`plan-upgrade-required`).',
+        );
       }
 
       const hasInput = operation.requestBody || operation.parameters?.some((p) => p.in === 'query');

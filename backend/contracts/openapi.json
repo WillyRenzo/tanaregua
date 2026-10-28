@@ -636,6 +636,41 @@
         ]
       }
     },
+    "/v1/plans": {
+      "get": {
+        "operationId": "PlansController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Plan"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Planos, do mais básico ao mais completo, com os recursos de cada um",
+        "tags": [
+          "Assinatura e planos"
+        ]
+      }
+    },
     "/v1/barbershop": {
       "get": {
         "operationId": "BarbershopsController_get",
@@ -8399,6 +8434,10 @@
       "description": "Mensagem automática de aniversário e campanhas por e-mail ou WhatsApp (modelos aprovados da Meta), só para quem consentiu no canal."
     },
     {
+      "name": "Assinatura e planos",
+      "description": "Planos da plataforma e os recursos de cada um. Recurso fora do plano responde 403 `plan-upgrade-required`."
+    },
+    {
       "name": "Saúde",
       "description": "Probes de liveness e readiness."
     }
@@ -8527,13 +8566,96 @@
             "items": {
               "type": "string"
             }
+          },
+          "subscription": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubscriptionSummary"
+              }
+            ]
           }
         },
         "required": [
           "user",
           "barbershop",
           "membership",
-          "permissions"
+          "permissions",
+          "subscription"
+        ],
+        "additionalProperties": false
+      },
+      "SubscriptionSummary": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "key",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "TRIALING",
+              "ACTIVE",
+              "PAST_DUE",
+              "CANCELED"
+            ]
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Feature"
+            }
+          }
+        },
+        "required": [
+          "plan",
+          "status",
+          "features"
+        ],
+        "additionalProperties": false
+      },
+      "Feature": {
+        "type": "string",
+        "enum": [
+          "online-payment",
+          "payroll",
+          "advanced-reports",
+          "assistant"
+        ]
+      },
+      "Plan": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Feature"
+            }
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "features"
         ],
         "additionalProperties": false
       },
@@ -8630,6 +8752,14 @@
             "items": {
               "type": "string"
             }
+          },
+          "subscription": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubscriptionSummary"
+              }
+            ]
           }
         },
         "required": [
@@ -8637,7 +8767,8 @@
           "key",
           "name",
           "isSystem",
-          "permissions"
+          "permissions",
+          "subscription"
         ],
         "additionalProperties": false
       },

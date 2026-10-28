@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { pageSchema } from '../common/http/openapi.js';
+import { subscriptionSummarySchema } from './subscriptions/subscriptions.responses.js';
 
 /**
  * Contratos de resposta dos cadastros (auth, barbearia, equipe, clientes, catálogo).
@@ -16,6 +17,8 @@ export const sessionProfileSchema = z
       role: z.object({ key: z.string(), name: z.string() }),
     }),
     permissions: z.array(z.string()),
+    /** `null` só se a barbearia ficou sem assinatura: nenhum recurso de plano liberado. */
+    subscription: subscriptionSummarySchema.nullable(),
   })
   .meta({ id: 'SessionProfile' });
 export type SessionProfile = z.infer<typeof sessionProfileSchema>;
@@ -70,6 +73,8 @@ export const roleSchema = z
     name: z.string(),
     isSystem: z.boolean(),
     permissions: z.array(z.string()),
+    /** `null` só se a barbearia ficou sem assinatura: nenhum recurso de plano liberado. */
+    subscription: subscriptionSummarySchema.nullable(),
   })
   .meta({ id: 'Role' });
 
