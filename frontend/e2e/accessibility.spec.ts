@@ -14,9 +14,15 @@ test('páginas públicas sem violações graves', async ({ browser, shop }) => {
   await context.close();
 });
 
-test('painel (agenda e comandas) sem violações graves', async ({ page, shop }) => {
+test('painel (agenda, comandas, clientes e configurações) sem violações graves', async ({ page, shop }) => {
   void shop;
-  for (const path of ['/painel', '/painel/agenda', '/painel/comandas', '/painel/clientes']) {
+  for (const path of [
+    '/painel',
+    '/painel/agenda',
+    '/painel/comandas',
+    '/painel/clientes',
+    '/painel/configuracoes',
+  ]) {
     await open(page, path);
     await page.waitForLoadState('networkidle');
     await expectNoSeriousViolations(page);
