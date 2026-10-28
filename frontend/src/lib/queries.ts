@@ -19,6 +19,14 @@ export type StockMovement = Schemas['StockMovement'];
 export type ServicePackage = Schemas['ServicePackage'];
 export type ClientPackage = Schemas['ClientPackage'];
 export type MyPackage = Schemas['MyPackage'];
+export type WhatsAppTemplate = Schemas['WhatsAppTemplate'];
+export type BirthdaySettings = Schemas['BirthdaySettings'];
+export type TemplateConfig = NonNullable<BirthdaySettings['whatsappTemplate']>;
+export type BirthdayEntry = Schemas['BirthdayEntry'];
+export type Campaign = Schemas['Campaign'];
+export type CampaignDetail = Schemas['CampaignDetail'];
+export type Audience = Campaign['audience'];
+export type MessageStatus = CampaignDetail['messages'][number]['status'];
 export type PaymentMethod = NonNullable<Order['paymentMethod']>;
 
 type Body<P extends keyof paths, M extends 'post' | 'patch' | 'put'> = NonNullable<
@@ -50,6 +58,12 @@ export const queryKeys = {
   packages: (includeInactive: boolean) => ['packages', includeInactive] as const,
   clientPackages: (clientId?: string, status?: string) =>
     ['client-packages', clientId ?? 'all', status ?? 'all'] as const,
+  whatsapp: ['whatsapp'] as const,
+  whatsappTemplates: ['whatsapp-templates'] as const,
+  birthdaySettings: ['birthday-settings'] as const,
+  birthdays: (month: number) => ['birthdays', month] as const,
+  campaigns: ['campaigns'] as const,
+  campaign: (id: string) => ['campaigns', id] as const,
 };
 
 // ───────────── Barbearia ─────────────
@@ -607,5 +621,106 @@ export function useReportSummary(from: string, to: string) {
   return useQuery({
     queryKey: queryKeys.report(from, to),
     queryFn: () => unwrap(api.GET('/v1/reports/summary', { params: { query: { from, to } } })),
+  });
+}
+
+// ───────────── Aniversários e campanhas ─────────────
+
+export function useWhatsApp(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.whatsapp,
+    enabled,
+    queryFn: () => unwrap(api.GET('/v1/whatsapp')),
+  });
+}
+
+export function useConnectWhatsApp() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Body<'/v1/whatsapp', 'put'>) => unwrap(api.PUT('/v1/whatsapp', { body })),
+    onSuccess: (data) => {
+      client.setQueryData(queryKeys.whatsapp, data);
+      void client.invalidateQueries({ queryKey: ['whatsapp-templates'] });
+      void client.invalidateQueries({ queryKey: queryKeys.birthdaySettings });
+    },
+  });
+}
+
+export function useDisconnectWhatsApp() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(api.DELETE('/v1/whatsapp')),
+    onSuccess: () => {
+      client.setQueryData(queryKeys.whatsapp, { connection: null });
+      client.removeQueries({ queryKey: ['whatsapp-templates'] });
+      void client.invalidateQueries({ queryKey: queryKeys.birthdaySettings });
+    },
+  });
+}
+
+export function useWhatsAppTemplates(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.whatsappTemplates,
+    enabled,
+    queryFn: () => unwrap(api.GET('/v1/whatsapp/templates')),
+  });
+}
+
+export function useBirthdaySettings(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.birthdaySettings,
+    enabled,
+    queryFn: () => unwrap(api.GET('/v1/birthday-settings')),
+  });
+}
+
+export function useUpdateBirthdaySettings() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Body<'/v1/birthday-settings', 'put'>) =>
+      unwrap(api.PUT('/v1/birthday-settings', { body })),
+    onSuccess: (data) => client.setQueryData(queryKeys.birthdaySettings, data),
+  });
+}
+
+export function useBirthdays(month: number) {
+  return useQuery({
+    queryKey: queryKeys.birthdays(month),
+    queryFn: () => unwrap(api.GET('/v1/birthdays', { params: { query: { month } } })),
+  });
+}
+
+export function useCampaigns(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.campaigns,
+    enabled,
+    queryFn: () => unwrap(api.GET('/v1/campaigns')),
+    // As mensagens saem pelo outbox em segundos: a situação muda sem ação do usuário.
+    refetchInterval: 15_000,
+  });
+}
+
+export function useCampaign(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.campaign(id ?? ''),
+    enabled: Boolean(id),
+    queryFn: () => unwrap(api.GET('/v1/campaigns/{id}', { params: { path: { id: id! } } })),
+    refetchInterval: (query) => (query.state.data?.counts.pending ? 5_000 : false),
+  });
+}
+
+export function usePreviewCampaign() {
+  return useMutation({
+    mutationFn: (body: Body<'/v1/campaigns/preview', 'post'>) =>
+      unwrap(api.POST('/v1/campaigns/preview', { body })),
+  });
+}
+
+export function useCreateCampaign() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Body<'/v1/campaigns', 'post'>) =>
+      unwrap(api.POST('/v1/campaigns', { body, headers: { 'Idempotency-Key': idempotencyKey() } })),
+    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.campaigns }),
   });
 }
