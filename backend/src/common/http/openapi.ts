@@ -98,5 +98,9 @@ export const API_TAGS = {
     'Agendamento online',
     'Página pública de cada barbearia (/{slug}). Leitura sem login; reservar exige conta de cliente.',
   ],
+  marketing: [
+    'Aniversários e campanhas',
+    'Mensagem automática de aniversário e campanhas por e-mail ou WhatsApp (modelos aprovados da Meta), só para quem consentiu no canal.',
+  ],
   health: ['Saúde', 'Probes de liveness e readiness.'],
 } as const;

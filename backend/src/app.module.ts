@@ -25,6 +25,7 @@ import { OrdersModule } from './modules/orders/orders.module.js';
 import { ProductsModule } from './modules/products/products.module.js';
 import { PackagesModule } from './modules/packages/packages.module.js';
 import { ReportsModule } from './modules/reports/reports.module.js';
+import { MarketingModule } from './modules/marketing/marketing.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { ClockModule } from './common/time/clock.js';
 import { StorageModule } from './common/storage/object-storage.js';
@@ -81,6 +82,7 @@ import { StorageModule } from './common/storage/object-storage.js';
     FinanceModule,
     OrdersModule,
     ReportsModule,
+    MarketingModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

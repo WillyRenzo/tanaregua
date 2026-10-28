@@ -429,6 +429,40 @@ export class AppointmentsService {
     >;
   }
 
+  /** Último atendimento concluído de cada cliente (filtro "sem visita há N dias" das campanhas). */
+  async lastCompletedVisits(tx: Tx, barbershopId: string): Promise<Map<string, Date>> {
+    const groups = await tx.appointment.groupBy({
+      by: ['clientId'],
+      where: { barbershopId, status: 'COMPLETED' },
+      _max: { startsAt: true },
+    });
+    return new Map(
+      groups.flatMap((group) =>
+        group._max.startsAt ? [[group.clientId, group._max.startsAt] as const] : [],
+      ),
+    );
+  }
+
+  /** Clientes com atendimento concluído que incluiu o serviço desde `since` (filtro das campanhas). */
+  async clientsWithCompletedService(
+    tx: Tx,
+    barbershopId: string,
+    serviceId: string,
+    since: Date,
+  ): Promise<Set<string>> {
+    const rows = await tx.appointment.findMany({
+      where: {
+        barbershopId,
+        status: 'COMPLETED',
+        startsAt: { gte: since },
+        items: { some: { serviceId } },
+      },
+      distinct: ['clientId'],
+      select: { clientId: true },
+    });
+    return new Set(rows.map((row) => row.clientId));
+  }
+
   /** Histórico do cliente (área "Meus agendamentos" do agendamento online). */
   async listForClient(tx: Tx, barbershopId: string, clientId: string): Promise<ClientAppointmentView[]> {
     const rows = await tx.appointment.findMany({

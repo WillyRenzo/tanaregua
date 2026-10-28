@@ -1260,6 +1260,162 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/whatsapp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Conta do WhatsApp conectada (o token nunca é devolvido)
+         * @description **Permissões (basta uma):** `barbershop:manage`, `campaigns:manage`
+         */
+        get: operations["MarketingController_getWhatsApp"];
+        /**
+         * Conecta ou troca a conta do WhatsApp Business (conferida na Meta)
+         * @description **Permissões (basta uma):** `barbershop:manage`
+         */
+        put: operations["MarketingController_connectWhatsApp"];
+        post?: never;
+        /**
+         * Desconecta o WhatsApp (o aniversário passa a sair só por e-mail)
+         * @description **Permissões (basta uma):** `barbershop:manage`
+         */
+        delete: operations["MarketingController_disconnectWhatsApp"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/whatsapp/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Modelos aprovados pela Meta na conta conectada
+         * @description **Permissões (basta uma):** `barbershop:manage`, `campaigns:manage`
+         */
+        get: operations["MarketingController_templates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/birthday-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Configuração da mensagem automática de aniversário
+         * @description **Permissões (basta uma):** `barbershop:manage`
+         */
+        get: operations["MarketingController_birthdaySettings"];
+        /**
+         * Liga/desliga a mensagem de aniversário e define o texto e o modelo
+         * @description **Permissões (basta uma):** `barbershop:manage`
+         */
+        put: operations["MarketingController_updateBirthdaySettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/birthdays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Aniversariantes do mês, com os canais consentidos e a mensagem deste ano
+         * @description **Permissões (basta uma):** `clients:read`
+         */
+        get: operations["MarketingController_listBirthdays"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/campaigns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Últimas campanhas, com a situação das mensagens
+         * @description **Permissões (basta uma):** `campaigns:manage`
+         */
+        get: operations["MarketingController_listCampaigns"];
+        put?: never;
+        /**
+         * Cria e envia a campanha (confirmando o número da prévia; até 2000 clientes)
+         * @description **Permissões (basta uma):** `campaigns:manage`
+         */
+        post: operations["MarketingController_createCampaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/campaigns/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prévia: quantos clientes atendem ao filtro e quantos podem receber no canal
+         * @description **Permissões (basta uma):** `campaigns:manage`
+         */
+        post: operations["MarketingController_previewCampaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/campaigns/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Detalhe da campanha, com a situação de cada destinatário
+         * @description **Permissões (basta uma):** `campaigns:manage`
+         */
+        get: operations["MarketingController_getCampaign"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1752,6 +1908,205 @@ export interface components {
                 };
                 noShowRate: number;
             };
+        };
+        WhatsAppConnection: {
+            connection: {
+                phoneNumberId: string;
+                businessAccountId: string;
+                displayPhoneNumber: string;
+                verifiedName: string;
+                /** Format: date-time */
+                connectedAt: string;
+            } | null;
+        };
+        WhatsAppTemplate: {
+            name: string;
+            language: string;
+            category: string;
+            body: string;
+            parameters: string[];
+            supported: boolean;
+        };
+        BirthdaySettings: {
+            enabled: boolean;
+            emailText: string | null;
+            defaultEmailText: string;
+            /**
+             * @example {
+             *       "name": "feliz_aniversario",
+             *       "language": "pt_BR",
+             *       "parameters": [
+             *         {
+             *           "name": "1",
+             *           "source": "client_first_name"
+             *         },
+             *         {
+             *           "name": "2",
+             *           "source": "barbershop_name"
+             *         }
+             *       ]
+             *     }
+             */
+            whatsappTemplate: {
+                name: string;
+                language: string;
+                parameters: {
+                    name: string;
+                    /** @enum {string} */
+                    source: "client_first_name" | "barbershop_name";
+                }[];
+            } | null;
+            whatsappConnected: boolean;
+            sendHour: number;
+        };
+        BirthdayEntry: {
+            /** Format: uuid */
+            clientId: string;
+            name: string;
+            day: number;
+            month: number;
+            consents: {
+                email: boolean;
+                whatsapp: boolean;
+            };
+            message: {
+                /** @enum {string} */
+                channel: "EMAIL" | "WHATSAPP";
+                /** @enum {string} */
+                status: "PENDING" | "SENT" | "SKIPPED" | "FAILED";
+                outcome: string | null;
+                /** Format: date-time */
+                sentAt: string | null;
+            } | null;
+        };
+        Campaign: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            channel: "EMAIL" | "WHATSAPP";
+            /**
+             * @example {
+             *       "kind": "inactive",
+             *       "days": 45
+             *     }
+             */
+            audience: {
+                /** @enum {string} */
+                kind: "all";
+            } | {
+                /** @enum {string} */
+                kind: "inactive";
+                days: number;
+            } | {
+                /** @enum {string} */
+                kind: "birthday-month";
+                month: number;
+            } | {
+                /** @enum {string} */
+                kind: "service";
+                /** Format: uuid */
+                serviceId: string;
+                days: number;
+            };
+            emailSubject: string | null;
+            whatsappTemplateName: string | null;
+            recipientCount: number;
+            /** Format: date-time */
+            createdAt: string;
+            counts: {
+                pending: number;
+                sent: number;
+                skipped: number;
+                failed: number;
+            };
+        };
+        CampaignPreview: {
+            matched: number;
+            recipients: number;
+            sample: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            }[];
+        };
+        CampaignDetail: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            channel: "EMAIL" | "WHATSAPP";
+            /**
+             * @example {
+             *       "kind": "inactive",
+             *       "days": 45
+             *     }
+             */
+            audience: {
+                /** @enum {string} */
+                kind: "all";
+            } | {
+                /** @enum {string} */
+                kind: "inactive";
+                days: number;
+            } | {
+                /** @enum {string} */
+                kind: "birthday-month";
+                month: number;
+            } | {
+                /** @enum {string} */
+                kind: "service";
+                /** Format: uuid */
+                serviceId: string;
+                days: number;
+            };
+            emailSubject: string | null;
+            whatsappTemplateName: string | null;
+            recipientCount: number;
+            /** Format: date-time */
+            createdAt: string;
+            counts: {
+                pending: number;
+                sent: number;
+                skipped: number;
+                failed: number;
+            };
+            emailBody: string | null;
+            /**
+             * @example {
+             *       "name": "feliz_aniversario",
+             *       "language": "pt_BR",
+             *       "parameters": [
+             *         {
+             *           "name": "1",
+             *           "source": "client_first_name"
+             *         },
+             *         {
+             *           "name": "2",
+             *           "source": "barbershop_name"
+             *         }
+             *       ]
+             *     }
+             */
+            whatsappTemplate: {
+                name: string;
+                language: string;
+                parameters: {
+                    name: string;
+                    /** @enum {string} */
+                    source: "client_first_name" | "barbershop_name";
+                }[];
+            } | null;
+            messages: {
+                /** Format: uuid */
+                clientId: string;
+                clientName: string;
+                /** @enum {string} */
+                status: "PENDING" | "SENT" | "SKIPPED" | "FAILED";
+                outcome: string | null;
+                /** Format: date-time */
+                sentAt: string | null;
+            }[];
         };
         /** @description Erro no formato RFC 9457. O final de `type` identifica o caso (ex.: appointment-conflict). */
         ProblemDetails: {
@@ -6343,6 +6698,687 @@ export interface operations {
             };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    MarketingController_getWhatsApp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhatsAppConnection"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    MarketingController_connectWhatsApp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    phoneNumberId: string;
+                    businessAccountId: string;
+                    accessToken: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhatsAppConnection"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `whatsapp-invalid-credentials`: A Meta recusou o ID do número, o ID da conta ou o token. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `whatsapp-unavailable`: O WhatsApp não respondeu. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    MarketingController_disconnectWhatsApp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    MarketingController_templates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhatsAppTemplate"][];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `whatsapp-not-connected`: A barbearia ainda não conectou o WhatsApp. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `whatsapp-unavailable`: O WhatsApp não respondeu. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    MarketingController_birthdaySettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BirthdaySettings"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    MarketingController_updateBirthdaySettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    enabled: boolean;
+                    emailText: string | null;
+                    /**
+                     * @example {
+                     *       "name": "feliz_aniversario",
+                     *       "language": "pt_BR",
+                     *       "parameters": [
+                     *         {
+                     *           "name": "1",
+                     *           "source": "client_first_name"
+                     *         },
+                     *         {
+                     *           "name": "2",
+                     *           "source": "barbershop_name"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    whatsappTemplate: {
+                        name: string;
+                        language: string;
+                        parameters: {
+                            name: string;
+                            /** @enum {string} */
+                            source: "client_first_name" | "barbershop_name";
+                        }[];
+                    } | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BirthdaySettings"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `whatsapp-not-connected | whatsapp-template-invalid`: WhatsApp não conectado, ou modelo não aprovado/suportado ou com variáveis erradas. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    MarketingController_listBirthdays: {
+        parameters: {
+            query: {
+                month: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BirthdayEntry"][];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    MarketingController_listCampaigns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Campaign"][];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    MarketingController_createCampaign: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Opcional (8–100 caracteres, ex.: um UUID). Reenviar a mesma chave devolve a resposta original; a mesma chave com outro corpo responde 422. */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    channel: "EMAIL" | "WHATSAPP";
+                    /**
+                     * @example {
+                     *       "kind": "inactive",
+                     *       "days": 45
+                     *     }
+                     */
+                    audience: {
+                        /** @enum {string} */
+                        kind: "all";
+                    } | {
+                        /** @enum {string} */
+                        kind: "inactive";
+                        days: number;
+                    } | {
+                        /** @enum {string} */
+                        kind: "birthday-month";
+                        month: number;
+                    } | {
+                        /** @enum {string} */
+                        kind: "service";
+                        /** Format: uuid */
+                        serviceId: string;
+                        days: number;
+                    };
+                    name: string;
+                    email?: {
+                        subject: string;
+                        body: string;
+                    };
+                    /**
+                     * @example {
+                     *       "name": "feliz_aniversario",
+                     *       "language": "pt_BR",
+                     *       "parameters": [
+                     *         {
+                     *           "name": "1",
+                     *           "source": "client_first_name"
+                     *         },
+                     *         {
+                     *           "name": "2",
+                     *           "source": "barbershop_name"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    whatsapp?: {
+                        name: string;
+                        language: string;
+                        parameters: {
+                            name: string;
+                            /** @enum {string} */
+                            source: "client_first_name" | "barbershop_name";
+                        }[];
+                    };
+                    confirmRecipients: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignDetail"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `audience-changed`: O público mudou desde a prévia: confirme o novo número. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `empty-audience | audience-too-large | invalid-service | whatsapp-not-connected | whatsapp-template-invalid`: Ninguém para receber, público grande demais, serviço inexistente ou problema com o WhatsApp. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    MarketingController_previewCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    channel: "EMAIL" | "WHATSAPP";
+                    /**
+                     * @example {
+                     *       "kind": "inactive",
+                     *       "days": 45
+                     *     }
+                     */
+                    audience: {
+                        /** @enum {string} */
+                        kind: "all";
+                    } | {
+                        /** @enum {string} */
+                        kind: "inactive";
+                        days: number;
+                    } | {
+                        /** @enum {string} */
+                        kind: "birthday-month";
+                        month: number;
+                    } | {
+                        /** @enum {string} */
+                        kind: "service";
+                        /** Format: uuid */
+                        serviceId: string;
+                        days: number;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignPreview"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `invalid-service`: Serviço inexistente. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    MarketingController_getCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignDetail"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

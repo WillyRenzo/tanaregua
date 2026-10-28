@@ -19,7 +19,7 @@ import { RequirePermissions } from '../../common/auth/decorators.js';
 import { notFound, unprocessable } from '../../common/http/domain-error.js';
 import { ObjectStorage, type StoredObject } from '../../common/storage/object-storage.js';
 import { TenantDb } from '../../common/tenancy/tenant-db.service.js';
-import type { Prisma } from '../../generated/prisma/client.js';
+import { Prisma } from '../../generated/prisma/client.js';
 import type { Tx } from '../../prisma/prisma.service.js';
 import { barbershopSettingsSchema, type BarbershopSettings } from '../registry.responses.js';
 import { API_TAGS, ApiProblem, ApiResult } from '../../common/http/openapi.js';
@@ -78,6 +78,14 @@ const settingsSelect = {
 } as const;
 
 type SettingsRow = Prisma.BarbershopGetPayload<{ select: typeof settingsSelect }>;
+
+const birthdaySelect = {
+  birthdayMessagesEnabled: true,
+  birthdayEmailText: true,
+  birthdayWhatsappTemplate: true,
+} as const;
+
+export type BirthdaySettingsRow = Prisma.BarbershopGetPayload<{ select: typeof birthdaySelect }>;
 
 /** A chave de storage não sai da API: só a versão do logo (o uuid do arquivo). */
 const toSettings = ({
@@ -181,6 +189,43 @@ export class BarbershopsService {
     });
     await this.deleteQuietly(previousKey);
     return settings;
+  }
+
+  /** Configuração da mensagem de aniversário (o módulo de marketing valida e interpreta). */
+  async birthdaySettings(tx: Tx, barbershopId: string): Promise<BirthdaySettingsRow> {
+    const row = await tx.barbershop.findUnique({ where: { id: barbershopId }, select: birthdaySelect });
+    if (!row) throw notFound('Barbearia');
+    return row;
+  }
+
+  async updateBirthdaySettings(
+    tx: Tx,
+    barbershopId: string,
+    data: { enabled: boolean; emailText: string | null; whatsappTemplate: Prisma.InputJsonValue | null },
+  ): Promise<BirthdaySettingsRow> {
+    return tx.barbershop.update({
+      where: { id: barbershopId },
+      data: {
+        birthdayMessagesEnabled: data.enabled,
+        birthdayEmailText: data.emailText,
+        birthdayWhatsappTemplate: data.whatsappTemplate ?? Prisma.DbNull,
+      },
+      select: birthdaySelect,
+    });
+  }
+
+  /**
+   * Barbearias com mensagem de aniversário ligada, para o job (todos os tenants). A tabela de
+   * barbearias não tem RLS: é lida pelo slug nas rotas públicas.
+   */
+  withBirthdayMessages(): Promise<{ id: string; timezone: string }[]> {
+    return this.db.runAs('', (tx) =>
+      tx.barbershop.findMany({
+        where: { birthdayMessagesEnabled: true },
+        select: { id: true, timezone: true },
+        orderBy: { id: 'asc' },
+      }),
+    );
   }
 
   /** Logo público da barbearia (página de agendamento e painel). */

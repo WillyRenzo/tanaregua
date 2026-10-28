@@ -7,6 +7,7 @@ import { AppointmentsService, type ClientAppointmentView } from '../appointments
 import { BarbershopsService } from '../barbershops/barbershops.module.js';
 import { ClientsService } from '../clients/clients.service.js';
 import { MailSender, type MailMessage } from './mail-sender.js';
+import { OutboxHandlers, type OutboxEventRef } from './outbox.service.js';
 
 const BATCH_SIZE = 20;
 const MAX_ATTEMPTS = 5;
@@ -16,7 +17,7 @@ interface ClaimedEvent {
   id: string;
   barbershop_id: string;
   type: string;
-  payload: { appointmentId?: string };
+  payload: { appointmentId?: string } & Record<string, unknown>;
   attempts: number;
 }
 
@@ -38,6 +39,7 @@ export class OutboxProcessor {
     @Inject(ClientsService) private readonly clients: ClientsService,
     @Inject(BarbershopsService) private readonly barbershops: BarbershopsService,
     @Inject(MailSender) private readonly mail: MailSender,
+    @Inject(OutboxHandlers) private readonly handlers: OutboxHandlers,
     @Inject(ConfigService) config: ConfigService<Env, true>,
   ) {
     // Nos testes o lote é processado sob demanda (processBatch), para ser determinístico.
@@ -94,6 +96,8 @@ export class OutboxProcessor {
   }
 
   private async dispatch(event: ClaimedEvent): Promise<void> {
+    const handler = this.handlers.get(event.type);
+    if (handler) return handler.handle(toRef(event));
     switch (event.type) {
       case 'AppointmentBooked':
         return this.notifyClient(event, 'booked');
@@ -144,9 +148,22 @@ export class OutboxProcessor {
     });
     if (exhausted) {
       this.logger.error(`Evento ${event.id} (${event.type}) falhou ${event.attempts} vezes: ${lastError}`);
+      try {
+        await this.handlers.get(event.type)?.onDeadLetter?.(toRef(event), lastError);
+      } catch (error) {
+        this.logger.error(
+          `Dead letter de ${event.id} não foi registrada: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
   }
 }
+
+const toRef = (event: ClaimedEvent): OutboxEventRef => ({
+  id: event.id,
+  barbershopId: event.barbershop_id,
+  payload: event.payload,
+});
 
 interface MessageContext {
   to: string;

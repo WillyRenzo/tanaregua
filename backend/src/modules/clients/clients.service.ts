@@ -9,6 +9,18 @@ import type { CreateClientInput, ListClientsQuery, UpdateClientInput } from './c
 
 export type { ClientView };
 
+/** Contato e consentimentos de um cliente, para mensagens de aniversário e campanhas. */
+export interface MessagingContact {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  /** AAAA-MM-DD */
+  birthDate: string | null;
+  emailConsentAt: Date | null;
+  whatsappConsentAt: Date | null;
+}
+
 type ClientRow = Prisma.ClientGetPayload<object>;
 
 const toView = (row: ClientRow): ClientView => ({
@@ -132,6 +144,37 @@ export class ClientsService {
       select: { name: true, email: true },
     });
     return client;
+  }
+
+  /**
+   * Contatos e consentimentos para mensagens de aniversário e campanhas (business-rules §9).
+   * Nunca inclui anonimizados. `ids` restringe a esses clientes; `withBirthDate`, a quem
+   * tem aniversário cadastrado.
+   */
+  async messagingContacts(
+    tx: Tx,
+    barbershopId: string,
+    filter: { ids?: string[]; withBirthDate?: boolean } = {},
+  ): Promise<MessagingContact[]> {
+    const rows = await tx.client.findMany({
+      where: {
+        barbershopId,
+        anonymizedAt: null,
+        ...(filter.ids ? { id: { in: filter.ids } } : {}),
+        ...(filter.withBirthDate ? { birthDate: { not: null } } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        birthDate: true,
+        emailConsentAt: true,
+        whatsappConsentAt: true,
+      },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    });
+    return rows.map((row) => ({ ...row, birthDate: row.birthDate?.toISOString().slice(0, 10) ?? null }));
   }
 
   /**

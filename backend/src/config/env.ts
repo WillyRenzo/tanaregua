@@ -40,6 +40,25 @@ export const envSchema = z.object({
   MAIL_PROVIDER: z.enum(['log', 'resend']).default('log'),
   MAIL_FROM: z.string().min(1),
   RESEND_API_KEY: z.string().optional(),
+
+  /** WhatsApp (Cloud API da Meta): "log" simula o envio (dev/testes); "meta" envia de verdade. */
+  WHATSAPP_PROVIDER: z.enum(['log', 'meta']).default('log'),
+  /** Versão da Graph API usada pelo adapter da Meta (troca sem mudar código). */
+  META_GRAPH_API_VERSION: z
+    .string()
+    .regex(/^v\d+\.\d+$/, 'Use o formato vNN.N.')
+    .default('v23.0'),
+  /**
+   * Chave (base64 de 32 bytes) que cifra segredos de terceiros no banco, como o token do
+   * WhatsApp de cada barbearia. Gere com `openssl rand -base64 32`. Obrigatória em produção.
+   */
+  SECRETS_ENCRYPTION_KEY: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .base64()
+      .refine((value) => Buffer.from(value, 'base64').length === 32, 'Precisa ter 32 bytes em base64.')
+      .optional(),
+  ),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -52,6 +71,9 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   }
   if (result.data.MAIL_PROVIDER === 'resend' && !result.data.RESEND_API_KEY) {
     throw new Error('RESEND_API_KEY é obrigatória quando MAIL_PROVIDER=resend');
+  }
+  if (result.data.NODE_ENV === 'production' && !result.data.SECRETS_ENCRYPTION_KEY) {
+    throw new Error('SECRETS_ENCRYPTION_KEY é obrigatória em produção');
   }
   if (result.data.NODE_ENV === 'production' && !result.data.RATE_LIMIT_ENABLED) {
     throw new Error('RATE_LIMIT_ENABLED=false não é permitido em produção');
