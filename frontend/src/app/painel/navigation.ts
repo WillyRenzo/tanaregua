@@ -8,6 +8,7 @@ import {
   Receipt,
   Scissors,
   Settings,
+  Ticket,
   UserRound,
   Users,
   type LucideIcon,
@@ -35,6 +36,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/painel/equipe', label: 'Equipe', icon: Users, permissions: ['staff:read'] },
   { href: '/painel/servicos', label: 'Serviços', icon: Scissors, permissions: ['services:read'] },
   { href: '/painel/produtos', label: 'Produtos', icon: Package, permissions: ['products:read'] },
+  { href: '/painel/pacotes', label: 'Pacotes', icon: Ticket, permissions: ['packages:read'] },
   {
     href: '/painel/comissoes',
     label: 'Comissões',

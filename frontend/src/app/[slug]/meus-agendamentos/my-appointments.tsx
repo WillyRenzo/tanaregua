@@ -18,8 +18,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ApiError, errorMessage } from '@/lib/api/errors';
-import { formatDateLong, formatMoney, formatTime } from '@/lib/format';
-import { useCancelBooking, useMyAppointments, useRescheduleBooking } from '@/lib/public-queries';
+import { PackageStatusBadge } from '@/components/package-status';
+import { formatDate, formatDateLong, formatMoney, formatTime } from '@/lib/format';
+import {
+  useCancelBooking,
+  useMyAppointments,
+  useMyPackages,
+  useRescheduleBooking,
+} from '@/lib/public-queries';
 import type { Schemas } from '@/lib/queries';
 import { useNow } from '@/lib/use-now';
 import { ClientAuthForm } from '../client-auth-form';
@@ -99,6 +105,8 @@ export function MyAppointments({
         </ul>
       )}
 
+      {isClientHere && <MyPackages slug={slug} timezone={timezone} />}
+
       {rescheduling && (
         <RescheduleDialog
           slug={slug}
@@ -108,6 +116,47 @@ export function MyAppointments({
         />
       )}
     </main>
+  );
+}
+
+/** Saldo dos pacotes do cliente nesta barbearia (só consulta: o uso é registrado no balcão). */
+function MyPackages({ slug, timezone }: { slug: string; timezone: string }) {
+  const packages = useMyPackages(slug, true);
+  if (!packages.data || packages.data.length === 0) return null;
+
+  return (
+    <section aria-labelledby="my-packages" className="mt-10">
+      <h2 id="my-packages" className="mb-1 text-2xl font-bold">
+        Meus pacotes
+      </h2>
+      <p className="text-muted-foreground mb-4 text-sm">
+        As sessões são descontadas no atendimento, na barbearia.
+      </p>
+      <ul className="grid gap-3">
+        {packages.data.map((myPackage) => (
+          <li key={myPackage.id} className="bg-card border-border rounded-lg border p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium">{myPackage.name}</span>
+              <PackageStatusBadge status={myPackage.status} />
+            </div>
+            <ul className="mt-2 grid gap-1 text-sm">
+              {myPackage.balances.map((balance) => (
+                <li key={balance.serviceId} className="flex justify-between gap-4">
+                  <span>{balance.name}</span>
+                  <span>
+                    <strong>{balance.remaining}</strong> de {balance.initialQuantity} restantes
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-muted-foreground mt-2 text-xs">
+              {myPackage.status === 'EXPIRED' ? 'Venceu em ' : 'Válido até '}
+              {formatDate(myPackage.expiresAt, timezone)}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

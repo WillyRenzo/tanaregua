@@ -84,6 +84,15 @@ export class CatalogService {
     });
   }
 
+  /** Nome e preço atual de serviços (inclusive inativos), para pacotes calcularem o valor da sessão. */
+  async servicePrices(tx: Tx, barbershopId: string, serviceIds: string[]) {
+    const rows = await tx.service.findMany({
+      where: { barbershopId, id: { in: serviceIds } },
+      select: { id: true, name: true, priceCents: true },
+    });
+    return new Map(rows.map((row) => [row.id, row]));
+  }
+
   listCommissionRules() {
     return this.db.run((tx, auth) => this.commissionRules(tx, auth.barbershopId));
   }

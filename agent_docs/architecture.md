@@ -38,13 +38,18 @@ Browser ──► frontend (Next.js 16) ──/api/* (rewrite)──► backend 
 | Uma regra de comissão por alvo | índice único `NULLS NOT DISTINCT` (membro, serviço, produto) | migrations `*_staff_clients_catalog` e `*_products_and_stock` |
 | Estoque nunca negativo | CHECK `stock_quantity >= 0`; o saldo só muda pelo trigger `apply_stock_movement` (SECURITY DEFINER) ao inserir movimentação | migration `*_products_and_stock` |
 | Saldo = soma das movimentações | app sem UPDATE em `products.stock_quantity` (grant só nas outras colunas) e sem UPDATE/DELETE em `stock_movements` | migration `*_products_and_stock` |
-| Item de comanda é serviço (com profissional) ou produto | CHECK `order_items_kind_check` | migration `*_products_and_stock` |
+| Item de comanda é serviço (com profissional), produto ou pacote (quantidade 1) | CHECK `order_items_kind_check` | migrations `*_products_and_stock` e `*_service_packages` |
+| Saldo de pacote nunca negativo nem acima do comprado | CHECK `remaining BETWEEN 0 AND initial_quantity`; o saldo só muda pelo trigger `apply_package_movement` (SECURITY DEFINER) ao inserir movimentação | migration `*_service_packages` |
+| Saldo de pacote = soma das movimentações | app sem UPDATE/DELETE em `client_package_balances` e `package_movements`, sem DELETE em `client_packages` | migration `*_service_packages` |
+| Sessão de pacote é R$ 0 e a comissão não passa do valor da sessão | CHECKs `order_items_values_check` e `order_items_commission_check` | migration `*_service_packages` |
+| Reembolso até o valor pago | CHECK em `client_packages` (e REFUNDED ⇔ data de reembolso) | migration `*_service_packages` |
 
 A aplicação pré-valida só para dar mensagem amigável. Sob concorrência, o banco decide (há testes e2e com requisições simultâneas).
 
 ## Fluxos não óbvios
 
 - **Fechar comanda** (`orders.service.ts#close`): `SELECT … FOR UPDATE` na comanda, baixa dos produtos (`ProductsService.recordSale`: trava os produtos em ordem de id para não haver deadlock entre fechamentos, confere o saldo e lança as vendas), depois congela a comissão em cada item (snapshot), muda o status para CLOSED, lança caixa e comissões (`FinanceService.recordSale`) e conclui o agendamento. Tudo numa transação. O estorno devolve os produtos com `SALE_REVERSAL` ao mesmo custo da venda.
+- **Pacotes no fechamento** (`PackagesService`): depois da baixa de produtos, `recordUses` trava os `client_packages` usados (`FOR UPDATE`, em ordem de id; os saldos não podem ser travados porque o app não tem UPDATE neles), confere validade e saldo e lança `USE`; depois `recordPurchases` cria o pacote do cliente, os saldos e as movimentações `PURCHASE`. A comissão da sessão usa o valor congelado da sessão como base. No estorno, `reverseForOrder` recusa antes de qualquer escrita (pacote reembolsado ou já usado) e lança `USE_REVERSAL`.
 - **E-mails** (AFA 12): a mudança e o evento (`outbox_events`) são gravados na mesma transação. `OutboxProcessor` reivindica lotes com `FOR UPDATE SKIP LOCKED` (seguro com várias instâncias), envia fora da transação, faz retry com backoff exponencial e, após 5 tentativas, move para FAILED (dead letter). O ID do evento vai como `Idempotency-Key` ao provedor, então reenvio não duplica o e-mail.
 - **Idempotência de POST** (`common/idempotency`): agendar e fechar comanda aceitam `Idempotency-Key`. A mesma chave devolve a resposta original; a mesma chave com outro corpo dá 422.
 - **Fuso:** tudo em UTC no banco; dia, expediente e grade são calculados no fuso da barbearia (`appointments/availability.ts`, função pura testada inclusive com horário de verão).

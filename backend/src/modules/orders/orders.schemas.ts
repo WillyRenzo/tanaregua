@@ -21,8 +21,25 @@ export const productItemInputSchema = z.strictObject({
   ...itemAmounts,
 });
 
-export const orderItemInputSchema = z.union([serviceItemInputSchema, productItemInputSchema]);
+/** Pacote vendido: um por item, para o cliente da comanda (business-rules §6). */
+export const packageItemInputSchema = z.strictObject({
+  packageId: z.uuid(),
+  quantity: z.literal(1).default(1),
+  discountCents: z.number().int().min(0).default(0),
+});
+
+export const orderItemInputSchema = z.union([
+  serviceItemInputSchema,
+  productItemInputSchema,
+  packageItemInputSchema,
+]);
 export type OrderItemInput = z.infer<typeof orderItemInputSchema>;
+
+/** Paga (ou deixa de pagar, com null) um serviço da comanda com sessão de pacote do cliente. */
+export const applyPackageSchema = z
+  .strictObject({ clientPackageId: z.uuid().nullable() })
+  .meta({ example: { clientPackageId: '0199a1b2-0000-7000-8000-000000000009' } });
+export type ApplyPackageInput = z.infer<typeof applyPackageSchema>;
 
 /** Abre a partir de um agendamento OU avulsa (cliente opcional: "cliente balcão"). */
 export const openOrderSchema = z.union([

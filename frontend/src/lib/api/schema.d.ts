@@ -601,6 +601,130 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/packages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista pacotes à venda
+         * @description **Permissões (basta uma):** `packages:read`
+         */
+        get: operations["PackagesController_list"];
+        put?: never;
+        /**
+         * Cadastra pacote (sessões por serviço, preço e validade em dias)
+         * @description **Permissões (basta uma):** `packages:manage`
+         */
+        post: operations["PackagesController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/packages/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Atualiza ou desativa pacote (vale só para vendas futuras)
+         * @description **Permissões (basta uma):** `packages:manage`
+         */
+        patch: operations["PackagesController_update"];
+        trace?: never;
+    };
+    "/v1/client-packages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pacotes vendidos (por cliente e situação; últimos 100)
+         * @description **Permissões (basta uma):** `packages:read`
+         */
+        get: operations["PackagesController_listSold"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/client-packages/{id}/refund": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reembolsa pacote pago (valor definido pela barbearia; encerra o pacote)
+         * @description **Permissões (basta uma):** `orders:void`
+         */
+        post: operations["PackagesController_refund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cash/day": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Caixa do dia por forma de pagamento
+         * @description **Permissões (basta uma):** `cash:read`
+         */
+        get: operations["FinanceController_cashDay"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/commissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Comissões por profissional no período
+         * @description **Permissões (basta uma):** `commissions:read:any`, `commissions:read:own`
+         */
+        get: operations["FinanceController_commissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agenda/day": {
         parameters: {
             query?: never;
@@ -888,6 +1012,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/{slug}/me/packages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Meus pacotes (saldo e validade)
+         * @description **Permissões (basta uma):** `bookings:self`
+         */
+        get: operations["PublicBookingController_myPackages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/{slug}/bookings": {
         parameters: {
             query?: never;
@@ -948,46 +1092,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/cash/day": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Caixa do dia por forma de pagamento
-         * @description **Permissões (basta uma):** `cash:read`
-         */
-        get: operations["FinanceController_cashDay"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/commissions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Comissões por profissional no período
-         * @description **Permissões (basta uma):** `commissions:read:any`, `commissions:read:own`
-         */
-        get: operations["FinanceController_commissions"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/orders": {
         parameters: {
             query?: never;
@@ -1042,7 +1146,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Adiciona serviço à comanda
+         * Adiciona serviço, produto ou pacote à comanda
          * @description **Permissões (basta uma):** `orders:manage`
          */
         post: operations["OrdersController_addItem"];
@@ -1074,6 +1178,26 @@ export interface paths {
          * @description **Permissões (basta uma):** `orders:manage`
          */
         patch: operations["OrdersController_updateItem"];
+        trace?: never;
+    };
+    "/v1/orders/{id}/items/{itemId}/package": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Paga o serviço com sessão de pacote do cliente (ou desfaz, com null)
+         * @description **Permissões (basta uma):** `orders:manage`
+         */
+        put: operations["OrdersController_applyPackage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/orders/{id}/close": {
@@ -1297,6 +1421,88 @@ export interface components {
             /** Format: date-time */
             occurredAt: string;
         };
+        ServicePackage: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: string | null;
+            priceCents: number;
+            validityDays: number;
+            commissionOnSessions: boolean;
+            active: boolean;
+            items: {
+                /** Format: uuid */
+                serviceId: string;
+                name: string;
+                quantity: number;
+            }[];
+        };
+        ClientPackage: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: date-time */
+            purchasedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** @enum {string} */
+            status: "ACTIVE" | "EXPIRED" | "REFUNDED" | "VOIDED";
+            balances: {
+                /** Format: uuid */
+                serviceId: string;
+                name: string;
+                initialQuantity: number;
+                remaining: number;
+            }[];
+            client: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            };
+            /** Format: uuid */
+            packageId: string;
+            /** Format: uuid */
+            orderId: string;
+            pricePaidCents: number;
+            commissionOnSessions: boolean;
+            refundCents: number | null;
+            /** Format: date-time */
+            refundedAt: string | null;
+            refundReason: string | null;
+        };
+        CashDay: {
+            date: string;
+            timezone: string;
+            totals: {
+                [key: string]: number;
+            };
+            netCents: number;
+            entries: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                orderId: string;
+                /** @enum {string} */
+                method: "CASH" | "PIX" | "CARD_CREDIT" | "CARD_DEBIT" | "OTHER";
+                /** @enum {string} */
+                kind: "ENTRY" | "REVERSAL" | "REFUND";
+                amountCents: number;
+                /** Format: date-time */
+                occurredAt: string;
+                clientName: string | null;
+            }[];
+        };
+        CommissionsSummary: {
+            from: string;
+            to: string;
+            professionals: {
+                /** Format: uuid */
+                professionalId: string;
+                name: string;
+                totalCents: number;
+                entries: number;
+            }[];
+        };
         DayAgenda: {
             date: string;
             timezone: string;
@@ -1437,37 +1643,22 @@ export interface components {
             }[];
             totalCents: number;
         };
-        CashDay: {
-            date: string;
-            timezone: string;
-            totals: {
-                [key: string]: number;
-            };
-            netCents: number;
-            entries: {
+        MyPackage: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: date-time */
+            purchasedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** @enum {string} */
+            status: "ACTIVE" | "EXPIRED" | "REFUNDED" | "VOIDED";
+            balances: {
                 /** Format: uuid */
-                id: string;
-                /** Format: uuid */
-                orderId: string;
-                /** @enum {string} */
-                method: "CASH" | "PIX" | "CARD_CREDIT" | "CARD_DEBIT" | "OTHER";
-                /** @enum {string} */
-                kind: "ENTRY" | "REVERSAL";
-                amountCents: number;
-                /** Format: date-time */
-                occurredAt: string;
-                clientName: string | null;
-            }[];
-        };
-        CommissionsSummary: {
-            from: string;
-            to: string;
-            professionals: {
-                /** Format: uuid */
-                professionalId: string;
+                serviceId: string;
                 name: string;
-                totalCents: number;
-                entries: number;
+                initialQuantity: number;
+                remaining: number;
             }[];
         };
         OrderPage: {
@@ -1490,11 +1681,15 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 /** @enum {string} */
-                kind: "SERVICE" | "PRODUCT";
+                kind: "SERVICE" | "PRODUCT" | "PACKAGE";
                 /** Format: uuid */
                 serviceId: string | null;
                 /** Format: uuid */
                 productId: string | null;
+                /** Format: uuid */
+                packageId: string | null;
+                /** Format: uuid */
+                clientPackageId: string | null;
                 name: string;
                 professional: {
                     /** Format: uuid */
@@ -3778,6 +3973,427 @@ export interface operations {
             };
         };
     };
+    PackagesController_list: {
+        parameters: {
+            query?: {
+                includeInactive?: "true" | "false";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServicePackage"][];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PackagesController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    description?: string | null;
+                    priceCents: number;
+                    validityDays: number;
+                    /** @default true */
+                    commissionOnSessions?: boolean;
+                    items: {
+                        /** Format: uuid */
+                        serviceId: string;
+                        quantity: number;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServicePackage"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `invalid-service`: Serviço inexistente. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PackagesController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name?: string;
+                    description?: string | null;
+                    priceCents?: number;
+                    validityDays?: number;
+                    commissionOnSessions?: boolean;
+                    active?: boolean;
+                    items?: {
+                        /** Format: uuid */
+                        serviceId: string;
+                        quantity: number;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServicePackage"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PackagesController_listSold: {
+        parameters: {
+            query?: {
+                clientId?: string;
+                status?: "ACTIVE" | "EXPIRED" | "REFUNDED" | "VOIDED";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientPackage"][];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PackagesController_refund: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    amountCents: number;
+                    /** @enum {string} */
+                    paymentMethod: "CASH" | "PIX" | "CARD_CREDIT" | "CARD_DEBIT" | "OTHER";
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientPackage"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `package-not-refundable | package-expired | refund-too-high`: Pacote já encerrado, vencido, ou valor acima do pago. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    FinanceController_cashDay: {
+        parameters: {
+            query: {
+                date: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CashDay"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    FinanceController_commissions: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                professionalId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommissionsSummary"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     AppointmentsController_day: {
         parameters: {
             query: {
@@ -4730,6 +5346,55 @@ export interface operations {
             };
         };
     };
+    PublicBookingController_myPackages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyPackage"][];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     PublicBookingController_book: {
         parameters: {
             query?: never;
@@ -4955,106 +5620,6 @@ export interface operations {
             };
         };
     };
-    FinanceController_cashDay: {
-        parameters: {
-            query: {
-                date: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Sucesso */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CashDay"];
-                };
-            };
-            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Sem token ou token expirado. Use **Authorize**. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    FinanceController_commissions: {
-        parameters: {
-            query: {
-                from: string;
-                to: string;
-                professionalId?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Sucesso */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CommissionsSummary"];
-                };
-            };
-            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Sem token ou token expirado. Use **Authorize**. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
     OrdersController_list: {
         parameters: {
             query?: {
@@ -5142,6 +5707,16 @@ export interface operations {
                         professionalId?: string | null;
                         /** @default 1 */
                         quantity?: number;
+                        /** @default 0 */
+                        discountCents?: number;
+                    } | {
+                        /** Format: uuid */
+                        packageId: string;
+                        /**
+                         * @default 1
+                         * @enum {number}
+                         */
+                        quantity?: 1;
                         /** @default 0 */
                         discountCents?: number;
                     })[];
@@ -5284,6 +5859,16 @@ export interface operations {
                     professionalId?: string | null;
                     /** @default 1 */
                     quantity?: number;
+                    /** @default 0 */
+                    discountCents?: number;
+                } | {
+                    /** Format: uuid */
+                    packageId: string;
+                    /**
+                     * @default 1
+                     * @enum {number}
+                     */
+                    quantity?: 1;
                     /** @default 0 */
                     discountCents?: number;
                 };
@@ -5470,6 +6055,81 @@ export interface operations {
                 };
             };
             /** @description `order-not-open | discount-too-high`: Comanda fechada ou desconto maior que o item. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    OrdersController_applyPackage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    clientPackageId: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Order"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `package-needs-client | package-service-mismatch | package-expired | package-not-active | package-no-sessions`: Comanda sem cliente, pacote sem o serviço, vencido, encerrado ou sem sessões. */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -13,6 +13,7 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Put,
   Post,
   Query,
 } from '@nestjs/common';
@@ -22,14 +23,17 @@ import { CatalogModule } from '../catalog/catalog.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { FinanceModule } from '../finance/finance.module.js';
 import { ProductsModule } from '../products/products.module.js';
+import { PackagesModule } from '../packages/packages.module.js';
 import { StaffModule } from '../staff/staff.module.js';
 import {
+  applyPackageSchema,
   closeOrderSchema,
   listOrdersSchema,
   openOrderSchema,
   orderItemInputSchema,
   updateOrderItemSchema,
   voidOrderSchema,
+  type ApplyPackageInput,
   type CloseOrderInput,
   type ListOrdersQuery,
   type OpenOrderInput,
@@ -72,7 +76,7 @@ export class OrdersController {
 
   @RequirePermissions('orders:manage')
   @ApiResult(orderViewSchema, 201)
-  @ApiOperation({ summary: 'Adiciona serviço à comanda' })
+  @ApiOperation({ summary: 'Adiciona serviço, produto ou pacote à comanda' })
   @ApiProblem(422, 'order-not-open | discount-too-high', 'Comanda fechada ou desconto maior que o item.')
   @Post(':id/items')
   addItem(
@@ -93,6 +97,23 @@ export class OrdersController {
     @Body({ schema: updateOrderItemSchema }) input: UpdateOrderItemInput,
   ) {
     return this.orders.updateItem(id, itemId, input);
+  }
+
+  @RequirePermissions('orders:manage')
+  @ApiResult(orderViewSchema)
+  @ApiOperation({ summary: 'Paga o serviço com sessão de pacote do cliente (ou desfaz, com null)' })
+  @ApiProblem(
+    422,
+    'package-needs-client | package-service-mismatch | package-expired | package-not-active | package-no-sessions',
+    'Comanda sem cliente, pacote sem o serviço, vencido, encerrado ou sem sessões.',
+  )
+  @Put(':id/items/:itemId/package')
+  applyPackage(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Body({ schema: applyPackageSchema }) input: ApplyPackageInput,
+  ) {
+    return this.orders.applyPackage(id, itemId, input);
   }
 
   @RequirePermissions('orders:manage')
@@ -127,7 +148,15 @@ export class OrdersController {
 }
 
 @Module({
-  imports: [AppointmentsModule, CatalogModule, StaffModule, ClientsModule, FinanceModule, ProductsModule],
+  imports: [
+    AppointmentsModule,
+    CatalogModule,
+    StaffModule,
+    ClientsModule,
+    FinanceModule,
+    ProductsModule,
+    PackagesModule,
+  ],
   controllers: [OrdersController],
   providers: [OrdersService],
   exports: [OrdersService],

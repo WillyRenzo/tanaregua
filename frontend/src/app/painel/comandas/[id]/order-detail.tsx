@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowLeft, Package, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Package, Plus, Ticket, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MoneyInput } from '@/components/money-input';
 import { ErrorState, LoadingRows, PageHeader } from '@/components/states';
@@ -29,15 +29,19 @@ import { PAYMENT_METHODS, paymentLabel } from '@/lib/payment-methods';
 import { can } from '@/lib/permissions';
 import {
   useAddOrderItem,
+  useApplyPackage,
   useBarbershop,
+  useClientPackages,
   useCloseOrder,
   useOrder,
+  usePackages,
   useProducts,
   useRemoveOrderItem,
   useServices,
   useStaff,
   useUpdateOrderItem,
   useVoidOrder,
+  type ClientPackage,
   type Order,
   type PaymentMethod,
 } from '@/lib/queries';
@@ -82,7 +86,7 @@ export function OrderDetail() {
       <div className="grid gap-8 lg:grid-cols-[1fr_20rem]">
         <section aria-label="Itens">
           <Items order={data} />
-          {data.status === 'OPEN' && <AddItem orderId={data.id} />}
+          {data.status === 'OPEN' && <AddItem orderId={data.id} hasClient={Boolean(data.client)} />}
         </section>
         <aside>
           {data.status === 'OPEN' && <CloseOrder order={data} />}
@@ -103,10 +107,18 @@ export function OrderDetail() {
 }
 
 function Items({ order }: { order: Order }) {
+  const session = useAuthenticatedSession();
   const update = useUpdateOrderItem(order.id);
   const remove = useRemoveOrderItem(order.id);
   const open = order.status === 'OPEN';
   const commissionTotal = order.items.reduce((sum, item) => sum + item.commissionCents, 0);
+  // Pacotes ativos do cliente: só numa comanda aberta, com cliente identificado.
+  const clientPackages = useClientPackages(
+    { clientId: order.client?.id, status: 'ACTIVE' },
+    open && Boolean(order.client) && can(session, 'packages:read'),
+  );
+  const packageName = (clientPackageId: string) =>
+    clientPackages.data?.find((candidate) => candidate.id === clientPackageId)?.name ?? 'pacote';
 
   if (order.items.length === 0) {
     return (
@@ -144,12 +156,26 @@ function Items({ order }: { order: Order }) {
                   <Package aria-hidden /> Produto
                 </Badge>
               )}
+              {item.kind === 'PACKAGE' && (
+                <Badge variant="outline" className="ml-2">
+                  <Ticket aria-hidden /> Pacote
+                </Badge>
+              )}
+              {item.clientPackageId && (
+                <Badge variant="secondary" className="ml-2">
+                  <Ticket aria-hidden /> Sessão de {open ? packageName(item.clientPackageId) : 'pacote'}
+                </Badge>
+              )}
               <p className="text-muted-foreground text-xs">
-                {item.professional?.name ?? 'Balcão'} · {formatMoney(item.unitPriceCents)}
+                {item.kind === 'PACKAGE' ? 'Venda de pacote' : (item.professional?.name ?? 'Balcão')} ·{' '}
+                {formatMoney(item.unitPriceCents)}
               </p>
+              {open && item.kind === 'SERVICE' && order.client && clientPackages.data && (
+                <PackageUse orderId={order.id} item={item} packages={clientPackages.data} />
+              )}
             </TableCell>
             <TableCell className="text-right">
-              {open ? (
+              {open && item.kind !== 'PACKAGE' ? (
                 <Input
                   aria-label={`Quantidade de ${item.name}`}
                   type="number"
@@ -172,7 +198,7 @@ function Items({ order }: { order: Order }) {
               )}
             </TableCell>
             <TableCell className="text-right">
-              {open ? (
+              {open && !item.clientPackageId ? (
                 <DiscountInput
                   label={`Desconto em ${item.name}`}
                   cents={item.discountCents}
@@ -227,6 +253,68 @@ function Items({ order }: { order: Order }) {
   );
 }
 
+/**
+ * Paga o serviço com sessão de um pacote do cliente (o item fica R$ 0) ou volta a cobrar.
+ * Só oferece pacotes que incluem o serviço e ainda têm saldo; a API confere tudo de novo.
+ */
+function PackageUse({
+  orderId,
+  item,
+  packages,
+}: {
+  orderId: string;
+  item: Order['items'][number];
+  packages: ClientPackage[];
+}) {
+  const apply = useApplyPackage(orderId);
+  const usable = packages.filter((candidate) =>
+    candidate.balances.some((balance) => balance.serviceId === item.serviceId && balance.remaining > 0),
+  );
+  const run = (clientPackageId: string | null) =>
+    apply.mutate(
+      { itemId: item.id, clientPackageId },
+      {
+        onSuccess: () =>
+          toast.success(clientPackageId ? 'Sessão do pacote aplicada.' : 'Item volta a ser cobrado.'),
+        onError: (error) => toast.error(errorMessage(error)),
+      },
+    );
+
+  if (item.clientPackageId) {
+    return (
+      <Button
+        variant="link"
+        size="sm"
+        className="h-auto px-0"
+        disabled={apply.isPending}
+        onClick={() => run(null)}
+      >
+        Não usar pacote
+      </Button>
+    );
+  }
+  if (usable.length === 0) return null;
+  return (
+    <div className="mt-1 max-w-64">
+      <Select value="" onValueChange={run} disabled={apply.isPending}>
+        <SelectTrigger size="sm" aria-label={`Usar pacote em ${item.name}`} className="w-full">
+          <SelectValue placeholder="Usar sessão de pacote" />
+        </SelectTrigger>
+        <SelectContent>
+          {usable.map((candidate) => {
+            const balance = candidate.balances.find((entry) => entry.serviceId === item.serviceId)!;
+            return (
+              <SelectItem key={candidate.id} value={candidate.id}>
+                {candidate.name} · {balance.remaining} de {balance.initialQuantity}
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 /** Edita o desconto em reais e só grava ao sair do campo (uma requisição por edição). */
 function DiscountInput({
   label,
@@ -255,40 +343,58 @@ function DiscountInput({
 /** Venda de produto sem profissional: balcão, sem comissão (business-rules §4). */
 const COUNTER = '__balcao__';
 
-function AddItem({ orderId }: { orderId: string }) {
+type ItemKind = 'service' | 'product' | 'package';
+
+function AddItem({ orderId, hasClient }: { orderId: string; hasClient: boolean }) {
   const session = useAuthenticatedSession();
   const canSellProducts = can(session, 'products:read');
+  const canSellPackages = can(session, 'packages:read');
   const services = useServices();
-  const products = useProducts();
+  const products = useProducts(false);
+  const packages = usePackages(false, canSellPackages);
   const staff = useStaff();
   const add = useAddOrderItem(orderId);
-  const [kind, setKind] = useState<'service' | 'product'>('service');
+  const [kind, setKind] = useState<ItemKind>('service');
   const [itemId, setItemId] = useState('');
   const [professionalId, setProfessionalId] = useState('');
   const professionals = (staff.data ?? []).filter((member) => member.isProfessional && member.active);
   const isProduct = kind === 'product';
+  const isPackage = kind === 'package';
+  const kinds: [ItemKind, string][] = [
+    ['service', 'Serviço'],
+    ...(canSellProducts ? [['product', 'Produto'] as [ItemKind, string]] : []),
+    ...(canSellPackages ? [['package', 'Pacote'] as [ItemKind, string]] : []),
+  ];
 
-  const switchKind = (next: 'service' | 'product') => {
+  const switchKind = (next: ItemKind) => {
     setKind(next);
     setItemId('');
     setProfessionalId(next === 'product' ? COUNTER : '');
   };
 
   const submit = async () => {
-    if (!itemId || !professionalId) {
-      toast.error(isProduct ? 'Escolha o produto.' : 'Escolha o serviço e quem atendeu.');
+    if (!itemId || (!isPackage && !professionalId)) {
+      toast.error(
+        isProduct
+          ? 'Escolha o produto.'
+          : isPackage
+            ? 'Escolha o pacote.'
+            : 'Escolha o serviço e quem atendeu.',
+      );
       return;
     }
     try {
       await add.mutateAsync(
-        isProduct
-          ? {
-              productId: itemId,
-              professionalId: professionalId === COUNTER ? null : professionalId,
-              quantity: 1,
-              discountCents: 0,
-            }
-          : { serviceId: itemId, professionalId, quantity: 1, discountCents: 0 },
+        isPackage
+          ? { packageId: itemId, quantity: 1, discountCents: 0 }
+          : isProduct
+            ? {
+                productId: itemId,
+                professionalId: professionalId === COUNTER ? null : professionalId,
+                quantity: 1,
+                discountCents: 0,
+              }
+            : { serviceId: itemId, professionalId, quantity: 1, discountCents: 0 },
       );
       setItemId('');
     } catch (error) {
@@ -298,14 +404,9 @@ function AddItem({ orderId }: { orderId: string }) {
 
   return (
     <div className="border-border mt-4 grid gap-3 rounded-lg border border-dashed p-4">
-      {canSellProducts && (
+      {kinds.length > 1 && (
         <div className="flex gap-2" role="radiogroup" aria-label="Tipo de item">
-          {(
-            [
-              ['service', 'Serviço'],
-              ['product', 'Produto'],
-            ] as const
-          ).map(([value, label]) => (
+          {kinds.map(([value, label]) => (
             <Button
               key={value}
               type="button"
@@ -320,49 +421,69 @@ function AddItem({ orderId }: { orderId: string }) {
           ))}
         </div>
       )}
-      <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-        <div className="grid gap-1.5">
-          <Label htmlFor="add-item">{isProduct ? 'Produto' : 'Serviço'}</Label>
-          <Select value={itemId} onValueChange={setItemId}>
-            <SelectTrigger id="add-item" className="w-full">
-              <SelectValue placeholder="Escolha" />
-            </SelectTrigger>
-            <SelectContent>
-              {isProduct
-                ? products.data?.map((product) => (
-                    <SelectItem key={product.id} value={product.id} disabled={product.stockQuantity < 1}>
-                      {product.name} · {formatMoney(product.priceCents)} ·{' '}
-                      {product.stockQuantity < 1 ? 'sem estoque' : `${product.stockQuantity} em estoque`}
-                    </SelectItem>
-                  ))
-                : services.data?.map((service) => (
-                    <SelectItem key={service.id} value={service.id}>
-                      {service.name} · {formatMoney(service.priceCents)}
+      {isPackage && !hasClient ? (
+        <p className="text-muted-foreground text-sm">
+          Pacote é do cliente que comprou: abra a comanda com o cliente identificado para vender um pacote.
+        </p>
+      ) : (
+        <div
+          className={cn(
+            'grid gap-3 sm:items-end',
+            isPackage ? 'sm:grid-cols-[1fr_auto]' : 'sm:grid-cols-[1fr_1fr_auto]',
+          )}
+        >
+          <div className="grid gap-1.5">
+            <Label htmlFor="add-item">{isProduct ? 'Produto' : isPackage ? 'Pacote' : 'Serviço'}</Label>
+            <Select value={itemId} onValueChange={setItemId}>
+              <SelectTrigger id="add-item" className="w-full">
+                <SelectValue placeholder="Escolha" />
+              </SelectTrigger>
+              <SelectContent>
+                {isPackage
+                  ? packages.data?.map((servicePackage) => (
+                      <SelectItem key={servicePackage.id} value={servicePackage.id}>
+                        {servicePackage.name} · {formatMoney(servicePackage.priceCents)} ·{' '}
+                        {servicePackage.validityDays} dias
+                      </SelectItem>
+                    ))
+                  : isProduct
+                    ? products.data?.map((product) => (
+                        <SelectItem key={product.id} value={product.id} disabled={product.stockQuantity < 1}>
+                          {product.name} · {formatMoney(product.priceCents)} ·{' '}
+                          {product.stockQuantity < 1 ? 'sem estoque' : `${product.stockQuantity} em estoque`}
+                        </SelectItem>
+                      ))
+                    : services.data?.map((service) => (
+                        <SelectItem key={service.id} value={service.id}>
+                          {service.name} · {formatMoney(service.priceCents)}
+                        </SelectItem>
+                      ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {!isPackage && (
+            <div className="grid gap-1.5">
+              <Label htmlFor="add-professional">{isProduct ? 'Quem vendeu' : 'Quem atendeu'}</Label>
+              <Select value={professionalId} onValueChange={setProfessionalId}>
+                <SelectTrigger id="add-professional" className="w-full">
+                  <SelectValue placeholder="Escolha" />
+                </SelectTrigger>
+                <SelectContent>
+                  {isProduct && <SelectItem value={COUNTER}>Balcão (sem comissão)</SelectItem>}
+                  {professionals.map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.name}
                     </SelectItem>
                   ))}
-            </SelectContent>
-          </Select>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <Button variant="outline" onClick={submit} disabled={add.isPending}>
+            <Plus aria-hidden /> Adicionar
+          </Button>
         </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="add-professional">{isProduct ? 'Quem vendeu' : 'Quem atendeu'}</Label>
-          <Select value={professionalId} onValueChange={setProfessionalId}>
-            <SelectTrigger id="add-professional" className="w-full">
-              <SelectValue placeholder="Escolha" />
-            </SelectTrigger>
-            <SelectContent>
-              {isProduct && <SelectItem value={COUNTER}>Balcão (sem comissão)</SelectItem>}
-              {professionals.map((member) => (
-                <SelectItem key={member.id} value={member.id}>
-                  {member.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <Button variant="outline" onClick={submit} disabled={add.isPending}>
-          <Plus aria-hidden /> Adicionar
-        </Button>
-      </div>
+      )}
     </div>
   );
 }

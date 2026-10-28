@@ -40,6 +40,7 @@ model Barbershop {
   clients     Client[]
   services    Service[]
   products    Product[]
+  packages    ServicePackage[]
   memberships Membership[]
 
   @@map("barbershops")
@@ -188,9 +189,10 @@ model Client {
   createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
-  barbershop   Barbershop    @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "clients_barbershop_fkey")
+  barbershop   Barbershop      @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "clients_barbershop_fkey")
   appointments Appointment[]
   orders       Order[]
+  packages     ClientPackage[]
 
   @@unique([barbershopId, id], map: "clients_tenant_id_key")
   @@unique([barbershopId, userId])
@@ -212,10 +214,12 @@ model Service {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  barbershop       Barbershop        @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "services_barbershop_fkey")
+  barbershop       Barbershop             @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "services_barbershop_fkey")
   appointmentItems AppointmentItem[]
   orderItems       OrderItem[]
   commissionRules  CommissionRule[]
+  packageItems     ServicePackageItem[]
+  packageBalances  ClientPackageBalance[]
 
   @@unique([barbershopId, id], map: "services_tenant_id_key")
   @@index([barbershopId, active])
@@ -308,6 +312,131 @@ model StockMovement {
 
   @@index([barbershopId, productId, occurredAt])
   @@map("stock_movements")
+}
+
+// ───────────── Pacotes de serviços (business-rules §6) ─────────────
+
+/// Pacote à venda: N sessões por serviço, preço e validade em dias a partir da compra.
+model ServicePackage {
+  id                   String   @id @default(uuid(7)) @db.Uuid
+  barbershopId         String   @map("barbershop_id") @db.Uuid
+  name                 String
+  description          String?
+  priceCents           Int      @map("price_cents")
+  validityDays         Int      @map("validity_days")
+  /// Sessão usada gera comissão para quem atendeu (sobre o valor da sessão). Desligável.
+  commissionOnSessions Boolean  @default(true) @map("commission_on_sessions")
+  /// Inativo some da venda; pacotes já vendidos continuam valendo.
+  active               Boolean  @default(true)
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  barbershop     Barbershop           @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "service_packages_barbershop_fkey")
+  items          ServicePackageItem[]
+  orderItems     OrderItem[]
+  clientPackages ClientPackage[]
+
+  @@unique([barbershopId, id], map: "service_packages_tenant_id_key")
+  @@index([barbershopId, active])
+  @@map("service_packages")
+}
+
+model ServicePackageItem {
+  id           String @id @default(uuid(7)) @db.Uuid
+  barbershopId String @map("barbershop_id") @db.Uuid
+  packageId    String @map("package_id") @db.Uuid
+  serviceId    String @map("service_id") @db.Uuid
+  quantity     Int
+
+  package ServicePackage @relation(fields: [barbershopId, packageId], references: [barbershopId, id], onDelete: Cascade, map: "service_package_items_tenant_package_fkey")
+  service Service        @relation(fields: [barbershopId, serviceId], references: [barbershopId, id], map: "service_package_items_tenant_service_fkey")
+
+  @@unique([barbershopId, packageId, serviceId], map: "service_package_items_service_key")
+  @@map("service_package_items")
+}
+
+enum ClientPackageStatus {
+  ACTIVE
+  REFUNDED
+  VOIDED
+}
+
+/// Pacote comprado (snapshot do modelo na compra). Intransferível: preso ao cliente.
+/// Vencido = ACTIVE com expiresAt no passado (derivado, sem job).
+model ClientPackage {
+  id                   String              @id @default(uuid(7)) @db.Uuid
+  barbershopId         String              @map("barbershop_id") @db.Uuid
+  clientId             String              @map("client_id") @db.Uuid
+  packageId            String              @map("package_id") @db.Uuid
+  /// Comanda em que foi vendido (e pago).
+  orderId              String              @map("order_id") @db.Uuid
+  name                 String
+  pricePaidCents       Int                 @map("price_paid_cents")
+  commissionOnSessions Boolean             @map("commission_on_sessions")
+  purchasedAt          DateTime            @map("purchased_at") @db.Timestamptz
+  expiresAt            DateTime            @map("expires_at") @db.Timestamptz
+  status               ClientPackageStatus @default(ACTIVE)
+  refundedAt           DateTime?           @map("refunded_at") @db.Timestamptz
+  refundCents          Int?                @map("refund_cents")
+  refundReason         String?             @map("refund_reason")
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz
+
+  client     Client                 @relation(fields: [barbershopId, clientId], references: [barbershopId, id], map: "client_packages_tenant_client_fkey")
+  package    ServicePackage         @relation(fields: [barbershopId, packageId], references: [barbershopId, id], map: "client_packages_tenant_package_fkey")
+  order      Order                  @relation(fields: [barbershopId, orderId], references: [barbershopId, id], map: "client_packages_tenant_order_fkey")
+  balances   ClientPackageBalance[]
+  movements  PackageMovement[]
+  orderItems OrderItem[]
+
+  @@unique([barbershopId, id], map: "client_packages_tenant_id_key")
+  @@index([barbershopId, clientId])
+  @@map("client_packages")
+}
+
+/// Saldo de sessões por serviço. `remaining` só muda pelo trigger das movimentações
+/// (o usuário da aplicação não tem UPDATE nela) e nunca fica negativo (CHECK).
+model ClientPackageBalance {
+  id                String @id @default(uuid(7)) @db.Uuid
+  barbershopId      String @map("barbershop_id") @db.Uuid
+  clientPackageId   String @map("client_package_id") @db.Uuid
+  serviceId         String @map("service_id") @db.Uuid
+  initialQuantity   Int    @map("initial_quantity")
+  remaining         Int    @default(0)
+  /// Valor de uma sessão deste serviço no pacote (base da comissão quando usada).
+  sessionValueCents Int    @map("session_value_cents")
+
+  clientPackage ClientPackage @relation(fields: [barbershopId, clientPackageId], references: [barbershopId, id], map: "client_package_balances_tenant_package_fkey")
+  service       Service       @relation(fields: [barbershopId, serviceId], references: [barbershopId, id], map: "client_package_balances_tenant_service_fkey")
+
+  @@unique([barbershopId, clientPackageId, serviceId], map: "client_package_balances_service_key")
+  @@map("client_package_balances")
+}
+
+enum PackageMovementKind {
+  PURCHASE
+  USE
+  USE_REVERSAL
+}
+
+/// Histórico de sessões, append-only: compra (+), uso (−), devolução por estorno (+).
+model PackageMovement {
+  id              String              @id @default(uuid(7)) @db.Uuid
+  barbershopId    String              @map("barbershop_id") @db.Uuid
+  clientPackageId String              @map("client_package_id") @db.Uuid
+  serviceId       String              @map("service_id") @db.Uuid
+  kind            PackageMovementKind
+  /// Delta com sinal.
+  quantity        Int
+  orderId         String              @map("order_id") @db.Uuid
+  authorUserId    String              @map("author_user_id") @db.Uuid
+  occurredAt      DateTime            @default(now()) @map("occurred_at") @db.Timestamptz
+
+  clientPackage ClientPackage @relation(fields: [barbershopId, clientPackageId], references: [barbershopId, id], map: "package_movements_tenant_package_fkey")
+  order         Order         @relation(fields: [barbershopId, orderId], references: [barbershopId, id], map: "package_movements_tenant_order_fkey")
+
+  @@index([barbershopId, clientPackageId])
+  @@index([barbershopId, orderId])
+  @@map("package_movements")
 }
 
 // ───────────── Agenda ─────────────
@@ -464,6 +593,8 @@ model Order {
   commissionEntries CommissionEntry[]
   cashEntries       CashEntry[]
   stockMovements    StockMovement[]
+  packageMovements  PackageMovement[]
+  packagesSold      ClientPackage[]
 
   @@unique([barbershopId, id], map: "orders_tenant_id_key")
   @@unique([barbershopId, appointmentId], map: "orders_appointment_key")
@@ -476,33 +607,42 @@ model Order {
 enum OrderItemKind {
   SERVICE
   PRODUCT
+  PACKAGE
 }
 
 model OrderItem {
-  id              String          @id @default(uuid(7)) @db.Uuid
-  barbershopId    String          @map("barbershop_id") @db.Uuid
-  orderId         String          @map("order_id") @db.Uuid
-  kind            OrderItemKind   @default(SERVICE)
-  /// Exatamente um de serviceId/productId, conforme o kind (CHECK na migration).
-  serviceId       String?         @map("service_id") @db.Uuid
-  productId       String?         @map("product_id") @db.Uuid
+  id                       String          @id @default(uuid(7)) @db.Uuid
+  barbershopId             String          @map("barbershop_id") @db.Uuid
+  orderId                  String          @map("order_id") @db.Uuid
+  kind                     OrderItemKind   @default(SERVICE)
+  /// Exatamente um de serviceId/productId/packageId, conforme o kind (CHECK na migration).
+  serviceId                String?         @map("service_id") @db.Uuid
+  productId                String?         @map("product_id") @db.Uuid
+  /// Pacote vendido neste item (kind PACKAGE).
+  packageId                String?         @map("package_id") @db.Uuid
+  /// Serviço pago com sessão de pacote do cliente: cobra zero, comissão sobre o valor da sessão.
+  clientPackageId          String?         @map("client_package_id") @db.Uuid
+  /// Valor da sessão do pacote (snapshot no fechamento): base da comissão do item.
+  packageSessionValueCents Int?            @map("package_session_value_cents")
   /// Obrigatório em serviço; opcional em produto (venda de balcão, sem comissão).
-  professionalId  String?         @map("professional_id") @db.Uuid
-  name            String
-  unitPriceCents  Int             @map("unit_price_cents")
-  quantity        Int             @default(1)
-  discountCents   Int             @default(0) @map("discount_cents")
+  professionalId           String?         @map("professional_id") @db.Uuid
+  name                     String
+  unitPriceCents           Int             @map("unit_price_cents")
+  quantity                 Int             @default(1)
+  discountCents            Int             @default(0) @map("discount_cents")
   /// unitPrice × quantidade − desconto
-  totalCents      Int             @map("total_cents")
-  commissionType  CommissionType? @map("commission_type")
-  commissionValue Int?            @map("commission_value")
-  commissionCents Int?            @map("commission_cents")
-  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  totalCents               Int             @map("total_cents")
+  commissionType           CommissionType? @map("commission_type")
+  commissionValue          Int?            @map("commission_value")
+  commissionCents          Int?            @map("commission_cents")
+  createdAt                DateTime        @default(now()) @map("created_at") @db.Timestamptz
 
-  order        Order       @relation(fields: [barbershopId, orderId], references: [barbershopId, id], onDelete: Cascade, map: "order_items_tenant_order_fkey")
-  service      Service?    @relation(fields: [barbershopId, serviceId], references: [barbershopId, id], map: "order_items_tenant_service_fkey")
-  product      Product?    @relation(fields: [barbershopId, productId], references: [barbershopId, id], map: "order_items_tenant_product_fkey")
-  professional Membership? @relation(fields: [barbershopId, professionalId], references: [barbershopId, id], map: "order_items_tenant_professional_fkey")
+  order         Order           @relation(fields: [barbershopId, orderId], references: [barbershopId, id], onDelete: Cascade, map: "order_items_tenant_order_fkey")
+  service       Service?        @relation(fields: [barbershopId, serviceId], references: [barbershopId, id], map: "order_items_tenant_service_fkey")
+  product       Product?        @relation(fields: [barbershopId, productId], references: [barbershopId, id], map: "order_items_tenant_product_fkey")
+  package       ServicePackage? @relation(fields: [barbershopId, packageId], references: [barbershopId, id], map: "order_items_tenant_package_fkey")
+  clientPackage ClientPackage?  @relation(fields: [barbershopId, clientPackageId], references: [barbershopId, id], map: "order_items_tenant_client_package_fkey")
+  professional  Membership?     @relation(fields: [barbershopId, professionalId], references: [barbershopId, id], map: "order_items_tenant_professional_fkey")
 
   @@unique([barbershopId, id], map: "order_items_tenant_id_key")
   @@index([barbershopId, orderId])
@@ -512,6 +652,8 @@ model OrderItem {
 enum EntryKind {
   ENTRY
   REVERSAL
+  /// Reembolso de pacote pago antecipadamente (business-rules §6).
+  REFUND
 }
 
 /// Lançamento de comissão. Append-only: estorno gera lançamento negativo.

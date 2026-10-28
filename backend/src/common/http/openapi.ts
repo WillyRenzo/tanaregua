@@ -83,6 +83,10 @@ export const API_TAGS = {
     'Produtos e estoque',
     'Produtos vendidos na comanda, entradas, ajustes e saldo (nunca negativo).',
   ],
+  packages: [
+    'Pacotes',
+    'Pacotes de sessões por serviço: venda na comanda, saldo nunca negativo, validade e reembolso.',
+  ],
   agenda: [
     'Agenda',
     'Agenda do dia, horários livres e agendamentos. Conflito de horário é barrado pelo banco.',

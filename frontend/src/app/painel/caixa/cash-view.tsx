@@ -103,6 +103,9 @@ function CashDay({ timezone }: { timezone: string }) {
                       {entry.kind === 'REVERSAL' && (
                         <span className="text-destructive ml-2 text-xs font-medium">Estorno</span>
                       )}
+                      {entry.kind === 'REFUND' && (
+                        <span className="text-destructive ml-2 text-xs font-medium">Reembolso de pacote</span>
+                      )}
                     </TableCell>
                     <TableCell>{paymentLabel(entry.method)}</TableCell>
                     <TableCell

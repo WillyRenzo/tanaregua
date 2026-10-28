@@ -184,6 +184,23 @@ describe('Seed de demonstração (e2e)', () => {
     expect(noShows.some((noShow) => noShow.noShowJustification !== null)).toBe(true);
   });
 
+  it('tem pacotes em uso, reembolsado e vencido; a cliente online vê o saldo do dela', async () => {
+    const owner = await loginPanel(DEMO_ACCOUNTS.owner.email);
+    const sold = await as(app, owner.accessToken).get('/v1/client-packages').expect(200);
+    const statuses = sold.body.map((row: { status: string }) => row.status);
+    expect(statuses.filter((status: string) => status === 'ACTIVE')).toHaveLength(2);
+    expect(statuses).toEqual(expect.arrayContaining(['REFUNDED', 'EXPIRED']));
+
+    const login = await request(app.getHttpServer())
+      .post(`/v1/public/${DEMO_SLUG}/auth/login`)
+      .send({ email: DEMO_ACCOUNTS.client.email, password: DEMO_PASSWORD })
+      .expect(200);
+    const mine = await as(app, login.body.accessToken).get(`/v1/public/${DEMO_SLUG}/me/packages`).expect(200);
+    expect(mine.body).toHaveLength(1);
+    const corte = mine.body[0].balances.find((row: { name: string }) => row.name === 'Corte masculino');
+    expect(corte).toMatchObject({ initialQuantity: 4, remaining: 3 });
+  });
+
   it('a barbearia vizinha é isolada da demo', async () => {
     const neighbor = await loginPanel(DEMO_ACCOUNTS.neighborOwner.email);
     const clients = await as(app, neighbor.accessToken).get('/v1/clients').expect(200);
@@ -214,13 +231,31 @@ describe('Seed de demonstração (e2e)', () => {
         isProfessional: true,
       })
       .expect(201);
+    // A demo antiga já tinha serviços e clientes (o que os pacotes usam).
+    for (const [name, priceCents] of [
+      ['Corte masculino', 5000],
+      ['Barba', 3500],
+    ] as const) {
+      await as(app, oldDemo.token)
+        .post('/v1/services')
+        .send({ name, priceCents, durationMinutes: 30 })
+        .expect(201);
+    }
+    for (const name of ['Carlos Souza', 'Marcos Oliveira', 'Lucas Ferreira']) {
+      await as(app, oldDemo.token).post('/v1/clients').send({ name }).expect(201);
+    }
     const slugs = { demo: oldDemo.slug, neighbor: oldNeighbor.slug };
 
     expect(await completeDemo(app, slugs)).toEqual([
       'produtos e estoque (com vendas dos últimos 30 dias)',
       'identidade visual (cores e logo)',
+      'pacotes (vendidos, em uso, reembolsado e vencido)',
       'cor da Barbearia Vizinha',
     ]);
+    const sold = await as(app, oldDemo.token).get('/v1/client-packages').expect(200);
+    expect(new Set(sold.body.map((row: { status: string }) => row.status))).toEqual(
+      new Set(['ACTIVE', 'REFUNDED', 'EXPIRED']),
+    );
 
     const products = await as(app, oldDemo.token).get('/v1/products').expect(200);
     expect(products.body).toHaveLength(4);
