@@ -35,6 +35,7 @@ type Body<P extends keyof paths, M extends 'post' | 'patch' | 'put'> = NonNullab
 
 export const queryKeys = {
   barbershop: ['barbershop'] as const,
+  plans: ['plans'] as const,
   staff: ['staff'] as const,
   roles: ['roles'] as const,
   schedule: (id: string) => ['staff', id, 'schedule'] as const,
@@ -65,6 +66,17 @@ export const queryKeys = {
   campaigns: ['campaigns'] as const,
   campaign: (id: string) => ['campaigns', id] as const,
 };
+
+// ───────────── Planos ─────────────
+
+/** Catálogo da plataforma: muda raramente. */
+export function usePlans() {
+  return useQuery({
+    queryKey: queryKeys.plans,
+    queryFn: () => unwrap(api.GET('/v1/plans')),
+    staleTime: 60 * 60_000,
+  });
+}
 
 // ───────────── Barbearia ─────────────
 
