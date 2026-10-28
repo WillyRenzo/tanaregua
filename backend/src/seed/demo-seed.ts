@@ -298,7 +298,7 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
         email: `${slugify(name)}@exemplo.test`,
         birthDate:
           birthdayInDays === null ? undefined : birthdayThisMonth(today, birthdayInDays, 1985 + name.length),
-        marketingConsent: consent ? { channel: name.length % 2 === 0 ? 'whatsapp' : 'email' } : undefined,
+        consents: consent ? { email: true, whatsapp: name.length % 2 === 0 } : undefined,
       });
       client[name.split(' ')[0]!] = created.id;
     }

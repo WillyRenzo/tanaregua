@@ -11,7 +11,9 @@ const birthDateSchema = z.iso
   .date('Use o formato AAAA-MM-DD.')
   .transform((value) => new Date(`${value}T00:00:00Z`));
 
-export const consentChannelSchema = z.enum(['whatsapp', 'email', 'sms']);
+/** Canais de mensagem ao cliente (business-rules §9). */
+export const CONSENT_CHANNELS = ['email', 'whatsapp'] as const;
+export type ConsentChannel = (typeof CONSENT_CHANNELS)[number];
 
 const clientFields = {
   name: z.string().trim().min(2).max(100),
@@ -24,8 +26,15 @@ const clientFields = {
     .optional(),
   birthDate: birthDateSchema.nullable().optional(),
   notes: z.string().trim().max(1000).nullable().optional(),
-  /** Consentimento para aniversário/marketing (business-rules §9). `null` revoga. */
-  marketingConsent: z.strictObject({ channel: consentChannelSchema }).nullable().optional(),
+  /**
+   * Consentimento para aniversário e marketing, por canal (business-rules §9): `true` concede
+   * (registra a data; se já concedido, mantém a data original), `false` revoga. Canal omitido
+   * não muda.
+   */
+  consents: z
+    .strictObject({ email: z.boolean().optional(), whatsapp: z.boolean().optional() })
+    .meta({ example: { whatsapp: true } })
+    .optional(),
 };
 
 export const createClientSchema = z.strictObject(clientFields);

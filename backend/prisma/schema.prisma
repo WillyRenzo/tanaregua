@@ -182,8 +182,9 @@ model Client {
   email                   String?
   /// P2
   birthDate               DateTime? @map("birth_date") @db.Date
-  marketingConsentAt      DateTime? @map("marketing_consent_at") @db.Timestamptz
-  marketingConsentChannel String?   @map("marketing_consent_channel")
+  /// Consentimento para aniversário e marketing, por canal (business-rules §9): data da concessão.
+  emailConsentAt          DateTime? @map("email_consent_at") @db.Timestamptz
+  whatsappConsentAt       DateTime? @map("whatsapp_consent_at") @db.Timestamptz
   notes                   String?
   anonymizedAt            DateTime? @map("anonymized_at") @db.Timestamptz
   createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz

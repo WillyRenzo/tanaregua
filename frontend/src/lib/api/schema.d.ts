@@ -1360,11 +1360,12 @@ export interface components {
             email: string | null;
             birthDate: string | null;
             notes: string | null;
-            marketingConsent: {
-                channel: string;
+            consents: {
                 /** Format: date-time */
-                grantedAt: string;
-            } | null;
+                email: string | null;
+                /** Format: date-time */
+                whatsapp: string | null;
+            };
             hasAccount: boolean;
             anonymized: boolean;
         };
@@ -2998,10 +2999,15 @@ export interface operations {
                     /** Format: date */
                     birthDate?: string | null;
                     notes?: string | null;
-                    marketingConsent?: {
-                        /** @enum {string} */
-                        channel: "whatsapp" | "email" | "sms";
-                    } | null;
+                    /**
+                     * @example {
+                     *       "whatsapp": true
+                     *     }
+                     */
+                    consents?: {
+                        email?: boolean;
+                        whatsapp?: boolean;
+                    };
                 };
             };
         };
@@ -3112,10 +3118,15 @@ export interface operations {
                     /** Format: date */
                     birthDate?: string | null;
                     notes?: string | null;
-                    marketingConsent?: {
-                        /** @enum {string} */
-                        channel: "whatsapp" | "email" | "sms";
-                    } | null;
+                    /**
+                     * @example {
+                     *       "whatsapp": true
+                     *     }
+                     */
+                    consents?: {
+                        email?: boolean;
+                        whatsapp?: boolean;
+                    };
                 };
             };
         };

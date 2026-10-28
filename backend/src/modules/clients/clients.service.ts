@@ -18,20 +18,25 @@ const toView = (row: ClientRow): ClientView => ({
   email: row.email,
   birthDate: row.birthDate?.toISOString().slice(0, 10) ?? null,
   notes: row.notes,
-  marketingConsent:
-    row.marketingConsentAt && row.marketingConsentChannel
-      ? { channel: row.marketingConsentChannel, grantedAt: row.marketingConsentAt }
-      : null,
+  consents: { email: row.emailConsentAt, whatsapp: row.whatsappConsentAt },
   hasAccount: row.userId !== null,
   anonymized: row.anonymizedAt !== null,
 });
 
-/** Traduz o input de consentimento para colunas: registra data e canal (LGPD). */
-function consentData(consent: CreateClientInput['marketingConsent']) {
-  if (consent === undefined) return {};
-  return consent === null
-    ? { marketingConsentAt: null, marketingConsentChannel: null }
-    : { marketingConsentAt: new Date(), marketingConsentChannel: consent.channel };
+/**
+ * Traduz o input de consentimento para colunas (LGPD): conceder registra a data da
+ * concessão, e conceder de novo um canal já consentido mantém a data original.
+ */
+function consentData(
+  consents: CreateClientInput['consents'],
+  current?: Pick<ClientRow, 'emailConsentAt' | 'whatsappConsentAt'>,
+) {
+  const at = (granted: boolean | undefined, previous: Date | null | undefined) =>
+    granted === undefined ? undefined : granted ? (previous ?? new Date()) : null;
+  return {
+    emailConsentAt: at(consents?.email, current?.emailConsentAt),
+    whatsappConsentAt: at(consents?.whatsapp, current?.whatsappConsentAt),
+  };
 }
 
 @Injectable()
@@ -68,18 +73,18 @@ export class ClientsService {
   }
 
   create(input: CreateClientInput): Promise<ClientView> {
-    const { marketingConsent, ...fields } = input;
+    const { consents, ...fields } = input;
     return this.db.run(async (tx, auth) =>
       toView(
         await tx.client.create({
-          data: { ...fields, ...consentData(marketingConsent), barbershopId: auth.barbershopId },
+          data: { ...fields, ...consentData(consents), barbershopId: auth.barbershopId },
         }),
       ),
     );
   }
 
   update(clientId: string, input: UpdateClientInput): Promise<ClientView> {
-    const { marketingConsent, ...fields } = input;
+    const { consents, ...fields } = input;
     return this.db.run(async (tx, auth) => {
       const client = await this.find(tx, auth.barbershopId, clientId);
       if (client.anonymizedAt) {
@@ -88,7 +93,7 @@ export class ClientsService {
       return toView(
         await tx.client.update({
           where: { id: clientId },
-          data: { ...fields, ...consentData(marketingConsent) },
+          data: { ...fields, ...consentData(consents, client) },
         }),
       );
     });
@@ -111,8 +116,8 @@ export class ClientsService {
             birthDate: null,
             notes: null,
             userId: null,
-            marketingConsentAt: null,
-            marketingConsentChannel: null,
+            emailConsentAt: null,
+            whatsappConsentAt: null,
             anonymizedAt: new Date(),
           },
         }),

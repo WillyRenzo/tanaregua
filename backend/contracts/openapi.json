@@ -1834,23 +1834,20 @@
                     "type": "string",
                     "maxLength": 1000
                   },
-                  "marketingConsent": {
-                    "nullable": true,
+                  "consents": {
                     "type": "object",
                     "properties": {
-                      "channel": {
-                        "type": "string",
-                        "enum": [
-                          "whatsapp",
-                          "email",
-                          "sms"
-                        ]
+                      "email": {
+                        "type": "boolean"
+                      },
+                      "whatsapp": {
+                        "type": "boolean"
                       }
                     },
-                    "required": [
-                      "channel"
-                    ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "example": {
+                      "whatsapp": true
+                    }
                   }
                 },
                 "required": [
@@ -2023,23 +2020,20 @@
                     "type": "string",
                     "maxLength": 1000
                   },
-                  "marketingConsent": {
-                    "nullable": true,
+                  "consents": {
                     "type": "object",
                     "properties": {
-                      "channel": {
-                        "type": "string",
-                        "enum": [
-                          "whatsapp",
-                          "email",
-                          "sms"
-                        ]
+                      "email": {
+                        "type": "boolean"
+                      },
+                      "whatsapp": {
+                        "type": "boolean"
                       }
                     },
-                    "required": [
-                      "channel"
-                    ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "example": {
+                      "whatsapp": true
+                    }
                   }
                 },
                 "additionalProperties": false
@@ -7673,21 +7667,23 @@
             "nullable": true,
             "type": "string"
           },
-          "marketingConsent": {
-            "nullable": true,
+          "consents": {
             "type": "object",
             "properties": {
-              "channel": {
-                "type": "string"
+              "email": {
+                "nullable": true,
+                "type": "string",
+                "format": "date-time"
               },
-              "grantedAt": {
+              "whatsapp": {
+                "nullable": true,
                 "type": "string",
                 "format": "date-time"
               }
             },
             "required": [
-              "channel",
-              "grantedAt"
+              "email",
+              "whatsapp"
             ],
             "additionalProperties": false
           },
@@ -7705,7 +7701,7 @@
           "email",
           "birthDate",
           "notes",
-          "marketingConsent",
+          "consents",
           "hasAccount",
           "anonymized"
         ],
