@@ -5,7 +5,7 @@
 # O contrato da API (src/lib/api/schema.d.ts) já está versionado: o build não precisa do
 # backend no ar.
 
-FROM node:24-alpine AS base
+FROM node:26-alpine AS base
 WORKDIR /app
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NEXT_TELEMETRY_DISABLED=1
 
