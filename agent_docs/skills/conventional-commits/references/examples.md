@@ -1,58 +1,69 @@
 # Conventional Commits Examples
 
-Real messages from this repository.
+Messages in the current format: English, ASCII only. Commits before 28/10/2026 are in
+Portuguese and stay as they are.
 
 ## Feature With Body
 
 ```
-feat(backend/packages): adiciona pacotes de serviços vendidos na comanda
+feat(backend/packages): add service packages sold on the order
 
-Pacote com sessões por serviço, preço e validade em dias. É vendido como
-item da comanda (cliente identificado) e cada sessão paga um serviço numa
-comanda futura do mesmo cliente, consumida só no fechamento.
+A package has sessions per service, a price and a validity in days. It is
+sold as an order item (identified client) and each session pays for a
+service in a later order of the same client, consumed only on close.
 
-- saldo garantido no banco: movimentações append-only aplicadas por
-  trigger, CHECK de 0 até o comprado, sem UPDATE/DELETE para o app
-- reembolso dentro da validade, até o valor pago, com motivo, como saída
-  no caixa (exige orders:void)
+- balance enforced by the database: append-only movements applied by a
+  trigger, CHECK from 0 to the amount bought, no UPDATE/DELETE for the app
+- refund within the validity, up to the amount paid, with a reason, as a
+  cash outflow (requires orders:void)
 ```
 
 ## Bug Fix With Body
 
 ```
-fix(frontend/brand): aplica a cor principal no fundo do menu
+fix(frontend/brand): apply the primary color to the menu background
 
-O menu do painel e a barra do topo da página pública ficavam sempre no
-marrom TaNaRegua, mesmo com as cores da barbearia configuradas. Agora o
-fundo usa a cor principal, escurecida só o necessário para que até o
-texto claro a 70% de opacidade mantenha contraste AA.
+The panel menu and the public page top bar stayed TaNaRegua brown even
+with the barbershop colors set. The background now uses the primary
+color, darkened only as much as needed for the light menu text at 70%
+opacity to keep AA contrast.
+```
+
+## Quoting UI Text or a Business Rule
+
+```
+feat(frontend/painel): show the barbershop plan and the upgrade prompt
+
+Settings show the current plan. FeatureGate shows the feature when the
+plan includes it and "Disponivel no plano X" otherwise (business-rules
+section 12). UX only: the API refuses with plan-upgrade-required.
 ```
 
 ## Short Titles
 
 ```
-feat(backend/seed): adiciona pacotes à demo de desenvolvimento
-feat(frontend/public-booking): mostra o saldo dos pacotes em meus agendamentos
-feat(frontend/agenda): adiciona visões de semana e mês e filtro por profissional
-docs: documenta as regras e garantias dos pacotes de serviços
-chore: adiciona as skills de tdd e de commits
+feat(backend/seed): add packages to the development demo
+feat(frontend/public-booking): show package balances in my appointments
+feat(frontend/agenda): add week and month views and a professional filter
+docs: document the rules and guarantees of service packages
+chore: add the tdd and commit skills
 ```
 
 ## Breaking Change
 
 ```
-feat(backend/auth)!: exige escopo de barbearia no refresh token
+feat(backend/auth)!: require a barbershop scope in the refresh token
 
-BREAKING CHANGE: tokens emitidos antes deste deploy deixam de renovar;
-o usuário precisa entrar de novo.
+BREAKING CHANGE: tokens issued before this deploy can no longer be
+refreshed; users must sign in again.
 ```
 
 ## Heredoc
 
 ```bash
 git commit -F - <<'EOF'
-fix(backend/orders): impede fechar comanda sem itens
+fix(backend/orders): block closing an order with no items
 
-A comanda vazia gerava lançamento de R$ 0 no caixa e poluía o relatório.
+An empty order created a R$ 0 cash entry and cluttered the report.
 EOF
 ```
