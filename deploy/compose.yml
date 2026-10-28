@@ -1,0 +1,124 @@
+# Produção (VPS): Postgres + API + web + Caddy (HTTPS) + backup diário.
+# Mesma topologia do desenvolvimento, com as imagens publicadas pelo CI no GHCR.
+# Nada aqui é específico da Hostinger: roda em qualquer máquina com Docker Compose.
+#
+# Uso (na VPS, dentro desta pasta, com o .env preenchido): ./deploy.sh <sha-do-commit>
+# Runbook completo em deploy/README.md.
+name: tanaregua
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tanaregua
+      POSTGRES_PASSWORD: ${DB_OWNER_PASSWORD:?defina DB_OWNER_PASSWORD no .env}
+      POSTGRES_DB: tanaregua
+      # Lida só pelo db-init, na criação do volume (usuário da aplicação, sujeito ao RLS).
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?defina APP_DB_PASSWORD no .env}
+    volumes:
+      - db-data:/var/lib/postgresql
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tanaregua -d tanaregua"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Passo separado do deploy (deploy.sh): migrations com o dono das tabelas, nunca com o
+  # usuário da aplicação. Só roda com `docker compose run --rm migrate`.
+  migrate:
+    image: ${IMAGE_PREFIX:?defina IMAGE_PREFIX no .env}-migrate:${TAG:?use deploy.sh <tag>}
+    profiles: [migrate]
+    environment:
+      DATABASE_MIGRATION_URL: postgresql://tanaregua:${DB_OWNER_PASSWORD}@db:5432/tanaregua
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    image: ${IMAGE_PREFIX}-backend:${TAG}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgresql://tanaregua_app:${APP_DB_PASSWORD}@db:5432/tanaregua
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?defina JWT_ACCESS_SECRET no .env}
+      CORS_ORIGINS: https://${APP_DOMAIN:?defina APP_DOMAIN no .env}
+      APP_PUBLIC_URL: https://${APP_DOMAIN}
+      # O Caddy grava o IP do visitante no X-Forwarded-For (security.md, rate limit).
+      TRUST_PROXY_HOPS: 1
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?defina INTERNAL_API_TOKEN no .env}
+      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:?defina SECRETS_ENCRYPTION_KEY no .env}
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-resend}
+      MAIL_FROM: ${MAIL_FROM:?defina MAIL_FROM no .env}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-meta}
+      META_GRAPH_API_VERSION: ${META_GRAPH_API_VERSION:-v23.0}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    volumes:
+      - storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    image: ${IMAGE_PREFIX}-frontend:${TAG}
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: http://backend:3333
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+    depends_on:
+      - backend
+
+  # Único serviço exposto. API e web ficam só na rede interna: se a API fosse alcançável
+  # direto, qualquer um forjaria o X-Forwarded-For e escaparia do rate limit.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?defina ACME_EMAIL no .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+      - backend
+
+  # Backup diário criptografado (age) do banco e dos logos para um storage S3-compatível.
+  backup:
+    build: ./backup
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: tanaregua
+      PGPASSWORD: ${DB_OWNER_PASSWORD}
+      PGDATABASE: tanaregua
+      BACKUP_HOUR_UTC: ${BACKUP_HOUR_UTC:-6}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:?defina BACKUP_AGE_RECIPIENT no .env}
+      BACKUP_DESTINATION: ${BACKUP_DESTINATION:?defina BACKUP_DESTINATION no .env}
+      RCLONE_CONFIG_REMOTE_TYPE: s3
+      RCLONE_CONFIG_REMOTE_PROVIDER: ${BACKUP_S3_PROVIDER:-Other}
+      RCLONE_CONFIG_REMOTE_ENDPOINT: ${BACKUP_S3_ENDPOINT:?defina BACKUP_S3_ENDPOINT no .env}
+      RCLONE_CONFIG_REMOTE_REGION: ${BACKUP_S3_REGION:-auto}
+      RCLONE_CONFIG_REMOTE_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:?defina BACKUP_S3_ACCESS_KEY_ID no .env}
+      RCLONE_CONFIG_REMOTE_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:?defina BACKUP_S3_SECRET_ACCESS_KEY no .env}
+    volumes:
+      - storage:/storage:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:
+  storage:
+  caddy-data:
+  caddy-config:
