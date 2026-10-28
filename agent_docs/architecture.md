@@ -123,7 +123,7 @@ O mesmo princípio das permissões: **o código checa recursos, nunca nomes de p
 | 09 Zero-trust | guard global deny-by-default, permissões, RLS, menor privilégio no banco |
 | 12 Event-driven | outbox transacional, consumidor idempotente, dead letter |
 | 14 Resiliência | timeout em chamada externa, retry com backoff no outbox (sem circuit breaker: só há um fornecedor externo) |
-| 18 Observabilidade | pino com correlation id, OpenTelemetry opcional (`node --import dist/telemetry.js`), `/health/live` e `/health/ready` |
+| 18 Observabilidade | pino com correlation id, OpenTelemetry opcional (`node --import dist/telemetry.js`), `/health/live` e `/health/ready`; estado atual, lacunas e como instrumentar cada mudança na skill `agent_docs/skills/observability/` |
 | 19 Testes | Testcontainers, gate de cobertura 80/70, Playwright, testes de falha e concorrência |
 | 20 Privacidade | PII anotada no schema, mascarada em logs, consentimento e anonimização |
 
