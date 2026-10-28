@@ -4,8 +4,8 @@ Gestão completa para barbearias e salões: agenda integrada, agendamento online
 comandas, comissões, caixa e relatórios, num SaaS multi-tenant pensado para
 pequenos negócios.
 
-> **Status:** MVP funcional, com estoque e pacotes de serviços. Aniversários,
-> pagamento online e folha de salários estão no roadmap.
+> **Status:** MVP funcional, com estoque, pacotes de serviços, aniversários e
+> campanhas. Pagamento online e folha de salários estão no roadmap.
 
 ## Funcionalidades
 
@@ -18,7 +18,8 @@ pequenos negócios.
 - **Pacotes de serviços:** sessões antecipadas (ex.: 4 cortes + 2 barbas) vendidas na comanda, com validade em dias, saldo por serviço e reembolso pela barbearia.
 - **Caixa do dia e relatórios:** faturamento por dia, por profissional e por serviço, além da taxa de não comparecimento.
 - **Equipe e papéis:** dono, recepcionista e profissional, com permissões granulares (o profissional vê só a própria agenda e as próprias comissões).
-- **Clientes com LGPD:** consentimento registrado para mensagens e exclusão de dados pessoais sob pedido, preservando o histórico financeiro.
+- **Clientes com LGPD:** consentimento registrado por canal (e-mail e WhatsApp) e exclusão de dados pessoais sob pedido, preservando o histórico financeiro.
+- **Aniversários e campanhas:** mensagem automática no dia do aniversário e campanhas para quem não volta há um tempo, aniversariantes do mês ou quem fez um serviço, com prévia de quantos recebem antes de enviar. Por e-mail ou pelo WhatsApp da própria barbearia (modelos aprovados pela Meta), sempre só para quem aceitou aquele canal.
 
 **Página pública de agendamento** (`/{slug-da-barbearia}`)
 
@@ -101,7 +102,8 @@ Senha de todas as contas: **`senha-forte-123`**.
 **O que já vem cadastrado** (dá para navegar por todas as telas com dados):
 - **Equipe:** três profissionais (o dono, a Bia e o Rafa) e a recepcionista, com expediente; folga da Bia amanhã à tarde e férias do Rafa na semana seguinte.
 - **Serviços:** sete serviços (um desativado) e regras de comissão em todos os níveis de precedência.
-- **Clientes:** vinte clientes, alguns com consentimento de marketing, aniversariantes no mês e um cliente anonimizado (LGPD), que some da lista mas continua no histórico.
+- **Clientes:** vinte clientes, alguns com consentimento de marketing (todos por e-mail, metade também por WhatsApp), aniversariantes no mês e um cliente anonimizado (LGPD), que some da lista mas continua no histórico.
+- **Aniversários e campanhas:** a mensagem de aniversário vem ligada, com o texto da casa, e já há uma campanha por e-mail ("Sábado estendido") enviada a quem consentiu. Veja em Campanhas. O WhatsApp não vem conectado; em desenvolvimento (`WHATSAPP_PROVIDER=log`), qualquer ID numérico e um token com 20 caracteres ou mais conectam uma conta simulada, com modelos de exemplo.
 - **Identidade visual:** a Barbearia Demo tem cores próprias (azul e dourado) e logo no painel e na página pública; veja e mude em Configurações → Identidade visual.
 - **Produtos e estoque:** quatro produtos ativos e um desativado, com entradas, reposição, vendas na comanda (pelo barbeiro e no balcão), um ajuste por avaria, comissões de produto e o shampoo abaixo do mínimo (alerta de reposição em Produtos).
 - **Pacotes:** "Combo do mês" (4 cortes + 2 barbas) e "Barba mensal" (sessões sem comissão). O Carlos e a Paula têm combos em uso, o Marcos foi reembolsado e o pacote do Lucas venceu. Veja em Pacotes → Vendidos; numa comanda aberta do Carlos ou da Paula, o serviço oferece "Usar sessão de pacote". A Paula vê o saldo em "Meus agendamentos".
@@ -257,7 +259,7 @@ agent_docs/        regras de negócio, segurança, arquitetura e fluxo de trabal
 - [x] Agenda integrada, agendamento online, comandas, comissões, caixa e relatórios
 - [x] Estoque e venda de produtos
 - [x] Pacotes de serviços
-- [ ] Lembretes de aniversário (com consentimento)
+- [x] Aniversários e campanhas por e-mail e WhatsApp (com consentimento por canal)
 - [ ] Pagamento online (Pix e cartão)
 - [ ] Salários e folha
 - [ ] Deploy de produção

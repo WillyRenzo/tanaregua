@@ -121,11 +121,19 @@ Não invente regra para preencher uma lacuna: pergunte.
 - Recepcionista: gerencia agenda de todos e caixa/comandas. Não vê salários.
 - Cliente final: agenda, cancela (dentro da política) e vê o próprio histórico. Não acessa o painel.
 
-## 9. Clientes e aniversários (LGPD)
+## 9. Clientes, aniversários e campanhas (LGPD)
 
 - Nome, telefone, e-mail e data de nascimento são dados pessoais (LGPD).
-- Mensagens de aniversário ou marketing exigem consentimento registrado (data e canal). Sem consentimento, o aniversário aparece só como lembrete interno.
-- Canais (fase 2): **e-mail e WhatsApp**, cada um por uma porta própria com adapter trocável. A mensagem só sai pelo canal que o cliente consentiu. Provedor de WhatsApp **[PENDENTE]**.
+- **Consentimento por canal** (e-mail e WhatsApp), cada um com a data em que foi dado; conceder de novo mantém a data original. Mensagem de aniversário ou campanha só sai pelo canal que o cliente aceitou, com contato válido nele. O consentimento é conferido de novo na hora do envio: quem revogou depois de entrar na fila não recebe. Sem consentimento, o aniversário aparece só como lembrete interno para a equipe.
+- Canais: **e-mail e WhatsApp**, cada um por uma porta própria com adapter trocável. WhatsApp pela **Cloud API da Meta**, com **conexão manual**: a barbearia informa o ID do número, o ID da conta do WhatsApp Business e o token, que o sistema confere na Meta antes de salvar. O cadastro integrado da Meta (Embedded Signup) pode substituir a conexão manual depois, sem mudar regra.
+- **WhatsApp só por modelo aprovado pela Meta:** mensagem iniciada pela barbearia não aceita texto livre. O sistema usa só modelos com variáveis no corpo (sem mídia), preenchidas com o primeiro nome do cliente ou o nome da barbearia. A Meta cobra cada mensagem da conta da barbearia.
+- **Mensagem automática de aniversário** (opcional, desligada por padrão): sai no dia do aniversário, **uma por cliente por ano**. Vai pelo WhatsApp se o cliente aceitou esse canal e a barbearia escolheu um modelo; senão, por e-mail, se aceitou. Quem nasceu em 29/02 recebe em 28/02 nos anos não bissextos. O texto do e-mail é editável (`{nome}`, `{barbearia}`).
+  - **[PROPOSTA]** a mensagem sai a partir das **9h** no fuso da barbearia.
+- **Campanhas:** filtro simples (todos, sem visita há N dias, aniversariantes de um mês, fez um serviço nos últimos N dias) e canal; a prévia mostra quantos atendem ao filtro e quantos vão receber. Enviar exige confirmar esse número: se o público mudou desde a prévia, a campanha não sai e o número novo aparece para nova confirmação. Campanha enviada não se edita nem se apaga.
+  - "Sem visita há N dias" considera o último atendimento concluído; quem nunca veio não entra.
+  - **[PROPOSTA]** no máximo 2.000 destinatários por campanha.
+- Todo e-mail de aniversário ou campanha sai com um rodapé dizendo por que o cliente recebe e como parar de receber.
+- **[PROPOSTA] Quem faz:** campanhas, dono e recepção (`campaigns:manage`); conectar o WhatsApp e configurar a mensagem de aniversário, quem configura a barbearia (`barbershop:manage`); a lista de aniversariantes, quem vê clientes (`clients:read`).
 - O cliente pode pedir exclusão ou anonimização. O histórico financeiro é mantido anonimizado.
 
 ## 12. Assinatura e planos (como o TaNaRegua é vendido)
