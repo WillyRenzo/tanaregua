@@ -1,6 +1,6 @@
 # Convenções Gerais
 
-- **Idioma:** código (variáveis, funções, tabelas, rotas) em inglês. Textos de UI, mensagens de erro para o usuário e documentação em pt-BR. Termos de domínio mapeados: comanda → `order`, profissional → `professional`, barbearia → `barbershop`, pacote → `package`.
+- **Idioma:** código (variáveis, funções, tabelas, rotas) e mensagens de commit em inglês. Textos de UI, mensagens de erro para o usuário e documentação em pt-BR. Termos de domínio mapeados: comanda → `order`, profissional → `professional`, barbearia → `barbershop`, pacote → `package`.
 - **Commits:** sempre Conventional Commits **e** atomic commits (detalhes abaixo).
 - **Branches:** `feat/<descricao-curta>`, `fix/<descricao-curta>`, `chore/<...>`. `main` sempre deployável. Mudanças entram por PR com CI verde.
 - **Nomes:** arquivos em kebab-case (`appointment.service.ts`), classes/componentes em PascalCase, funções e variáveis em camelCase.
@@ -13,11 +13,13 @@ commits) e `conventional-commits` (mensagem); o código chega até aqui pela ski
 
 ### Conventional Commits
 
-- Formato: `<tipo>(<escopo>): <descrição>`, ex.: `feat(backend/appointments): bloqueia conflito de horário`, `fix(frontend/painel): corrige total da comanda`, `chore(deps): atualiza next para 16.4.3`.
+- Formato: `<tipo>(<escopo>): <descrição>`, ex.: `feat(backend/appointments): block overlapping appointments`, `fix(frontend/painel): fix order total with discount`, `chore(deps): bump next to 16.4.3`.
 - Tipos: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`, `ci`, `chore`, `style`, `revert`.
 - Escopo: o app e, quando fizer sentido, o domínio (`backend/orders`, `frontend/public-booking`, `backend/db`). Omita o escopo em mudanças que atravessam o repositório (`docs: …`, `ci: …`).
-- Descrição em pt-BR, no imperativo do presente ("adiciona", "corrige"), minúscula, sem ponto final, até ~72 caracteres.
+- **Mensagem inteira (título, corpo e rodapé) em inglês e só com ASCII:** sem acentos, cedilha nem outros caracteres especiais (travessão, aspas curvas, `§`, `→`). Termos de domínio vão pelo nome usado no código (`order`, não "comanda"); um texto de UI citado perde os acentos. O hook de pré-commit bloqueia mensagem com caractere fora do ASCII. Os commits anteriores a 28/10/2026 estão em pt-BR e não são reescritos.
+- Descrição no imperativo ("add", "fix", "show"), minúscula, sem ponto final, até ~72 caracteres.
 - Corpo (opcional, recomendado em `feat`/`fix`): explica **o porquê** e o impacto, não repete o diff.
+- Título de PR segue o mesmo formato, em inglês; a descrição do PR continua em pt-BR, como a documentação.
 - Quebra de contrato da API ou de comportamento: `!` depois do escopo (`feat(backend/auth)!: …`) e rodapé `BREAKING CHANGE: …`.
 
 ### Atomic commits

@@ -32,7 +32,7 @@ Do instead:
 
 Bad signs:
 
-- `feat: …` without tests followed by `test: adiciona testes`.
+- `feat: …` without tests followed by `test: add tests`.
 
 Why it hurts:
 
