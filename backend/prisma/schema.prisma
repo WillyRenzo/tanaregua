@@ -33,15 +33,23 @@ model Barbershop {
   brandSecondaryColor          String?  @map("brand_secondary_color")
   /// Chave do logo no ObjectStorage (nome gerado pelo sistema, nunca vindo do usuário).
   logoKey                      String?  @map("logo_key")
+  /// Mensagem automática de aniversário (business-rules §9): só para quem consentiu no canal.
+  birthdayMessagesEnabled      Boolean  @default(false) @map("birthday_messages_enabled")
+  /// Texto do e-mail de aniversário ({nome}, {barbearia}); null = texto padrão.
+  birthdayEmailText            String?  @map("birthday_email_text")
+  /// Modelo aprovado do WhatsApp para o aniversário ({ name, language, parameters }); null = só e-mail.
+  birthdayWhatsappTemplate     Json?    @map("birthday_whatsapp_template")
   createdAt                    DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt                    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  roles       Role[]
-  clients     Client[]
-  services    Service[]
-  products    Product[]
-  packages    ServicePackage[]
-  memberships Membership[]
+  roles              Role[]
+  clients            Client[]
+  services           Service[]
+  products           Product[]
+  packages           ServicePackage[]
+  memberships        Membership[]
+  whatsappConnection WhatsAppConnection?
+  campaigns          Campaign[]
 
   @@map("barbershops")
 }
@@ -170,29 +178,31 @@ model TimeOff {
 /// Cadastro de cliente por barbearia. Classificação de dados (AFA 20) nos comentários:
 /// P2 = dado pessoal identificável (mascarar em logs).
 model Client {
-  id                      String    @id @default(uuid(7)) @db.Uuid
-  barbershopId            String    @map("barbershop_id") @db.Uuid
+  id                String    @id @default(uuid(7)) @db.Uuid
+  barbershopId      String    @map("barbershop_id") @db.Uuid
   /// Conta de login do cliente (agendamento online), quando existir.
-  userId                  String?   @map("user_id") @db.Uuid
+  userId            String?   @map("user_id") @db.Uuid
   /// P2
-  name                    String
+  name              String
   /// P2 — só dígitos, com DDI (ex.: 5511999998888)
-  phone                   String?
+  phone             String?
   /// P2
-  email                   String?
+  email             String?
   /// P2
-  birthDate               DateTime? @map("birth_date") @db.Date
-  marketingConsentAt      DateTime? @map("marketing_consent_at") @db.Timestamptz
-  marketingConsentChannel String?   @map("marketing_consent_channel")
-  notes                   String?
-  anonymizedAt            DateTime? @map("anonymized_at") @db.Timestamptz
-  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  birthDate         DateTime? @map("birth_date") @db.Date
+  /// Consentimento para aniversário e marketing, por canal (business-rules §9): data da concessão.
+  emailConsentAt    DateTime? @map("email_consent_at") @db.Timestamptz
+  whatsappConsentAt DateTime? @map("whatsapp_consent_at") @db.Timestamptz
+  notes             String?
+  anonymizedAt      DateTime? @map("anonymized_at") @db.Timestamptz
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
-  barbershop   Barbershop      @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "clients_barbershop_fkey")
-  appointments Appointment[]
-  orders       Order[]
-  packages     ClientPackage[]
+  barbershop        Barbershop         @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "clients_barbershop_fkey")
+  appointments      Appointment[]
+  orders            Order[]
+  packages          ClientPackage[]
+  marketingMessages MarketingMessage[]
 
   @@unique([barbershopId, id], map: "clients_tenant_id_key")
   @@unique([barbershopId, userId])
@@ -688,4 +698,97 @@ model CashEntry {
 
   @@index([barbershopId, occurredAt])
   @@map("cash_entries")
+}
+
+// ───────────── Aniversários e campanhas (business-rules §9) ─────────────
+
+enum MessageChannel {
+  EMAIL
+  WHATSAPP
+}
+
+enum MarketingMessageKind {
+  BIRTHDAY
+  CAMPAIGN
+}
+
+enum MarketingMessageStatus {
+  PENDING
+  SENT
+  SKIPPED
+  FAILED
+}
+
+/// Conta do WhatsApp Business da barbearia (Cloud API da Meta), conectada manualmente.
+model WhatsAppConnection {
+  id                 String   @id @default(uuid(7)) @db.Uuid
+  barbershopId       String   @unique @map("barbershop_id") @db.Uuid
+  phoneNumberId      String   @map("phone_number_id")
+  businessAccountId  String   @map("business_account_id")
+  /// Conferidos na Meta ao conectar; mostrados no painel.
+  displayPhoneNumber String   @map("display_phone_number")
+  verifiedName       String   @map("verified_name")
+  /// Token de acesso cifrado (AES-256-GCM, ligado ao tenant). Nunca sai da API.
+  accessTokenSealed  String   @map("access_token_sealed")
+  connectedByUserId  String   @map("connected_by_user_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "whatsapp_connections_barbershop_fkey")
+
+  @@unique([barbershopId, id], map: "whatsapp_connections_tenant_id_key")
+  @@map("whatsapp_connections")
+}
+
+/// Envio em massa para um público filtrado. Imutável depois de criada.
+model Campaign {
+  id               String         @id @default(uuid(7)) @db.Uuid
+  barbershopId     String         @map("barbershop_id") @db.Uuid
+  name             String
+  channel          MessageChannel
+  /// Filtro usado ({ kind: 'inactive', days } …), guardado para o histórico.
+  audience         Json
+  emailSubject     String?        @map("email_subject")
+  emailBody        String?        @map("email_body")
+  /// Modelo aprovado do WhatsApp ({ name, language, parameters }).
+  whatsappTemplate Json?          @map("whatsapp_template")
+  recipientCount   Int            @map("recipient_count")
+  createdByUserId  String         @map("created_by_user_id") @db.Uuid
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  barbershop Barbershop         @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "campaigns_barbershop_fkey")
+  messages   MarketingMessage[]
+
+  @@unique([barbershopId, id], map: "campaigns_tenant_id_key")
+  @@index([barbershopId, createdAt])
+  @@map("campaigns")
+}
+
+/// Uma mensagem para um cliente (aniversário ou campanha), despachada pelo outbox.
+model MarketingMessage {
+  id                String                 @id @default(uuid(7)) @db.Uuid
+  barbershopId      String                 @map("barbershop_id") @db.Uuid
+  clientId          String                 @map("client_id") @db.Uuid
+  kind              MarketingMessageKind
+  channel           MessageChannel
+  status            MarketingMessageStatus @default(PENDING)
+  /// Só em campanha.
+  campaignId        String?                @map("campaign_id") @db.Uuid
+  /// Só em aniversário: no máximo uma mensagem por cliente por ano (índice único).
+  birthdayYear      Int?                   @map("birthday_year")
+  /// Motivo de SKIPPED/FAILED, em código curto e sem dado pessoal (ex.: no-consent).
+  outcome           String?
+  /// ID da mensagem no provedor (e-mail ou WhatsApp), quando enviada.
+  providerMessageId String?                @map("provider_message_id")
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  sentAt            DateTime?              @map("sent_at") @db.Timestamptz
+
+  client   Client    @relation(fields: [barbershopId, clientId], references: [barbershopId, id], map: "marketing_messages_tenant_client_fkey")
+  campaign Campaign? @relation(fields: [barbershopId, campaignId], references: [barbershopId, id], map: "marketing_messages_tenant_campaign_fkey")
+
+  @@unique([barbershopId, id], map: "marketing_messages_tenant_id_key")
+  @@unique([barbershopId, clientId, birthdayYear], map: "marketing_messages_birthday_key")
+  @@unique([campaignId, clientId], map: "marketing_messages_campaign_client_key")
+  @@index([barbershopId, campaignId])
+  @@map("marketing_messages")
 }

@@ -11,7 +11,7 @@
 | Traces | OpenTelemetry NodeSDK + auto-instrumentations + Prisma, behind `OTEL_ENABLED`, loaded with `node --import dist/telemetry.js` | `backend/src/telemetry.ts` | No custom spans; frontend not instrumented; no collector in Compose |
 | Metrics | none | — | No RED, business or job metrics |
 | Health | `/health/live` (no deps), `/health/ready` (DB ping, 2 s) | `backend/src/health/` | — |
-| Jobs | outbox retries with backoff; dead letter logged at `error` | `modules/notifications/outbox.processor.ts` | Backlog and failures not measured |
+| Jobs | outbox retries with backoff; dead letter logged at `error`; modules register consumers in `OutboxHandlers`; birthday job every 10 min logs `birthday.queued`; deliveries log `marketing.message.sent/skipped/failed` (ids only) | `modules/notifications/outbox.processor.ts`, `modules/marketing/` | Backlog and failures not measured |
 | Frontend | none | — | No `instrumentation.ts`, `onRequestError`, client errors or Web Vitals |
 | Alerts/SLOs | none | — | Defined with the production deploy (B7) |
 

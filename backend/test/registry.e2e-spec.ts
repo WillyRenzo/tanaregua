@@ -121,19 +121,46 @@ describe('Cadastros (e2e)', () => {
           name: 'Marcos Antônio',
           phone: '(11) 98888-7777',
           birthDate: '1990-05-20',
-          marketingConsent: { channel: 'whatsapp' },
+          consents: { whatsapp: true },
         })
         .expect(201);
       expect(created.body).toMatchObject({
         phone: '11988887777',
         birthDate: '1990-05-20',
-        marketingConsent: { channel: 'whatsapp' },
+        consents: { whatsapp: expect.any(String), email: null },
       });
 
       const byName = await as(app, shopA.token).get('/v1/clients').query({ search: 'antônio' }).expect(200);
       expect(byName.body.items.map((c: { id: string }) => c.id)).toContain(created.body.id);
       const byPhone = await as(app, shopA.token).get('/v1/clients').query({ search: '98888' }).expect(200);
       expect(byPhone.body.items.map((c: { id: string }) => c.id)).toContain(created.body.id);
+    });
+
+    it('consentimento é por canal: conceder de novo mantém a data, revogar limpa só aquele canal', async () => {
+      const created = await as(app, shopA.token)
+        .post('/v1/clients')
+        .send({ name: 'Cliente Consentido', email: 'consentido@teste.com', consents: { email: true } })
+        .expect(201);
+      const emailGrantedAt = created.body.consents.email;
+      expect(emailGrantedAt).toEqual(expect.any(String));
+
+      const both = await as(app, shopA.token)
+        .patch(`/v1/clients/${created.body.id}`)
+        .send({ consents: { email: true, whatsapp: true } })
+        .expect(200);
+      expect(both.body.consents.email).toBe(emailGrantedAt);
+      expect(both.body.consents.whatsapp).toEqual(expect.any(String));
+
+      const revoked = await as(app, shopA.token)
+        .patch(`/v1/clients/${created.body.id}`)
+        .send({ consents: { email: false } })
+        .expect(200);
+      expect(revoked.body.consents).toEqual({ email: null, whatsapp: both.body.consents.whatsapp });
+
+      const anonymized = await as(app, shopA.token)
+        .post(`/v1/clients/${created.body.id}/anonymize`)
+        .expect(201);
+      expect(anonymized.body.consents).toEqual({ email: null, whatsapp: null });
     });
 
     it('pagina por cursor sem repetir nem perder registros', async () => {

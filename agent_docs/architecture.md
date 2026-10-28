@@ -43,6 +43,8 @@ Browser ──► frontend (Next.js 16) ──/api/* (rewrite)──► backend 
 | Saldo de pacote = soma das movimentações | app sem UPDATE/DELETE em `client_package_balances` e `package_movements`, sem DELETE em `client_packages` | migration `*_service_packages` |
 | Sessão de pacote é R$ 0 e a comissão não passa do valor da sessão | CHECKs `order_items_values_check` e `order_items_commission_check` | migration `*_service_packages` |
 | Reembolso até o valor pago | CHECK em `client_packages` (e REFUNDED ⇔ data de reembolso) | migration `*_service_packages` |
+| Uma mensagem de aniversário por cliente por ano | índice único `marketing_messages_birthday_key` e CHECK `marketing_messages_kind_check` | migration `*_birthdays_and_campaigns` |
+| Campanha imutável e histórico de envios preservado | app sem UPDATE/DELETE em `campaigns` e sem DELETE em `marketing_messages` | migration `*_birthdays_and_campaigns` |
 
 A aplicação pré-valida só para dar mensagem amigável. Sob concorrência, o banco decide (há testes e2e com requisições simultâneas).
 
@@ -51,6 +53,7 @@ A aplicação pré-valida só para dar mensagem amigável. Sob concorrência, o 
 - **Fechar comanda** (`orders.service.ts#close`): `SELECT … FOR UPDATE` na comanda, baixa dos produtos (`ProductsService.recordSale`: trava os produtos em ordem de id para não haver deadlock entre fechamentos, confere o saldo e lança as vendas), depois congela a comissão em cada item (snapshot), muda o status para CLOSED, lança caixa e comissões (`FinanceService.recordSale`) e conclui o agendamento. Tudo numa transação. O estorno devolve os produtos com `SALE_REVERSAL` ao mesmo custo da venda.
 - **Pacotes no fechamento** (`PackagesService`): depois da baixa de produtos, `recordUses` trava os `client_packages` usados (`FOR UPDATE`, em ordem de id; os saldos não podem ser travados porque o app não tem UPDATE neles), confere validade e saldo e lança `USE`; depois `recordPurchases` cria o pacote do cliente, os saldos e as movimentações `PURCHASE`. A comissão da sessão usa o valor congelado da sessão como base. No estorno, `reverseForOrder` recusa antes de qualquer escrita (pacote reembolsado ou já usado) e lança `USE_REVERSAL`.
 - **E-mails** (AFA 12): a mudança e o evento (`outbox_events`) são gravados na mesma transação. `OutboxProcessor` reivindica lotes com `FOR UPDATE SKIP LOCKED` (seguro com várias instâncias), envia fora da transação, faz retry com backoff exponencial e, após 5 tentativas, move para FAILED (dead letter). O ID do evento vai como `Idempotency-Key` ao provedor, então reenvio não duplica o e-mail.
+- **Aniversários e campanhas** (`modules/marketing`): cada destinatário vira uma linha em `marketing_messages` e um evento `MarketingMessageQueued` no outbox, na mesma transação. O worker não conhece o marketing: o módulo registra o próprio consumidor em `OutboxHandlers` (com `onDeadLetter`, que marca a mensagem FAILED). Na entrega, o consentimento é conferido de novo e o envio acontece fora da transação. O job de aniversário (`BirthdaysService`, a cada 10 min) lê as barbearias com a mensagem ligada (tabela sem RLS), abre a transação de cada uma e enfileira com `createManyAndReturn(skipDuplicates)`: o índice único `(barbershop_id, client_id, birthday_year)` impede a segunda mensagem do ano, mesmo com várias instâncias. E-mail não duplica (ID da mensagem como `Idempotency-Key`); a Cloud API do WhatsApp não tem chave de idempotência, então uma queda entre o envio e a gravação do status pode repetir a mensagem (entrega "ao menos uma vez").
 - **Idempotência de POST** (`common/idempotency`): agendar e fechar comanda aceitam `Idempotency-Key`. A mesma chave devolve a resposta original; a mesma chave com outro corpo dá 422.
 - **Fuso:** tudo em UTC no banco; dia, expediente e grade são calculados no fuso da barbearia (`appointments/availability.ts`, função pura testada inclusive com horário de verão).
 
@@ -63,7 +66,7 @@ escrever um adapter novo e mudar a configuração, sem migration e sem mexer em 
 | Porta | Uso | Adapters | Status |
 |---|---|---|---|
 | `MailSender` | e-mails do outbox | `LogMailSender` (dev), `ResendMailSender` | implementada |
-| `WhatsAppSender` | aniversários e campanhas (com consentimento) | log (dev) + adapter do provedor escolhido | fase 2; provedor **[PENDENTE]** |
+| `WhatsAppSender` | aniversários e campanhas (com consentimento), só por modelo aprovado | `LogWhatsAppSender` (dev e testes), `MetaWhatsAppSender` (Cloud API via HTTP, sem SDK); `WHATSAPP_PROVIDER` e `META_GRAPH_API_VERSION` | implementada (`marketing/whatsapp`) |
 | `PaymentGateway` | cobrança online, reembolso, **assinatura recorrente do TaNaRegua** e webhooks | `MercadoPagoGateway` (inicial) + fake para testes; outros gateways (Asaas, Stripe…) entram como adapters novos | fase 3 |
 | `ObjectStorage` | logos da identidade visual (e futuros anexos) | `LocalDiskStorage` (dev e VPS com volume; `STORAGE_LOCAL_DIR`); S3-compatível depois | implementada (`common/storage`) |
 | `LlmProvider` | assistente de IA | `ClaudeProvider` (inicial, API da Anthropic) + fake para testes; outro provedor = adapter novo + `LLM_PROVIDER` | fase 4 |

@@ -11,6 +11,8 @@ import { BarbershopsService } from '../modules/barbershops/barbershops.module.js
 import { CatalogService } from '../modules/catalog/catalog.service.js';
 import { ClientsService } from '../modules/clients/clients.service.js';
 import type { PaymentMethod } from '../modules/finance/finance.service.js';
+import { BirthdaysService } from '../modules/marketing/birthdays.service.js';
+import { CampaignsService } from '../modules/marketing/campaigns.service.js';
 import { OrdersService } from '../modules/orders/orders.service.js';
 import type { OrderItemInput } from '../modules/orders/orders.schemas.js';
 import { PackagesService } from '../modules/packages/packages.service.js';
@@ -32,6 +34,8 @@ import { PrismaService } from '../prisma/prisma.service.js';
  * - faltas com e sem justificativa;
  * - identidade visual própria (cores e logo) no painel e na página pública;
  * - produtos com entradas, vendas (com profissional e no balcão), ajuste e um abaixo do mínimo;
+ * - consentimento de marketing por canal, mensagem de aniversário ligada (com aniversariantes
+ *   no mês) e uma campanha por e-mail para quem consentiu;
  * - uma segunda barbearia, com outra cor, para testar o isolamento entre tenants.
  *
  * Tudo passa pelos services de domínio (não por SQL): snapshots de preço, comissões,
@@ -298,7 +302,7 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
         email: `${slugify(name)}@exemplo.test`,
         birthDate:
           birthdayInDays === null ? undefined : birthdayThisMonth(today, birthdayInDays, 1985 + name.length),
-        marketingConsent: consent ? { channel: name.length % 2 === 0 ? 'whatsapp' : 'email' } : undefined,
+        consents: consent ? { email: true, whatsapp: name.length % 2 === 0 } : undefined,
       });
       client[name.split(' ')[0]!] = created.id;
     }
@@ -617,6 +621,10 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
       },
     });
 
+    // ───────────── Aniversários e campanhas ─────────────
+
+    await addDemoMarketing(app);
+
     // LGPD: cliente que pediu exclusão. Some da lista, o histórico fica como "Cliente anonimizado".
     await clients.anonymize(client.Ricardo!);
   });
@@ -692,6 +700,8 @@ export async function completeDemo(
         added.push('pacotes (vendidos, em uso, reembolsado e vencido)');
       }
     }
+    const marketing = await addDemoMarketing(app);
+    if (marketing) added.push(marketing);
   });
 
   await asOwnerOf(app, slugs.neighbor, async () => {
@@ -976,6 +986,46 @@ async function createDemoProducts(
     });
   }
   return created;
+}
+
+/**
+ * Aniversários e campanhas (business-rules §9): liga a mensagem de aniversário com o texto da
+ * casa e manda uma campanha por e-mail para quem consentiu (o worker do outbox entrega). O
+ * WhatsApp não vem conectado: a conta é de cada barbearia; com WHATSAPP_PROVIDER=log, qualquer
+ * ID numérico e token servem para testar no painel. Não mexe em quem já configurou algo.
+ * Devolve a descrição do que acrescentou, ou null.
+ */
+async function addDemoMarketing(app: INestApplicationContext): Promise<string | null> {
+  const birthdays = app.get(BirthdaysService);
+  const campaigns = app.get(CampaignsService);
+  const settings = await birthdays.settings();
+  const untouched = !settings.enabled && settings.emailText === null && settings.whatsappTemplate === null;
+  if (!untouched || (await campaigns.list()).length > 0) return null;
+
+  await birthdays.updateSettings({
+    enabled: true,
+    emailText:
+      'Feliz aniversário, {nome}! Toda a equipe da {barbearia} deseja um ano incrível. ' +
+      'Neste mês, a barba é por nossa conta no seu próximo corte.',
+    whatsappTemplate: null,
+  });
+
+  const audience = { kind: 'all' } as const;
+  const preview = await campaigns.preview({ channel: 'EMAIL', audience });
+  if (preview.recipients === 0) return 'mensagem automática de aniversário';
+  await campaigns.create({
+    name: 'Sábado estendido',
+    channel: 'EMAIL',
+    audience,
+    email: {
+      subject: '{nome}, agora atendemos até as 20h aos sábados',
+      body:
+        'Oi, {nome}! A {barbearia} agora atende até as 20h aos sábados. ' +
+        'Garanta seu horário pela nossa página de agendamento.',
+    },
+    confirmRecipients: preview.recipients,
+  });
+  return 'mensagem automática de aniversário e campanha por e-mail';
 }
 
 /**

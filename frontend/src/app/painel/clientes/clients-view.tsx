@@ -10,14 +10,14 @@ import { EmptyState, ErrorState, LoadingRows, PageHeader } from '@/components/st
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { errorMessage } from '@/lib/api/errors';
-import { formatDateLong, formatPhone, formatTime } from '@/lib/format';
+import { formatDate, formatDateLong, formatPhone, formatTime } from '@/lib/format';
 import { zodResolver } from '@/lib/forms/zod-resolver';
 import { can } from '@/lib/permissions';
 import {
@@ -119,9 +119,7 @@ export function ClientsView() {
                       ? client.birthDate.slice(8, 10) + '/' + client.birthDate.slice(5, 7)
                       : '—'}
                   </TableCell>
-                  <TableCell className="hidden sm:table-cell">
-                    {client.marketingConsent ? `Sim (${client.marketingConsent.channel})` : 'Não'}
-                  </TableCell>
+                  <TableCell className="hidden sm:table-cell">{consentSummary(client)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -150,7 +148,13 @@ export function ClientsView() {
   );
 }
 
-const NO_CONSENT = 'none';
+/** Canais com consentimento, para a listagem (business-rules §9). */
+function consentSummary(client: Client): string {
+  const channels = [client.consents.email && 'E-mail', client.consents.whatsapp && 'WhatsApp'].filter(
+    Boolean,
+  );
+  return channels.length > 0 ? channels.join(', ') : 'Não';
+}
 
 const clientSchema = z.object({
   name: z.string().trim().min(2, 'Informe o nome.'),
@@ -160,7 +164,8 @@ const clientSchema = z.object({
   email: z.union([z.literal(''), z.email('E-mail inválido.')]),
   birthDate: z.string(),
   notes: z.string().max(1000),
-  consent: z.enum([NO_CONSENT, 'whatsapp', 'email', 'sms']),
+  consentEmail: z.boolean(),
+  consentWhatsapp: z.boolean(),
 });
 
 function ClientForm({ client, onDone }: { client?: Client; onDone: () => void }) {
@@ -168,6 +173,7 @@ function ClientForm({ client, onDone }: { client?: Client; onDone: () => void })
   const update = useUpdateClient();
   const anonymize = useAnonymizeClient();
   const [confirmingAnonymize, setConfirmingAnonymize] = useState(false);
+  const timezone = useBarbershop().data?.timezone;
   const form = useForm({
     resolver: zodResolver(clientSchema),
     defaultValues: {
@@ -176,23 +182,21 @@ function ClientForm({ client, onDone }: { client?: Client; onDone: () => void })
       email: client?.email ?? '',
       birthDate: client?.birthDate ?? '',
       notes: client?.notes ?? '',
-      consent: (client?.marketingConsent?.channel ?? NO_CONSENT) as z.infer<typeof clientSchema>['consent'],
+      consentEmail: Boolean(client?.consents.email),
+      consentWhatsapp: Boolean(client?.consents.whatsapp),
     },
   });
   const { errors, isSubmitting } = form.formState;
 
   const onSubmit = form.handleSubmit(async (values) => {
-    const previousChannel = client?.marketingConsent?.channel ?? NO_CONSENT;
     const body = {
       name: values.name,
       phone: values.phone || null,
       email: values.email || null,
       birthDate: values.birthDate || null,
       notes: values.notes || null,
-      // Só envia consentimento quando muda: a API grava a data da concessão (LGPD).
-      ...(values.consent !== previousChannel
-        ? { marketingConsent: values.consent === NO_CONSENT ? null : { channel: values.consent } }
-        : {}),
+      // A API grava a data da concessão de cada canal e mantém a original se já havia (LGPD).
+      consents: { email: values.consentEmail, whatsapp: values.consentWhatsapp },
     };
     try {
       if (client) await update.mutateAsync({ id: client.id, ...body });
@@ -253,28 +257,39 @@ function ClientForm({ client, onDone }: { client?: Client; onDone: () => void })
       <Field label="E-mail" error={errors.email?.message} hint="Usado para confirmar agendamentos.">
         <Input type="email" {...form.register('email')} />
       </Field>
-      <Controller
-        control={form.control}
-        name="consent"
-        render={({ field }) => (
-          <Field
-            label="Aceita mensagens de aniversário e promoções?"
-            hint="Sem consentimento, o aniversário fica só como lembrete interno."
-          >
-            <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_CONSENT}>Não</SelectItem>
-                <SelectItem value="whatsapp">Sim, por WhatsApp</SelectItem>
-                <SelectItem value="email">Sim, por e-mail</SelectItem>
-                <SelectItem value="sms">Sim, por SMS</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-        )}
-      />
+      <fieldset className="grid gap-2">
+        <legend className="mb-1.5 text-sm font-medium">Aceita mensagens de aniversário e promoções?</legend>
+        {(
+          [
+            ['consentEmail', 'Por e-mail', client?.consents.email],
+            ['consentWhatsapp', 'Por WhatsApp', client?.consents.whatsapp],
+          ] as const
+        ).map(([name, label, grantedAt]) => (
+          <div key={name} className="flex items-center gap-3">
+            <Controller
+              control={form.control}
+              name={name}
+              render={({ field }) => (
+                <Checkbox
+                  id={`client-${name}`}
+                  checked={field.value}
+                  onCheckedChange={(checked) => field.onChange(checked === true)}
+                />
+              )}
+            />
+            <Label htmlFor={`client-${name}`} className="font-normal">
+              {label}
+              {grantedAt && timezone && (
+                <span className="text-muted-foreground text-xs">desde {formatDate(grantedAt, timezone)}</span>
+              )}
+            </Label>
+          </div>
+        ))}
+        <p className="text-muted-foreground text-xs">
+          Só marque o canal que o cliente aceitou. Sem consentimento, o aniversário fica só como lembrete
+          interno.
+        </p>
+      </fieldset>
       <Field label="Observações" error={errors.notes?.message}>
         <Textarea rows={2} {...form.register('notes')} />
       </Field>

@@ -67,6 +67,14 @@ em um SaaS multi-tenant que lida com dados pessoais, salários e pagamentos.
 - Cores entram só como hexadecimal validado (`#RRGGBB`) e viram CSS custom properties. Nunca interpole texto livre da barbearia em CSS ou HTML.
 - Domínio próprio: só é ativado depois de verificado (DNS apontando para a plataforma), é único entre barbearias e o HTTPS sob demanda só é emitido para domínios ativos. O `Host` da requisição nunca define o tenant de rotas autenticadas; ele só resolve a página pública, como o slug.
 
+## Segredos de terceiros guardados por barbearia (WhatsApp)
+
+- Token de fornecedor de cada barbearia (hoje, o token do WhatsApp) é guardado cifrado com AES-256-GCM (`common/crypto/secret-box.ts`). O id da barbearia entra como dado autenticado: o texto cifrado copiado para a linha de outro tenant não decifra.
+- A chave fica em `SECRETS_ENCRYPTION_KEY` (base64 de 32 bytes), fora do repositório; é obrigatória em produção (a API não sobe sem ela). Trocar a chave exige que as barbearias reconectem o WhatsApp.
+- O token nunca volta ao navegador (a API devolve só os dados conferidos na Meta) nem aparece em logs. Credencial recusada pela Meta vira 422 sem detalhes do provedor.
+- IDs da Meta são validados como numéricos: entram no caminho da URL da Graph API e não podem virar outro caminho.
+- Envio de aniversário e campanha registra só IDs, canal e resultado; destinatário, variáveis e texto da mensagem nunca vão para logs.
+
 ## Assistente de IA
 
 - **Prompt injection é o risco principal.** Conteúdo de arquivos, nomes de clientes e qualquer dado do banco é dado, não instrução. A defesa não depende do prompt: o assistente só tem ferramentas com as permissões do usuário, sem acesso a outro tenant, e toda escrita exige confirmação humana com prévia.

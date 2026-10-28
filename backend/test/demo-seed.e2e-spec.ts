@@ -201,6 +201,30 @@ describe('Seed de demonstração (e2e)', () => {
     expect(corte).toMatchObject({ initialQuantity: 4, remaining: 3 });
   });
 
+  it('tem aniversário automático ligado e uma campanha por e-mail só para quem consentiu', async () => {
+    const owner = await loginPanel(DEMO_ACCOUNTS.owner.email);
+    const settings = await as(app, owner.accessToken).get('/v1/birthday-settings').expect(200);
+    expect(settings.body).toMatchObject({ enabled: true, emailText: expect.stringContaining('{nome}') });
+
+    const clients = await as(app, owner.accessToken).get('/v1/clients').query({ limit: 100 }).expect(200);
+    const emailConsents = clients.body.items.filter(
+      (client: { email: string | null; consents: { email: string | null } }) =>
+        client.email && client.consents.email,
+    );
+    const campaigns = await as(app, owner.accessToken).get('/v1/campaigns').expect(200);
+    expect(campaigns.body).toEqual([
+      expect.objectContaining({ channel: 'EMAIL', recipientCount: emailConsents.length }),
+    ]);
+    expect(emailConsents.length).toBeGreaterThan(0);
+
+    // Aniversariantes do mês com consentimento: a mensagem automática tem para quem sair.
+    const month = Number(
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date()).slice(5, 7),
+    );
+    const birthdays = await as(app, owner.accessToken).get('/v1/birthdays').query({ month }).expect(200);
+    expect(birthdays.body.some((entry: { consents: { email: boolean } }) => entry.consents.email)).toBe(true);
+  });
+
   it('a barbearia vizinha é isolada da demo', async () => {
     const neighbor = await loginPanel(DEMO_ACCOUNTS.neighborOwner.email);
     const clients = await as(app, neighbor.accessToken).get('/v1/clients').expect(200);
@@ -250,6 +274,8 @@ describe('Seed de demonstração (e2e)', () => {
       'produtos e estoque (com vendas dos últimos 30 dias)',
       'identidade visual (cores e logo)',
       'pacotes (vendidos, em uso, reembolsado e vencido)',
+      // Os clientes da demo antiga não têm consentimento: sem campanha, só o aniversário.
+      'mensagem automática de aniversário',
       'cor da Barbearia Vizinha',
     ]);
     const sold = await as(app, oldDemo.token).get('/v1/client-packages').expect(200);

@@ -3,6 +3,7 @@ import {
   CalendarDays,
   Coins,
   Home,
+  Megaphone,
   Package,
   Percent,
   Receipt,
@@ -37,6 +38,12 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/painel/servicos', label: 'Serviços', icon: Scissors, permissions: ['services:read'] },
   { href: '/painel/produtos', label: 'Produtos', icon: Package, permissions: ['products:read'] },
   { href: '/painel/pacotes', label: 'Pacotes', icon: Ticket, permissions: ['packages:read'] },
+  {
+    href: '/painel/campanhas',
+    label: 'Campanhas',
+    icon: Megaphone,
+    permissions: ['campaigns:manage', 'barbershop:manage'],
+  },
   {
     href: '/painel/comissoes',
     label: 'Comissões',

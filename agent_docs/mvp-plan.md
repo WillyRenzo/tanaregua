@@ -309,7 +309,7 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
 - **Identidade visual por barbearia:** logo (porta `ObjectStorage`) e cores principal e secundária com contraste AA garantido, aplicados na página pública e no painel.
 - **Estoque e produtos:** venda na comanda, movimentações com autor e motivo, quantidade nunca negativa (garantida no banco), valor total do estoque pode ficar negativo.
 - **Pacotes de serviços** (feito): sessões por serviço vendidas na comanda, validade em dias a partir da compra, intransferível, comissão por sessão usada (desligável por pacote), saldo garantido no banco, reembolso dentro da validade com valor definido pela barbearia, saldo visível ao cliente na página pública.
-- **Aniversários e campanhas** com consentimento (LGPD).
+- **Aniversários e campanhas** (feito): consentimento por canal (e-mail e WhatsApp), WhatsApp pela Cloud API da Meta com conexão manual da conta da barbearia (token cifrado) e só modelos aprovados, mensagem automática de aniversário uma vez por ano, campanhas com filtro simples, prévia e confirmação do número de destinatários, tudo pelo outbox.
 
 ### Fase 3 · Dinheiro
 

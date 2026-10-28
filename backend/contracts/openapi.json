@@ -1834,23 +1834,20 @@
                     "type": "string",
                     "maxLength": 1000
                   },
-                  "marketingConsent": {
-                    "nullable": true,
+                  "consents": {
                     "type": "object",
                     "properties": {
-                      "channel": {
-                        "type": "string",
-                        "enum": [
-                          "whatsapp",
-                          "email",
-                          "sms"
-                        ]
+                      "email": {
+                        "type": "boolean"
+                      },
+                      "whatsapp": {
+                        "type": "boolean"
                       }
                     },
-                    "required": [
-                      "channel"
-                    ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "example": {
+                      "whatsapp": true
+                    }
                   }
                 },
                 "required": [
@@ -2023,23 +2020,20 @@
                     "type": "string",
                     "maxLength": 1000
                   },
-                  "marketingConsent": {
-                    "nullable": true,
+                  "consents": {
                     "type": "object",
                     "properties": {
-                      "channel": {
-                        "type": "string",
-                        "enum": [
-                          "whatsapp",
-                          "email",
-                          "sms"
-                        ]
+                      "email": {
+                        "type": "boolean"
+                      },
+                      "whatsapp": {
+                        "type": "boolean"
                       }
                     },
-                    "required": [
-                      "channel"
-                    ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "example": {
+                      "whatsapp": true
+                    }
                   }
                 },
                 "additionalProperties": false
@@ -7216,6 +7210,1123 @@
         ],
         "description": "**Permissões (basta uma):** `reports:read`"
       }
+    },
+    "/v1/whatsapp": {
+      "get": {
+        "operationId": "MarketingController_getWhatsApp",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsAppConnection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Conta do WhatsApp conectada (o token nunca é devolvido)",
+        "tags": [
+          "Aniversários e campanhas"
+        ],
+        "x-required-permissions": [
+          "barbershop:manage",
+          "campaigns:manage"
+        ],
+        "description": "**Permissões (basta uma):** `barbershop:manage`, `campaigns:manage`"
+      },
+      "put": {
+        "operationId": "MarketingController_connectWhatsApp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "phoneNumberId": {
+                    "type": "string",
+                    "pattern": "^\\d{5,30}$"
+                  },
+                  "businessAccountId": {
+                    "type": "string",
+                    "pattern": "^\\d{5,30}$"
+                  },
+                  "accessToken": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "phoneNumberId",
+                  "businessAccountId",
+                  "accessToken"
+                ],
+                "additionalProperties": false,
+                "example": {
+                  "phoneNumberId": "106540352242922",
+                  "businessAccountId": "102290129340398",
+                  "accessToken": "EAAG…"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsAppConnection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`whatsapp-invalid-credentials`: A Meta recusou o ID do número, o ID da conta ou o token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`whatsapp-unavailable`: O WhatsApp não respondeu.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Conecta ou troca a conta do WhatsApp Business (conferida na Meta)",
+        "tags": [
+          "Aniversários e campanhas"
+        ],
+        "x-required-permissions": [
+          "barbershop:manage"
+        ],
+        "description": "**Permissões (basta uma):** `barbershop:manage`"
+      },
+      "delete": {
+        "operationId": "MarketingController_disconnectWhatsApp",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Desconecta o WhatsApp (o aniversário passa a sair só por e-mail)",
+        "tags": [
+          "Aniversários e campanhas"
+        ],
+        "x-required-permissions": [
+          "barbershop:manage"
+        ],
+        "description": "**Permissões (basta uma):** `barbershop:manage`"
+      }
+    },
+    "/v1/whatsapp/templates": {
+      "get": {
+        "operationId": "MarketingController_templates",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WhatsAppTemplate"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`whatsapp-not-connected`: A barbearia ainda não conectou o WhatsApp.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`whatsapp-unavailable`: O WhatsApp não respondeu.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Modelos aprovados pela Meta na conta conectada",
+        "tags": [
+          "Aniversários e campanhas"
+        ],
+        "x-required-permissions": [
+          "barbershop:manage",
+          "campaigns:manage"
+        ],
+        "description": "**Permissões (basta uma):** `barbershop:manage`, `campaigns:manage`"
+      }
+    },
+    "/v1/birthday-settings": {
+      "get": {
+        "operationId": "MarketingController_birthdaySettings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BirthdaySettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Configuração da mensagem automática de aniversário",
+        "tags": [
+          "Aniversários e campanhas"
+        ],
+        "x-required-permissions": [
+          "barbershop:manage"
+        ],
+        "description": "**Permissões (basta uma):** `barbershop:manage`"
+      },
+      "put": {
+        "operationId": "MarketingController_updateBirthdaySettings",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "emailText": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 1000
+                  },
+                  "whatsappTemplate": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9_]{1,512}$"
+                      },
+                      "language": {
+                        "type": "string",
+                        "pattern": "^[a-z]{2,3}(_[A-Z]{2})?$"
+                      },
+                      "parameters": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_]{1,100}$"
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "client_first_name",
+                                "barbershop_name"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "source"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "language",
+                      "parameters"
+                    ],
+                    "additionalProperties": false,
+                    "example": {
+                      "name": "feliz_aniversario",
+                      "language": "pt_BR",
+                      "parameters": [
+                        {
+                          "name": "1",
+                          "source": "client_first_name"
+                        },
+                        {
+                          "name": "2",
+                          "source": "barbershop_name"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "emailText",
+                  "whatsappTemplate"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BirthdaySettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`whatsapp-not-connected | whatsapp-template-invalid`: WhatsApp não conectado, ou modelo não aprovado/suportado ou com variáveis erradas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Liga/desliga a mensagem de aniversário e define o texto e o modelo",
+        "tags": [
+          "Aniversários e campanhas"
+        ],
+        "x-required-permissions": [
+          "barbershop:manage"
+        ],
+        "description": "**Permissões (basta uma):** `barbershop:manage`"
+      }
+    },
+    "/v1/birthdays": {
+      "get": {
+        "operationId": "MarketingController_listBirthdays",
+        "parameters": [
+          {
+            "name": "month",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BirthdayEntry"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Aniversariantes do mês, com os canais consentidos e a mensagem deste ano",
+        "tags": [
+          "Aniversários e campanhas"
+        ],
+        "x-required-permissions": [
+          "clients:read"
+        ],
+        "description": "**Permissões (basta uma):** `clients:read`"
+      }
+    },
+    "/v1/campaigns": {
+      "get": {
+        "operationId": "MarketingController_listCampaigns",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Campaign"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Últimas campanhas, com a situação das mensagens",
+        "tags": [
+          "Aniversários e campanhas"
+        ],
+        "x-required-permissions": [
+          "campaigns:manage"
+        ],
+        "description": "**Permissões (basta uma):** `campaigns:manage`"
+      },
+      "post": {
+        "operationId": "MarketingController_createCampaign",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Opcional (8–100 caracteres, ex.: um UUID). Reenviar a mesma chave devolve a resposta original; a mesma chave com outro corpo responde 422.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "3f1c2b8e-6d4a-4e1f-9a7b-2c5d8e0f1a2b"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "EMAIL",
+                      "WHATSAPP"
+                    ]
+                  },
+                  "audience": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "all"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "inactive"
+                            ]
+                          },
+                          "days": {
+                            "type": "integer",
+                            "minimum": 15,
+                            "maximum": 730
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "days"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "birthday-month"
+                            ]
+                          },
+                          "month": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 12
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "month"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "service"
+                            ]
+                          },
+                          "serviceId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "days": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 730
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "serviceId",
+                          "days"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ],
+                    "example": {
+                      "kind": "inactive",
+                      "days": 45
+                    }
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 100
+                  },
+                  "email": {
+                    "type": "object",
+                    "properties": {
+                      "subject": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 150
+                      },
+                      "body": {
+                        "type": "string",
+                        "minLength": 10,
+                        "maxLength": 2000
+                      }
+                    },
+                    "required": [
+                      "subject",
+                      "body"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "whatsapp": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9_]{1,512}$"
+                      },
+                      "language": {
+                        "type": "string",
+                        "pattern": "^[a-z]{2,3}(_[A-Z]{2})?$"
+                      },
+                      "parameters": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "pattern": "^[a-zA-Z0-9_]{1,100}$"
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "client_first_name",
+                                "barbershop_name"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "source"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "language",
+                      "parameters"
+                    ],
+                    "additionalProperties": false,
+                    "example": {
+                      "name": "feliz_aniversario",
+                      "language": "pt_BR",
+                      "parameters": [
+                        {
+                          "name": "1",
+                          "source": "client_first_name"
+                        },
+                        {
+                          "name": "2",
+                          "source": "barbershop_name"
+                        }
+                      ]
+                    }
+                  },
+                  "confirmRecipients": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "channel",
+                  "audience",
+                  "name",
+                  "confirmRecipients"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`audience-changed`: O público mudou desde a prévia: confirme o novo número.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`empty-audience | audience-too-large | invalid-service | whatsapp-not-connected | whatsapp-template-invalid`: Ninguém para receber, público grande demais, serviço inexistente ou problema com o WhatsApp.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Cria e envia a campanha (confirmando o número da prévia; até 2000 clientes)",
+        "tags": [
+          "Aniversários e campanhas"
+        ],
+        "x-required-permissions": [
+          "campaigns:manage"
+        ],
+        "description": "**Permissões (basta uma):** `campaigns:manage`"
+      }
+    },
+    "/v1/campaigns/preview": {
+      "post": {
+        "operationId": "MarketingController_previewCampaign",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "EMAIL",
+                      "WHATSAPP"
+                    ]
+                  },
+                  "audience": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "all"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "inactive"
+                            ]
+                          },
+                          "days": {
+                            "type": "integer",
+                            "minimum": 15,
+                            "maximum": 730
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "days"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "birthday-month"
+                            ]
+                          },
+                          "month": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 12
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "month"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "service"
+                            ]
+                          },
+                          "serviceId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "days": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 730
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "serviceId",
+                          "days"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ],
+                    "example": {
+                      "kind": "inactive",
+                      "days": 45
+                    }
+                  }
+                },
+                "required": [
+                  "channel",
+                  "audience"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid-service`: Serviço inexistente.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Prévia: quantos clientes atendem ao filtro e quantos podem receber no canal",
+        "tags": [
+          "Aniversários e campanhas"
+        ],
+        "x-required-permissions": [
+          "campaigns:manage"
+        ],
+        "description": "**Permissões (basta uma):** `campaigns:manage`"
+      }
+    },
+    "/v1/campaigns/{id}": {
+      "get": {
+        "operationId": "MarketingController_getCampaign",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso inexistente ou de outra barbearia.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Detalhe da campanha, com a situação de cada destinatário",
+        "tags": [
+          "Aniversários e campanhas"
+        ],
+        "x-required-permissions": [
+          "campaigns:manage"
+        ],
+        "description": "**Permissões (basta uma):** `campaigns:manage`"
+      }
     }
   },
   "info": {
@@ -7272,6 +8383,10 @@
     {
       "name": "Agendamento online",
       "description": "Página pública de cada barbearia (/{slug}). Leitura sem login; reservar exige conta de cliente."
+    },
+    {
+      "name": "Aniversários e campanhas",
+      "description": "Mensagem automática de aniversário e campanhas por e-mail ou WhatsApp (modelos aprovados da Meta), só para quem consentiu no canal."
     },
     {
       "name": "Saúde",
@@ -7673,21 +8788,23 @@
             "nullable": true,
             "type": "string"
           },
-          "marketingConsent": {
-            "nullable": true,
+          "consents": {
             "type": "object",
             "properties": {
-              "channel": {
-                "type": "string"
+              "email": {
+                "nullable": true,
+                "type": "string",
+                "format": "date-time"
               },
-              "grantedAt": {
+              "whatsapp": {
+                "nullable": true,
                 "type": "string",
                 "format": "date-time"
               }
             },
             "required": [
-              "channel",
-              "grantedAt"
+              "email",
+              "whatsapp"
             ],
             "additionalProperties": false
           },
@@ -7705,7 +8822,7 @@
           "email",
           "birthDate",
           "notes",
-          "marketingConsent",
+          "consents",
           "hasAccount",
           "anonymized"
         ],
@@ -9350,6 +10467,753 @@
           "topServices",
           "topProducts",
           "appointments"
+        ],
+        "additionalProperties": false
+      },
+      "WhatsAppConnection": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "nullable": true,
+            "type": "object",
+            "properties": {
+              "phoneNumberId": {
+                "type": "string"
+              },
+              "businessAccountId": {
+                "type": "string"
+              },
+              "displayPhoneNumber": {
+                "type": "string"
+              },
+              "verifiedName": {
+                "type": "string"
+              },
+              "connectedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "phoneNumberId",
+              "businessAccountId",
+              "displayPhoneNumber",
+              "verifiedName",
+              "connectedAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "connection"
+        ],
+        "additionalProperties": false
+      },
+      "WhatsAppTemplate": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "supported": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "language",
+          "category",
+          "body",
+          "parameters",
+          "supported"
+        ],
+        "additionalProperties": false
+      },
+      "BirthdaySettings": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "emailText": {
+            "nullable": true,
+            "type": "string"
+          },
+          "defaultEmailText": {
+            "type": "string"
+          },
+          "whatsappTemplate": {
+            "nullable": true,
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9_]{1,512}$"
+              },
+              "language": {
+                "type": "string",
+                "pattern": "^[a-z]{2,3}(_[A-Z]{2})?$"
+              },
+              "parameters": {
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_]{1,100}$"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "client_first_name",
+                        "barbershop_name"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "source"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "name",
+              "language",
+              "parameters"
+            ],
+            "additionalProperties": false,
+            "example": {
+              "name": "feliz_aniversario",
+              "language": "pt_BR",
+              "parameters": [
+                {
+                  "name": "1",
+                  "source": "client_first_name"
+                },
+                {
+                  "name": "2",
+                  "source": "barbershop_name"
+                }
+              ]
+            }
+          },
+          "whatsappConnected": {
+            "type": "boolean"
+          },
+          "sendHour": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "enabled",
+          "emailText",
+          "defaultEmailText",
+          "whatsappTemplate",
+          "whatsappConnected",
+          "sendHour"
+        ],
+        "additionalProperties": false
+      },
+      "BirthdayEntry": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "day": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "month": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "consents": {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "boolean"
+              },
+              "whatsapp": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "email",
+              "whatsapp"
+            ],
+            "additionalProperties": false
+          },
+          "message": {
+            "nullable": true,
+            "type": "object",
+            "properties": {
+              "channel": {
+                "type": "string",
+                "enum": [
+                  "EMAIL",
+                  "WHATSAPP"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "PENDING",
+                  "SENT",
+                  "SKIPPED",
+                  "FAILED"
+                ]
+              },
+              "outcome": {
+                "nullable": true,
+                "type": "string"
+              },
+              "sentAt": {
+                "nullable": true,
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "channel",
+              "status",
+              "outcome",
+              "sentAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "clientId",
+          "name",
+          "day",
+          "month",
+          "consents",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "Campaign": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "EMAIL",
+              "WHATSAPP"
+            ]
+          },
+          "audience": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "all"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "inactive"
+                    ]
+                  },
+                  "days": {
+                    "type": "integer",
+                    "minimum": 15,
+                    "maximum": 730
+                  }
+                },
+                "required": [
+                  "kind",
+                  "days"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "birthday-month"
+                    ]
+                  },
+                  "month": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12
+                  }
+                },
+                "required": [
+                  "kind",
+                  "month"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "service"
+                    ]
+                  },
+                  "serviceId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 730
+                  }
+                },
+                "required": [
+                  "kind",
+                  "serviceId",
+                  "days"
+                ],
+                "additionalProperties": false
+              }
+            ],
+            "example": {
+              "kind": "inactive",
+              "days": 45
+            }
+          },
+          "emailSubject": {
+            "nullable": true,
+            "type": "string"
+          },
+          "whatsappTemplateName": {
+            "nullable": true,
+            "type": "string"
+          },
+          "recipientCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "pending": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "sent": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "skipped": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "failed": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "pending",
+              "sent",
+              "skipped",
+              "failed"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "channel",
+          "audience",
+          "emailSubject",
+          "whatsappTemplateName",
+          "recipientCount",
+          "createdAt",
+          "counts"
+        ],
+        "additionalProperties": false
+      },
+      "CampaignPreview": {
+        "type": "object",
+        "properties": {
+          "matched": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "recipients": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "sample": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "matched",
+          "recipients",
+          "sample"
+        ],
+        "additionalProperties": false
+      },
+      "CampaignDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "EMAIL",
+              "WHATSAPP"
+            ]
+          },
+          "audience": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "all"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "inactive"
+                    ]
+                  },
+                  "days": {
+                    "type": "integer",
+                    "minimum": 15,
+                    "maximum": 730
+                  }
+                },
+                "required": [
+                  "kind",
+                  "days"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "birthday-month"
+                    ]
+                  },
+                  "month": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12
+                  }
+                },
+                "required": [
+                  "kind",
+                  "month"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "service"
+                    ]
+                  },
+                  "serviceId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 730
+                  }
+                },
+                "required": [
+                  "kind",
+                  "serviceId",
+                  "days"
+                ],
+                "additionalProperties": false
+              }
+            ],
+            "example": {
+              "kind": "inactive",
+              "days": 45
+            }
+          },
+          "emailSubject": {
+            "nullable": true,
+            "type": "string"
+          },
+          "whatsappTemplateName": {
+            "nullable": true,
+            "type": "string"
+          },
+          "recipientCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "pending": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "sent": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "skipped": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "failed": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "pending",
+              "sent",
+              "skipped",
+              "failed"
+            ],
+            "additionalProperties": false
+          },
+          "emailBody": {
+            "nullable": true,
+            "type": "string"
+          },
+          "whatsappTemplate": {
+            "nullable": true,
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9_]{1,512}$"
+              },
+              "language": {
+                "type": "string",
+                "pattern": "^[a-z]{2,3}(_[A-Z]{2})?$"
+              },
+              "parameters": {
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_]{1,100}$"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "client_first_name",
+                        "barbershop_name"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "source"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "name",
+              "language",
+              "parameters"
+            ],
+            "additionalProperties": false,
+            "example": {
+              "name": "feliz_aniversario",
+              "language": "pt_BR",
+              "parameters": [
+                {
+                  "name": "1",
+                  "source": "client_first_name"
+                },
+                {
+                  "name": "2",
+                  "source": "barbershop_name"
+                }
+              ]
+            }
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "clientId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "clientName": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "PENDING",
+                    "SENT",
+                    "SKIPPED",
+                    "FAILED"
+                  ]
+                },
+                "outcome": {
+                  "nullable": true,
+                  "type": "string"
+                },
+                "sentAt": {
+                  "nullable": true,
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "clientId",
+                "clientName",
+                "status",
+                "outcome",
+                "sentAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "channel",
+          "audience",
+          "emailSubject",
+          "whatsappTemplateName",
+          "recipientCount",
+          "createdAt",
+          "counts",
+          "emailBody",
+          "whatsappTemplate",
+          "messages"
         ],
         "additionalProperties": false
       },

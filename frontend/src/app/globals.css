@@ -159,3 +159,15 @@
     @apply font-heading tracking-wide uppercase;
   }
 }
+
+/*
+ * Avisos coloridos (sonner com richColors): no tema claro, os tons de texto padrão ficam
+ * abaixo de 4.5:1 sobre o fundo (WCAG AA). Escurecidos aqui; o `html` no seletor vence o
+ * CSS que o sonner injeta em tempo de execução. O tema escuro já usa texto claro.
+ */
+html [data-sonner-toaster][data-sonner-theme='light'] {
+  --success-text: hsl(140 100% 20%);
+  --info-text: hsl(210 92% 35%);
+  --warning-text: hsl(31 92% 28%);
+  --error-text: hsl(360 100% 38%);
+}

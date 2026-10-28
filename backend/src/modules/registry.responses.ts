@@ -96,7 +96,8 @@ export const clientViewSchema = z
     email: z.string().nullable(),
     birthDate: z.string().nullable(),
     notes: z.string().nullable(),
-    marketingConsent: z.object({ channel: z.string(), grantedAt: z.date() }).nullable(),
+    /** Data em que cada canal foi consentido; null = sem consentimento naquele canal. */
+    consents: z.object({ email: z.date().nullable(), whatsapp: z.date().nullable() }),
     hasAccount: z.boolean(),
     anonymized: z.boolean(),
   })
