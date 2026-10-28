@@ -217,6 +217,27 @@ No Linux, o hot reload funciona nos dois apps sem configuração extra, porque o
 | `port is already allocated` ao subir | outro serviço usando a porta 3000, 3333 ou 5432 | pare o serviço ou troque a porta publicada no `docker-compose.yml` |
 | Mudanças no frontend não aparecem (Windows) | o Turbopack não percebe arquivos alterados em pastas do Windows | `docker compose restart frontend` (veja a seção [Windows](#windows)) |
 
+## Atenção no deploy
+
+Com `NODE_ENV=production`, a API valida o ambiente na inicialização e **não sobe** se faltar algo:
+
+- **`SECRETS_ENCRYPTION_KEY` é obrigatória.** Ela cifra os segredos de terceiros guardados no banco, como o token do WhatsApp de cada barbearia. Gere uma vez com `openssl rand -base64 32` e guarde junto com os outros segredos de produção, fora do repositório. **Não troque a chave depois:** se trocar, os tokens salvos deixam de abrir e cada barbearia precisa reconectar o WhatsApp.
+- `RATE_LIMIT_ENABLED=false` é recusado (só serve para o E2E local).
+- `MAIL_PROVIDER=resend` exige `RESEND_API_KEY`.
+
+**WhatsApp:**
+
+- `WHATSAPP_PROVIDER=meta` envia de verdade pela Cloud API da Meta. Com `log`, que é o padrão, o envio só é simulado.
+- `META_GRAPH_API_VERSION` define a versão da Graph API (padrão `v23.0`). Atualize quando a Meta descontinuar a versão em uso.
+- A Cloud API não tem chave de idempotência. Se a API cair entre enviar a mensagem e gravar o status, a mensagem pode sair de novo quando o outbox repetir a tentativa. O e-mail não duplica.
+
+**Mudança de contrato da API (consentimento por canal):** em `/v1/clients`, o campo `marketingConsent: { channel }` virou `consents`:
+
+- na entrada, `{ email?: boolean, whatsapp?: boolean }`;
+- na resposta, `{ email, whatsapp }`, com a data do consentimento ou `null`.
+
+O frontend já usa o formato novo. Atualize junto qualquer outro cliente da API. A migration preserva os consentimentos de e-mail e WhatsApp já gravados; os de SMS não são migrados, porque SMS não é canal do produto.
+
 ## Testes e qualidade
 
 ```bash
