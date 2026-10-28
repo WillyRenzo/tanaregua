@@ -8,6 +8,9 @@
 
 ## Commits
 
+Passo a passo nas skills de `agent_docs/skills/`: `atomic-commits` (dividir e validar os
+commits) e `conventional-commits` (mensagem); o código chega até aqui pela skill `tdd`.
+
 ### Conventional Commits
 
 - Formato: `<tipo>(<escopo>): <descrição>`, ex.: `feat(backend/appointments): bloqueia conflito de horário`, `fix(frontend/painel): corrige total da comanda`, `chore(deps): atualiza next para 16.4.3`.

@@ -9,7 +9,8 @@ Where each principle is implemented in TaNaRegua:
 
 - Type safety → `strict: true` in both `tsconfig.json`; `typecheck` script (`tsc --noEmit`).
 - Automated validation → `.claude/settings.json` hook blocks `git commit` on lint/typecheck failure; GitHub Actions runs the full pipeline on every PR.
-- Test-driven bug fixes → Vitest (backend unit + e2e against real Postgres), frontend test runner per `.claude/rules/frontend.md`.
+- Test-driven bug fixes → Vitest (backend unit + e2e against real Postgres), frontend test runner per `.claude/rules/frontend.md`; the step-by-step cycle is the `tdd` skill (`agent_docs/skills/tdd/`).
+- Commits → `atomic-commits` and `conventional-commits` skills (`agent_docs/skills/`), on top of the rules in `.claude/rules/general.md`.
 - Stack-specific practices → `.claude/rules/backend.md`, `frontend.md`, `database.md`.
 - Demo data always current → `backend/src/seed/demo-seed.ts`: every new module ships with examples in the full seed (`seedDemo`) and in the top-up of an existing demo (`completeDemo`), covered by `backend/test/demo-seed.e2e-spec.ts`.
 
