@@ -4,6 +4,8 @@ import type { NextConfig } from 'next';
 const apiInternalUrl = process.env.API_INTERNAL_URL ?? 'http://localhost:3333';
 
 const nextConfig: NextConfig = {
+  // Não anuncia a stack em cada resposta (security.md, hardening).
+  poweredByHeader: false,
   cacheComponents: true,
   partialPrefetching: true,
   // Só afeta `next dev`: o Playwright (container `e2e`) acessa como http://frontend:3000,
