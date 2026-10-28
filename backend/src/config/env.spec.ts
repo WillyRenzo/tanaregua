@@ -14,6 +14,7 @@ const production = {
   SECRETS_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
   TRUST_PROXY_HOPS: '1',
   INTERNAL_API_TOKEN: 'i'.repeat(48),
+  PLATFORM_JWT_SECRET: 'p'.repeat(48),
 };
 
 describe('validateEnv', () => {
@@ -33,6 +34,16 @@ describe('validateEnv', () => {
 
   it('em produção, recusa subir sem o token das chamadas internas', () => {
     expect(() => validateEnv({ ...production, INTERNAL_API_TOKEN: '' })).toThrow(/INTERNAL_API_TOKEN/);
+  });
+
+  it('em produção, recusa subir sem o segredo da administração da plataforma', () => {
+    expect(() => validateEnv({ ...production, PLATFORM_JWT_SECRET: '' })).toThrow(/PLATFORM_JWT_SECRET/);
+  });
+
+  it('recusa o mesmo segredo para a barbearia e para a plataforma (um token valeria nas duas)', () => {
+    expect(() => validateEnv({ ...base, PLATFORM_JWT_SECRET: base.JWT_ACCESS_SECRET })).toThrow(
+      /PLATFORM_JWT_SECRET/,
+    );
   });
 
   it('recusa token interno curto', () => {

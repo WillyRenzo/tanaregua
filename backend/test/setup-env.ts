@@ -8,6 +8,8 @@ Object.assign(process.env, {
   LOG_LEVEL: 'warn',
   DATABASE_URL: inject('databaseUrl'),
   JWT_ACCESS_SECRET: 'test-secret-with-at-least-thirty-two-characters',
+  PLATFORM_JWT_SECRET: 'test-platform-secret-with-at-least-thirty-two-chars',
+  DATABASE_MIGRATION_URL: inject('ownerDatabaseUrl'),
   JWT_ACCESS_TTL_SECONDS: '900',
   REFRESH_TOKEN_TTL_DAYS: '30',
   CORS_ORIGINS: 'http://localhost:3000',

@@ -1433,6 +1433,119 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/platform/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Entra na administração da plataforma */
+        post: operations["PlatformController_login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Renova o access token da administração usando o cookie de refresh */
+        post: operations["PlatformController_refresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sai da administração e revoga a sessão */
+        post: operations["PlatformController_logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quem está na administração da plataforma
+         * @description **Acesso:** administração da plataforma (token próprio; token de barbearia é recusado).
+         */
+        get: operations["PlatformController_me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Planos com recursos e preços
+         * @description **Acesso:** administração da plataforma (token próprio; token de barbearia é recusado).
+         */
+        get: operations["PlatformController_plans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/platform/plans/{key}/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Define os preços mensal e anual de um plano
+         * @description Valores em centavos; `null` tira o plano de venda naquele ciclo. Vale para as próximas contratações: assinaturas já contratadas mantêm o valor.
+         *
+         *     **Acesso:** administração da plataforma (token próprio; token de barbearia é recusado).
+         */
+        put: operations["PlatformController_setPrices"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1483,6 +1596,11 @@ export interface components {
             key: string;
             name: string;
             features: components["schemas"]["Feature"][];
+            prices: components["schemas"]["PlanPrices"];
+        };
+        PlanPrices: {
+            monthlyCents: number | null;
+            yearlyCents: number | null;
         };
         BarbershopSettings: {
             /** Format: uuid */
@@ -2142,6 +2260,40 @@ export interface components {
                 /** Format: date-time */
                 sentAt: string | null;
             }[];
+        };
+        /**
+         * @example {
+         *       "email": "voce@tanaregua.app",
+         *       "password": "••••••••••••"
+         *     }
+         */
+        PlatformLoginInput: {
+            /** Format: email */
+            email: string;
+            password: string;
+        };
+        PlatformSession: {
+            accessToken: string;
+            expiresIn: number;
+            profile: components["schemas"]["PlatformProfile"];
+        };
+        PlatformProfile: {
+            admin: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                email: string;
+            };
+        };
+        /**
+         * @example {
+         *       "monthlyCents": 9990,
+         *       "yearlyCents": 99900
+         *     }
+         */
+        SetPlanPricesInput: {
+            monthlyCents: number | null;
+            yearlyCents: number | null;
         };
         /** @description Erro no formato RFC 9457. O final de `type` identifica o caso (ex.: appointment-conflict). */
         ProblemDetails: {
@@ -7443,6 +7595,214 @@ export interface operations {
             };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PlatformController_login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformLoginInput"];
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformSession"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Muitas requisições do mesmo IP (rate limit). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PlatformController_refresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformSession"];
+                };
+            };
+            /** @description Muitas requisições do mesmo IP (rate limit). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PlatformController_logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Muitas requisições do mesmo IP (rate limit). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PlatformController_me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformProfile"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PlatformController_plans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plan"][];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PlatformController_setPrices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPlanPricesInput"];
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plan"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

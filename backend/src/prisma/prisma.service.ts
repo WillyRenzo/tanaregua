@@ -9,6 +9,8 @@ export type Tx = Prisma.TransactionClient;
 export interface DbContext {
   barbershopId?: string;
   userId?: string;
+  /** Só a administração da plataforma define, e nunca junto com um tenant. */
+  platformAdminId?: string;
 }
 
 /**
@@ -20,7 +22,8 @@ export interface DbContext {
 export async function setDbContext(tx: Tx, context: DbContext): Promise<void> {
   await tx.$executeRaw`SELECT
     set_config('app.current_tenant', ${context.barbershopId ?? ''}, true),
-    set_config('app.current_user', ${context.userId ?? ''}, true)`;
+    set_config('app.current_user', ${context.userId ?? ''}, true),
+    set_config('app.current_platform_admin', ${context.platformAdminId ?? ''}, true)`;
 }
 
 @Injectable()

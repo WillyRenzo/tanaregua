@@ -53,7 +53,11 @@ describe('Assinatura e planos (e2e)', () => {
   it('lista os planos do mais básico ao mais completo, com os recursos de cada um', async () => {
     const shop = await registerTenant(app);
     const plans = await as(app, shop.token).get('/v1/plans').expect(200);
-    expect(plans.body).toEqual([
+    // Outras suítes criam planos de teste e definem preços (platform.e2e-spec): aqui só os reais.
+    const real = (plans.body as { key: string; name: string; features: string[] }[])
+      .filter((plan) => !plan.key.startsWith('test-'))
+      .map(({ key, name, features }) => ({ key, name, features }));
+    expect(real).toEqual([
       { key: 'essential', name: 'Essencial', features: [] },
       {
         key: 'professional',

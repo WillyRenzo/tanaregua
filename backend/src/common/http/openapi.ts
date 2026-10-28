@@ -106,5 +106,9 @@ export const API_TAGS = {
     'Assinatura e planos',
     'Planos da plataforma e os recursos de cada um. Recurso fora do plano responde 403 `plan-upgrade-required`.',
   ],
+  platform: [
+    'Administração da plataforma',
+    'Planos e preços do TaNaRegua. Login e token próprios, separados dos das barbearias; nenhum dado de barbearia aparece aqui.',
+  ],
   health: ['Saúde', 'Probes de liveness e readiness.'],
 } as const;

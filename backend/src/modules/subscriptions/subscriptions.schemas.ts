@@ -1,0 +1,10 @@
+import { z } from 'zod';
+
+/** Entre R$ 1,00 e R$ 100.000,00 por ciclo: fora disso é quase certo um erro de digitação. */
+const priceCentsSchema = z.int().min(100).max(10_000_000).nullable();
+
+/** Preços de um plano, definidos na administração da plataforma. `null` tira o plano de venda no ciclo. */
+export const setPlanPricesSchema = z
+  .strictObject({ monthlyCents: priceCentsSchema, yearlyCents: priceCentsSchema })
+  .meta({ id: 'SetPlanPricesInput', example: { monthlyCents: 9990, yearlyCents: 99900 } });
+export type SetPlanPricesInput = z.infer<typeof setPlanPricesSchema>;

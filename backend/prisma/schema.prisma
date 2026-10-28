@@ -810,6 +810,7 @@ model Plan {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   subscriptions Subscription[]
+  prices        PlanPrice[]
 
   @@map("plans")
 }
@@ -835,4 +836,63 @@ model Subscription {
 
   @@unique([barbershopId, id], map: "subscriptions_tenant_id_key")
   @@map("subscriptions")
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+/// Preço de um plano num ciclo de cobrança, configurado na administração da plataforma.
+/// Sem linha para o ciclo, o plano não é vendido nele. Mudar o preço não altera o valor
+/// de assinaturas já contratadas.
+model PlanPrice {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  planId      String          @map("plan_id") @db.Uuid
+  interval    BillingInterval
+  /// Centavos (BRL), sempre positivo (CHECK no SQL manual).
+  amountCents Int             @map("amount_cents")
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+  updatedById String?         @map("updated_by_id") @db.Uuid
+
+  plan      Plan           @relation(fields: [planId], references: [id], onDelete: Cascade)
+  updatedBy PlatformAdmin? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([planId, interval])
+  @@map("plan_prices")
+}
+
+// ───────────── Plataforma ─────────────
+
+/// Quem administra a plataforma TaNaRegua (planos e preços). Não pertence a nenhuma
+/// barbearia e não enxerga os dados delas. Criado só pelo comando de administração, com o
+/// usuário dono das tabelas: a aplicação não tem INSERT aqui.
+model PlatformAdmin {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  email        String   @unique
+  name         String
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  refreshTokens PlatformRefreshToken[]
+  planPrices    PlanPrice[]
+
+  @@map("platform_admins")
+}
+
+/// Refresh tokens da administração da plataforma: mesma rotação dos tokens da equipe,
+/// em tabela e cookie próprios.
+model PlatformRefreshToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  adminId   String    @map("admin_id") @db.Uuid
+  familyId  String    @map("family_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  admin PlatformAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([familyId])
+  @@map("platform_refresh_tokens")
 }

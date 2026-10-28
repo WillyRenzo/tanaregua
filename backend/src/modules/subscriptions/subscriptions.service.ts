@@ -1,12 +1,45 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { notFound } from '../../common/http/domain-error.js';
 import { TenantDb } from '../../common/tenancy/tenant-db.service.js';
-import type { Tx } from '../../prisma/prisma.service.js';
+import type { BillingInterval } from '../../generated/prisma/client.js';
+import { PrismaService, type Tx } from '../../prisma/prisma.service.js';
 import { grantedFeatures, isFeature, type Feature } from './features.js';
 import type { PlanSummary, SubscriptionSummary } from './subscriptions.responses.js';
+import type { SetPlanPricesInput } from './subscriptions.schemas.js';
+
+const PLAN_SELECT = {
+  key: true,
+  name: true,
+  features: true,
+  prices: { select: { interval: true, amountCents: true } },
+} as const;
+
+type PlanRow = {
+  key: string;
+  name: string;
+  features: string[];
+  prices: { interval: BillingInterval; amountCents: number }[];
+};
+
+const priceOf = (plan: PlanRow, interval: BillingInterval) =>
+  plan.prices.find((price) => price.interval === interval)?.amountCents ?? null;
+
+const toPlanSummary = (plan: PlanRow): PlanSummary => ({
+  key: plan.key,
+  name: plan.name,
+  features: plan.features.filter(isFeature),
+  prices: { monthlyCents: priceOf(plan, 'MONTHLY'), yearlyCents: priceOf(plan, 'YEARLY') },
+});
+
+const readPlans = async (tx: Tx): Promise<PlanSummary[]> =>
+  (await tx.plan.findMany({ select: PLAN_SELECT, orderBy: { position: 'asc' } })).map(toPlanSummary);
 
 @Injectable()
 export class SubscriptionsService {
-  constructor(@Inject(TenantDb) private readonly db: TenantDb) {}
+  constructor(
+    @Inject(TenantDb) private readonly db: TenantDb,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+  ) {}
 
   /** Assinatura de uma barbearia recém-criada, no plano padrão (chamado pelo cadastro). */
   async startDefault(tx: Tx, barbershopId: string): Promise<void> {
@@ -35,13 +68,41 @@ export class SubscriptionsService {
     return this.db.run(async (tx, auth) => (await this.summary(tx, auth.barbershopId))?.features ?? []);
   }
 
+  /** Catálogo para o painel da barbearia: planos, recursos e preços. */
   listPlans(): Promise<PlanSummary[]> {
-    return this.db.run(async (tx) => {
-      const plans = await tx.plan.findMany({
-        select: { key: true, name: true, features: true },
-        orderBy: { position: 'asc' },
-      });
-      return plans.map((plan) => ({ ...plan, features: plan.features.filter(isFeature) }));
+    return this.db.run(readPlans);
+  }
+
+  /** Mesmo catálogo, para a administração da plataforma (sem tenant). */
+  listPlansAsPlatform(adminId: string): Promise<PlanSummary[]> {
+    return this.prisma.withContext({ platformAdminId: adminId }, readPlans);
+  }
+
+  /**
+   * Define os preços de um plano. Só a administração da plataforma chama: a transação leva o
+   * administrador no contexto, sem o qual o RLS de `plan_prices` recusa a escrita. Mudar o
+   * preço não altera assinaturas já contratadas (o valor é gravado na contratação).
+   */
+  setPlanPrices(adminId: string, planKey: string, input: SetPlanPricesInput): Promise<PlanSummary> {
+    return this.prisma.withContext({ platformAdminId: adminId }, async (tx) => {
+      const plan = await tx.plan.findUnique({ where: { key: planKey }, select: { id: true } });
+      if (!plan) throw notFound('Plano');
+      const prices: [BillingInterval, number | null][] = [
+        ['MONTHLY', input.monthlyCents],
+        ['YEARLY', input.yearlyCents],
+      ];
+      for (const [interval, amountCents] of prices) {
+        if (amountCents === null) {
+          await tx.planPrice.deleteMany({ where: { planId: plan.id, interval } });
+        } else {
+          await tx.planPrice.upsert({
+            where: { planId_interval: { planId: plan.id, interval } },
+            create: { planId: plan.id, interval, amountCents, updatedById: adminId },
+            update: { amountCents, updatedById: adminId },
+          });
+        }
+      }
+      return toPlanSummary(await tx.plan.findUniqueOrThrow({ where: { id: plan.id }, select: PLAN_SELECT }));
     });
   }
 

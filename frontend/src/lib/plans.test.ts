@@ -2,13 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { hasFeature, planIncluding, subscriptionStatusLabel, type Plan } from './plans';
 import type { SessionProfile, SessionState } from './session/session-store';
 
+const prices = { monthlyCents: null, yearlyCents: null };
+
 const plans: Plan[] = [
-  { key: 'essential', name: 'Essencial', features: [] },
-  { key: 'professional', name: 'Profissional', features: ['online-payment', 'payroll', 'advanced-reports'] },
+  { key: 'essential', name: 'Essencial', features: [], prices },
+  {
+    key: 'professional',
+    name: 'Profissional',
+    features: ['online-payment', 'payroll', 'advanced-reports'],
+    prices,
+  },
   {
     key: 'premium',
     name: 'Premium',
     features: ['online-payment', 'payroll', 'advanced-reports', 'assistant'],
+    prices,
   },
 ];
 

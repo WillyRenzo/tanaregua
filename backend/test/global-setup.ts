@@ -6,6 +6,7 @@ import type { TestProject } from 'vitest/node';
 declare module 'vitest' {
   export interface ProvidedContext {
     databaseUrl: string;
+    ownerDatabaseUrl: string;
   }
 }
 
@@ -39,15 +40,18 @@ export async function setup(project: TestProject): Promise<void> {
 
   const host = container.getHost();
   const port = container.getPort();
+  const ownerDatabaseUrl = `postgresql://tanaregua:tanaregua@${host}:${port}/tanaregua`;
   execFileSync('npx', ['prisma', 'migrate', 'deploy'], {
     stdio: 'inherit',
     env: {
       ...process.env,
-      DATABASE_MIGRATION_URL: `postgresql://tanaregua:tanaregua@${host}:${port}/tanaregua`,
+      DATABASE_MIGRATION_URL: ownerDatabaseUrl,
     },
   });
 
   project.provide('databaseUrl', `postgresql://tanaregua_app:tanaregua_app@${host}:${port}/tanaregua`);
+  // Dono das tabelas: só para o que a aplicação não pode fazer (criar administrador da plataforma).
+  project.provide('ownerDatabaseUrl', ownerDatabaseUrl);
 }
 
 export async function teardown(): Promise<void> {
