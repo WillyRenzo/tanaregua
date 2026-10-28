@@ -7,7 +7,7 @@ em um SaaS multi-tenant que lida com dados pessoais, salários e pagamentos.
 
 - JWT próprio: **access token curto** (~15 min) e **refresh token rotativo**. O refresh token é guardado como hash no banco, revogado no logout e invalida toda a família de tokens quando há reuso detectado.
 - Refresh token vai em cookie `httpOnly`, `Secure`, `SameSite`. Nunca em `localStorage`.
-- **Painel e agendamento online são sessões separadas**, cada uma com o seu cookie: `tnr_refresh` (equipe, renovado em `/v1/auth/refresh`) e `tnr_client_refresh` (cliente final, renovado em `/v1/auth/client/refresh`). Login no painel nunca grava o cookie do cliente, e vice-versa. Assim, a mesma pessoa (ou o dono testando a própria página) pode estar logada nos dois no mesmo navegador sem que uma sessão substitua a outra. Não volte a unificar os cookies.
+- **Painel e agendamento online são sessões separadas**, cada uma com o seu cookie: `tnr_refresh` (equipe, renovado em `/v1/auth/refresh`) e `tnr_client_refresh` (cliente final, renovado em `/v1/auth/client/refresh`). Login no painel nunca grava o cookie do cliente, e vice-versa. Assim, a mesma pessoa (ou o dono testando a própria página) pode estar logada nos dois no mesmo navegador sem que uma sessão substitua a outra. Não volte a unificar os cookies. A administração da plataforma tem um terceiro cookie, `tnr_platform_refresh` (ver "Administração da plataforma").
 - **O login do painel entra pelo vínculo de equipe.** A mesma conta pode ser cliente de uma barbearia e equipe de outra. O painel usa o primeiro vínculo cujo papel dá acesso a ele (`canUsePanel`: qualquer permissão além de `bookings:self`). A conta que só é cliente recebe 403.
 - Senhas com **argon2id**. Nunca logue senhas, tokens ou hashes.
 - O payload do JWT tem o mínimo: `sub`, `barbershopId`, papel/versão de permissões. Nada sensível, porque o payload é legível.
@@ -60,6 +60,15 @@ em um SaaS multi-tenant que lida com dados pessoais, salários e pagamentos.
 - Webhooks: verifique a assinatura, rejeite eventos antigos (timestamp), processe de forma idempotente (tabela de eventos processados com unique no ID do evento) e responda rápido (processamento pesado vai para uma fila).
 - **Plano da assinatura (business-rules §12):** o recurso do plano é verificado na API em toda rota que depende dele (`@RequiresFeature`), nunca só escondido no frontend. O plano não vai no JWT (mudaria sem o token saber). Upgrade só vale depois de confirmado pelo gateway (webhook verificado), nunca pelo retorno do checkout no navegador.
 - A administração de planos é da plataforma, com autenticação separada; quem administra planos não ganha acesso aos dados das barbearias.
+
+## Administração da plataforma (`/admin`)
+
+- **Conta separada:** tabela `platform_admins`, sem vínculo com barbearia. A aplicação **não tem INSERT nem UPDATE** nela: contas e troca de senha só pelo comando `platform-admin`, que roda no servidor com o usuário dono das tabelas. Uma falha na API não cria administrador.
+- **Token separado:** access token assinado com `PLATFORM_JWT_SECRET` (diferente do `JWT_ACCESS_SECRET`; a API recusa subir com os dois iguais, e em produção sem ele) e com audiência própria. O token de uma barbearia não abre rota da plataforma, e o contrário também não, porque cada guard só confere o próprio segredo. Sem o segredo, as rotas `/v1/platform/*` respondem 404.
+- **Sessão separada:** cookie `tnr_platform_refresh` (httpOnly, `SameSite=Strict`), refresh rotativo em tabela própria com revogação da família no reuso, sessão de 12 h. Trocar a senha encerra as sessões abertas. Login com rate limit mais restrito (5/min por IP).
+- **Rotas:** `@PlatformAdminOnly()`; o `AccessGuard` autentica com o token da plataforma e não coloca tenant no contexto. Sem tenant, o RLS (fail-closed) não mostra nenhum dado de barbearia, e há teste disso.
+- **Preços no banco:** `plan_prices` tem leitura livre, mas INSERT, UPDATE e DELETE só passam no RLS dentro de uma transação com `app.current_platform_admin` definido, o que só a administração faz. Uma rota de barbearia que tentasse mudar preço falha no banco.
+- **Risco aceito:** sem segundo fator (TOTP) por enquanto; a proteção é senha longa, rate limit e sessão curta. Entra se a administração ganhar ações mais sensíveis que preços.
 
 ## Identidade visual (upload de logo e cores)
 

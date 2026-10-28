@@ -98,6 +98,7 @@ Senha de todas as contas: **`senha-forte-123`**.
 | Profissional | `rafa@demo.tanaregua.test` | [/entrar](http://localhost:3000/entrar) | Idem, para comparar com a Bia |
 | Cliente | `cliente@demo.tanaregua.test` | [/barbearia-demo](http://localhost:3000/barbearia-demo) | Agendar online, "Meus agendamentos", reagendar (até 24 h antes) e cancelar (até 2 h antes) |
 | Dona de outra barbearia | `dono@vizinha.tanaregua.test` | [/entrar](http://localhost:3000/entrar) | Isolamento: não enxerga nada da Barbearia Demo |
+| Administração da plataforma | `plataforma@tanaregua.dev` | [/admin](http://localhost:3000/admin) | Preços mensal e anual dos planos. Login e sessão próprios: não abre o painel das barbearias, e vice-versa |
 
 **O que já vem cadastrado** (dá para navegar por todas as telas com dados):
 - **Equipe:** três profissionais (o dono, a Bia e o Rafa) e a recepcionista, com expediente; folga da Bia amanhã à tarde e férias do Rafa na semana seguinte.
@@ -112,6 +113,7 @@ Senha de todas as contas: **`senha-forte-123`**.
 - **Próximos 7 dias:** agenda parcialmente preenchida, com confirmados nos primeiros dias.
 - **Cliente online (Paula):** "Meus agendamentos" com atendimentos passados, uma reserva que ela mesma cancelou, uma que ela mesma reagendou e reservas futuras (o botão Reagendar aparece até 24 h antes).
 - **Plano:** a Barbearia Demo está no plano mais completo (Premium) e a Vizinha no básico (Essencial), que é o plano de toda barbearia nova. Veja em Configurações → Plano.
+- **Preços dos planos:** valores **fictícios** de demonstração (Essencial R$ 79,90/mês, Profissional R$ 129,90, Premium R$ 199,90; o anual com dois meses de desconto). Mude em `/admin`. A conta da administração só é criada se o `backend/.env` tiver `DATABASE_MIGRATION_URL` (a aplicação não cria administradores).
 - **Barbearia Vizinha:** outra cor (vinho, sem logo), um cliente, um atendimento de ontem e um de amanhã, para conferir o isolamento.
 
 As datas são relativas ao dia em que o seed rodou, e o sorteio do histórico usa semente fixa
