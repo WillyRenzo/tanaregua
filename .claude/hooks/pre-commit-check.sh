@@ -10,6 +10,16 @@ if ! printf '%s' "$input" | grep -q 'git commit'; then
   exit 0
 fi
 
+# Mensagem de commit em inglês e só com ASCII (.claude/rules/general.md). Olha só o campo
+# "command" (caminhos e descrição da tool podem ter acento legítimo). O caractere pode vir cru
+# (UTF-8) ou escapado no JSON (\u00e7); os dois contam. Checado antes do lint, que é lento.
+command_field="$(printf '%s' "$input" | LC_ALL=C grep -oE '"command"[[:space:]]*:[[:space:]]*"([^"\\]|\\.)*"' | head -n 1)"
+if printf '%s' "$command_field" | LC_ALL=C grep -q $'[\x80-\xff]' \
+  || printf '%s' "$command_field" | grep -qiE '\\u(00[89a-f][0-9a-f]|0[1-9a-f][0-9a-f]{2}|[1-9a-f][0-9a-f]{3})'; then
+  echo "Commit bloqueado: a mensagem de commit precisa estar em inglês e só com ASCII (sem acentos, cedilha, travessão, aspas curvas, §, →). Veja agent_docs/skills/conventional-commits." >&2
+  exit 2
+fi
+
 root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 failed=0
 report=""

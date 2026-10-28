@@ -11,9 +11,10 @@ decidir**.
 Claude tenta rodar `git commit` (pela tool Bash ou PowerShell) e executa
 [`pre-commit-check.sh`](pre-commit-check.sh):
 
-1. Para cada app (`backend/`, `frontend/`) que já tiver `package.json`, roda `npm run lint` e `npm run typecheck` **dentro do container** do app (`docker compose run --rm --no-deps -T <app>`), porque o Node não está instalado no host. Se não houver Docker, usa o `npm` do host.
-2. Se algo falhar, sai com **exit 2**. O commit é bloqueado e o Claude recebe as últimas linhas do erro para corrigir.
-3. Apps ainda não criados são ignorados, então o hook não atrapalha durante o scaffold.
+1. Bloqueia a mensagem de commit com caractere fora do ASCII (acento, cedilha, travessão, aspas curvas, `§`, `→`): mensagens são em inglês e só com ASCII (`.claude/rules/general.md`). Olha só o campo `command` da tool, com o caractere cru ou escapado no JSON (`\u00e7`). Roda antes do lint, que é lento. Mensagem passada por arquivo (`git commit -F arquivo`) não é inspecionada.
+2. Para cada app (`backend/`, `frontend/`) que já tiver `package.json`, roda `npm run lint` e `npm run typecheck` **dentro do container** do app (`docker compose run --rm --no-deps -T <app>`), porque o Node não está instalado no host. Se não houver Docker, usa o `npm` do host.
+3. Se algo falhar, sai com **exit 2**. O commit é bloqueado e o Claude recebe o motivo (ou as últimas linhas do erro) para corrigir.
+4. Apps ainda não criados são ignorados, então o hook não atrapalha durante o scaffold.
 
 Detalhes que importam (e que o exemplo genérico original do kit errava):
 
