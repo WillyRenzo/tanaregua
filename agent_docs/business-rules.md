@@ -142,7 +142,9 @@ Não invente regra para preencher uma lacuna: pergunte.
 - **Vários planos.** Cada plano é um conjunto de **recursos** (e, se preciso, limites). Confirmado:
   - o plano **mais básico** inclui só as **fases 1 e 2** (agenda, agendamento online, comanda, comissões, caixa, relatórios básicos, estoque, pacotes, aniversários, identidade visual…);
   - o plano **mais caro** inclui o **assistente de IA** (fase 4).
-  - **[PROPOSTA]** três planos: **Essencial** (fases 1 e 2), **Profissional** (+ fase 3: pagamento online, salários e relatórios avançados) e **Premium** (+ assistente de IA). Nomes, preços e o conteúdo exato de cada um ainda serão definidos.
+  - **[PROPOSTA]** três planos: **Essencial** (fases 1 e 2), **Profissional** (+ fase 3: pagamento online, salários e relatórios avançados) e **Premium** (+ assistente de IA). Nomes, preços e o conteúdo exato de cada um ainda serão definidos. Já estão cadastrados assim, sem preço; mudar é dado, não código.
+- **[PROPOSTA] Plano de quem chega:** a barbearia nova começa no plano padrão (hoje o Essencial), com a assinatura ativa; as que já existiam entraram nele. Vale até a decisão sobre o teste grátis.
+- **[PROPOSTA] Situação da assinatura:** em teste, ativa ou em atraso, os recursos do plano continuam liberados (a carência ainda está pendente); cancelada, nenhum recurso de plano fica liberado. O núcleo das fases 1 e 2 não depende disso por enquanto.
 - **Criar ou mudar planos não exige código.** Assim como as permissões (§8), o sistema checa **recursos**, nunca o nome do plano. Um plano novo é um registro novo com a lista de recursos dele.
 - **Acesso efetivo = permissão do papel E recurso do plano.** Ex.: a recepcionista tem `assistant:use`, mas só usa o assistente se a barbearia estiver num plano com o recurso do assistente.
 - **Recurso fora do plano:** a API recusa (erro `plan-upgrade-required`) e o painel mostra o recurso como "disponível no plano X", com convite para trocar de plano. Esconder no frontend não basta: quem garante é a API.

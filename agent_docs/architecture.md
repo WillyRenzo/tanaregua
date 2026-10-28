@@ -115,18 +115,21 @@ Regras para portas novas:
 - Cada execução fica em uma tabela de auditoria por tenant (pedido, plano, confirmação, resultado).
 - **Independente do provedor:** conversa, ferramentas (Zod → JSON Schema) e resultados ficam num formato próprio do módulo; só o adapter traduz para a API do provedor (tool use do Claude, function calling de outro). Trocar de provedor não muda ferramentas nem telas; os testes rodam contra o adapter fake.
 
-## Assinatura e planos (desenho previsto; regras em business-rules §12)
+## Assinatura e planos (regras em business-rules §12)
 
 O mesmo princípio das permissões: **o código checa recursos, nunca nomes de plano**.
+Implementado: catálogo, planos, assinatura e verificação (módulo `subscriptions`). A
+cobrança e o ciclo de vida da assinatura entram nas próximas entregas.
 
-- **Catálogo de recursos em código** (`FEATURES`, como `PERMISSIONS` em `auth/permissions.ts`): uma chave por capacidade vendável (`online-payment`, `payroll`, `advanced-reports`, `assistant`…). O núcleo das fases 1 e 2 vale em todo plano e não tem chave própria.
-- **Planos no banco**, catálogo global (sem tenant): `plans` com chave, nome, preço em centavos, ciclo, lista de recursos e limites. Plano novo ou mudança de conteúdo = dado, não código.
-- **Assinatura por barbearia**: `subscriptions` (com tenant e RLS) com plano, status (`TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELED`), fim do período, `provider` e `externalId`. Eventos do gateway em tabela com unique no ID do evento (idempotência).
-- **Verificação na API**: decorator `@RequiresFeature('assistant')` + guard global depois do `AccessGuard`, que lê os recursos da assinatura da barbearia (cache curto por processo, invalidado na troca de plano). Fora do plano: 403 com `type` `plan-upgrade-required`. Acesso efetivo = permissão **e** recurso. O teste de OpenAPI passa a exigir que rotas com `@RequiresFeature` documentem o recurso, como já faz com permissões.
-- **Plano não vai no JWT**: muda com pagamento a qualquer momento e o token vive 15 min. O perfil da sessão (`/v1/auth/me`) devolve os recursos para o painel decidir o que mostrar ou oferecer como upgrade; a API revalida sempre.
+- **Catálogo de recursos em código** (`FEATURES` em `subscriptions/features.ts`, como `PERMISSIONS` em `auth/permissions.ts`): uma chave por capacidade vendável (`online-payment`, `payroll`, `advanced-reports`, `assistant`). O núcleo das fases 1 e 2 vale em todo plano e não tem chave própria. Chave desconhecida gravada num plano é ignorada.
+- **Planos no banco**, catálogo global (sem tenant e sem RLS): `plans` com chave, nome, lista de recursos, ordem de exibição e o plano padrão (no máximo um, por exclusion constraint). A aplicação **só lê** (`REVOKE INSERT, UPDATE, DELETE`); os planos vêm por migration até existir a administração da plataforma. Preço, ciclo e limites entram com a cobrança.
+- **Assinatura por barbearia**: `subscriptions` (uma por tenant, com RLS) com plano e status (`TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELED`). O cadastro da barbearia cria a assinatura no plano padrão na mesma transação. A aplicação não tem `DELETE`: trocar de plano nunca apaga nada. Na cobrança entram fim do período, `provider`, `externalId` e a tabela de eventos do gateway com unique no ID do evento (idempotência).
+- **Troca de plano** só por `SubscriptionsService.changePlan`, que nenhuma rota da barbearia chama: hoje só o seed, depois a confirmação do gateway (webhook verificado).
+- **Verificação na API**: `@RequiresFeature('assistant')` (`common/auth/requires-feature.ts`) + `FeatureGuard` global depois do `AccessGuard`, que lê os recursos da assinatura a cada rota que exige um (uma consulta por chave única; cache só se a medição pedir). Fora do plano: 403 com `type` `plan-upgrade-required`. Acesso efetivo = permissão **e** recurso. Só em rota autenticada: o tenant vem do token. O OpenAPI mostra o recurso na descrição da rota, e o teste do contrato exige isso.
+- **Plano não vai no JWT**: muda com pagamento a qualquer momento e o token vive 15 min. O perfil da sessão (`/v1/auth/me`, login, refresh) devolve `subscription` com o plano, o status e os recursos liberados; `GET /v1/plans` lista os planos com os recursos. No painel, `hasFeature()` e `<FeatureGate>` decidem entre mostrar o recurso e o convite "disponível no plano X"; a API revalida sempre.
 - **Cobrança** pela porta `PaymentGateway` (assinatura recorrente no Mercado Pago como adapter inicial). Webhook verificado → atualiza a assinatura → efeitos (e-mail de cobrança, aviso de inadimplência) saem pelo outbox.
-- **Administração dos planos** é da plataforma, não das barbearias: superfície separada, com autenticação própria e sem acesso aos dados dos tenants. **[PENDENTE]** quando e como (no começo, os planos podem vir por migration/seed).
-- **Seed**: a Barbearia Demo fica no plano mais completo (mostra tudo) e a Vizinha no básico (mostra o bloqueio e o convite de upgrade), seguindo a regra de todo módulo no seed.
+- **Administração dos planos** é da plataforma, não das barbearias: superfície separada, com autenticação própria e sem acesso aos dados dos tenants. **[PENDENTE]** quando e como (por enquanto, os planos vêm por migration).
+- **Seed**: a Barbearia Demo fica no plano mais completo (mostra tudo) e a Vizinha no básico (mostra o bloqueio e o convite de upgrade). Numa demo existente, o complemento troca o plano só se ela ainda estiver no padrão.
 
 ## Frontend
 

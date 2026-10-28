@@ -325,7 +325,7 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
 ### Fase 3 · Dinheiro
 
 - **Assinatura e planos (vem primeiro na fase 3):** o uso do TaNaRegua passa a exigir assinatura por barbearia, com vários planos. O básico cobre as fases 1 e 2; o mais caro inclui o assistente de IA (fase 4); proposta de um intermediário com a fase 3. Entregas, em ordem:
-  1. catálogo de recursos, planos e assinatura por barbearia, com verificação na API (`@RequiresFeature`) e no painel (recurso fora do plano aparece como upgrade);
+  1. catálogo de recursos, planos e assinatura por barbearia, com verificação na API (`@RequiresFeature`) e no painel (recurso fora do plano aparece como upgrade) (feito em 28/10/2026: o painel mostra o plano em Configurações, e o `<FeatureGate>` está pronto para os recursos da fase 3);
   2. cobrança recorrente pela porta `PaymentGateway` (Mercado Pago), com webhook verificado e idempotente;
   3. inadimplência, teste grátis e troca de plano, conforme as decisões pendentes em `business-rules.md` §12.
   - A verificação de recursos precisa estar pronta **antes** de liberar qualquer recurso da fase 3 ou 4, senão o plano básico já nasceria com eles.
