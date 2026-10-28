@@ -4,6 +4,10 @@ import type { NextConfig } from 'next';
 const apiInternalUrl = process.env.API_INTERNAL_URL ?? 'http://localhost:3333';
 
 const nextConfig: NextConfig = {
+  // Imagem de produção enxuta: `server.js` + só os node_modules rastreados (frontend/Dockerfile).
+  // A config (inclusive os rewrites abaixo) é congelada no build: API_INTERNAL_URL entra como
+  // argumento do build da imagem.
+  output: 'standalone',
   // Não anuncia a stack em cada resposta (security.md, hardening).
   poweredByHeader: false,
   cacheComponents: true,
