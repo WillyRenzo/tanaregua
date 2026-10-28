@@ -50,6 +50,7 @@ model Barbershop {
   memberships        Membership[]
   whatsappConnection WhatsAppConnection?
   campaigns          Campaign[]
+  subscription       Subscription?
 
   @@map("barbershops")
 }
@@ -791,4 +792,47 @@ model MarketingMessage {
   @@unique([campaignId, clientId], map: "marketing_messages_campaign_client_key")
   @@index([barbershopId, campaignId])
   @@map("marketing_messages")
+}
+
+/// Plano de assinatura (business-rules §12). Catálogo global da plataforma, sem tenant: a
+/// aplicação só lê. Plano novo ou mudança de conteúdo é dado (por migration, por enquanto).
+model Plan {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  /// Identificador estável para seed e integrações. O código checa recursos, nunca a chave.
+  key       String   @unique
+  name      String
+  /// Chaves do catálogo FEATURES (subscriptions/features.ts). Chave desconhecida é ignorada.
+  features  String[]
+  /// Ordem de exibição, do mais básico ao mais completo.
+  position  Int      @unique
+  /// Plano de quem cria uma barbearia. No máximo um (constraint no SQL manual).
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+/// Assinatura da barbearia: uma por tenant. Trocar de plano nunca apaga dados (§12).
+model Subscription {
+  id           String             @id @default(uuid(7)) @db.Uuid
+  barbershopId String             @unique @map("barbershop_id") @db.Uuid
+  planId       String             @map("plan_id") @db.Uuid
+  status       SubscriptionStatus @default(ACTIVE)
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "subscriptions_barbershop_fkey")
+  plan       Plan       @relation(fields: [planId], references: [id], map: "subscriptions_plan_fkey")
+
+  @@unique([barbershopId, id], map: "subscriptions_tenant_id_key")
+  @@map("subscriptions")
 }

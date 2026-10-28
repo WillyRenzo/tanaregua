@@ -8,6 +8,7 @@ import type { Request } from 'express';
 import { ClsModule } from 'nestjs-cls';
 import { LoggerModule } from 'nestjs-pino';
 import { AccessGuard } from './common/auth/access.guard.js';
+import { FeatureGuard } from './common/auth/requires-feature.js';
 import { isInternalRequest } from './common/http/internal-request.js';
 import { ProblemDetailsFilter } from './common/http/problem-details.filter.js';
 import { validateEnv, type Env } from './config/env.js';
@@ -28,6 +29,7 @@ import { ProductsModule } from './modules/products/products.module.js';
 import { PackagesModule } from './modules/packages/packages.module.js';
 import { ReportsModule } from './modules/reports/reports.module.js';
 import { MarketingModule } from './modules/marketing/marketing.module.js';
+import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { ClockModule } from './common/time/clock.js';
 import { StorageModule } from './common/storage/object-storage.js';
@@ -92,10 +94,13 @@ import { StorageModule } from './common/storage/object-storage.js';
     OrdersModule,
     ReportsModule,
     MarketingModule,
+    SubscriptionsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: AccessGuard },
+    // Depois do AccessGuard: precisa do tenant autenticado para ler a assinatura.
+    { provide: APP_GUARD, useClass: FeatureGuard },
     { provide: APP_FILTER, useClass: ProblemDetailsFilter },
   ],
 })

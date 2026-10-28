@@ -23,6 +23,7 @@ docker compose down -v                     # para e APAGA o banco local (bootstr
 - **Frontend:** o Turbopack (bundler padrão do Next 16) **não tem modo polling**, então mudanças salvas no Windows não aparecem até `docker compose restart frontend`. Saídas, em ordem de preferência:
   1. Manter o repositório dentro do sistema de arquivos do WSL2 (`\\wsl$\...`): eventos nativos, hot reload normal e I/O mais rápido.
   2. Rodar o dev com webpack (`next dev --webpack` + `WATCHPACK_POLLING=true`), aceitando que o bundler de dev será diferente do de build.
+- **Arquivo novo importado no frontend** é o caso mais traiçoeiro: o dev server não vê o arquivo, responde `Module not found` e devolve 500 em **todas** as rotas, não só na que mudou. No Playwright, isso aparece como timeout em todos os testes, inclusive nos que não têm relação com a mudança. Antes de concluir que o código quebrou, confira `docker compose logs frontend` e rode `docker compose restart frontend`.
 
 ## Prisma CLI (dentro do container do backend)
 
@@ -37,7 +38,7 @@ npm run db:generate              # regenera o client
 ## Testes
 
 - Backend e2e: Testcontainers sobe um Postgres efêmero via o Docker do host (socket montado no container). Nada compartilhado entre execuções.
-- Frontend E2E: `RATE_LIMIT_ENABLED=false docker compose up -d backend frontend` e depois `docker compose --profile e2e run --rm --no-deps e2e`. A imagem oficial do Playwright tem a mesma versão do `@playwright/test`; ao atualizar um, atualize o outro. Relatório em `frontend/playwright-report/`.
+- Frontend E2E: `RATE_LIMIT_ENABLED=false docker compose up -d backend frontend` e depois `docker compose --profile e2e run --rm --no-deps e2e`. No Windows, se o frontend ganhou arquivo novo, rode `docker compose restart frontend` antes (ver "Hot reload no Windows"). Ao terminar, `docker compose up -d backend` religa o rate limit. A imagem oficial do Playwright tem a mesma versão do `@playwright/test`; ao atualizar um, atualize o outro. Relatório em `frontend/playwright-report/`.
 - O dev server do Next só serve `/_next/*` para origens liberadas; `frontend` (o host visto pelo container de E2E) está em `allowedDevOrigins`.
 
 ## GitHub CLI (`gh`)

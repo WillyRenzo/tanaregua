@@ -111,6 +111,7 @@ Senha de todas as contas: **`senha-forte-123`**.
 - **Hoje:** agenda com todos os status (agendado, confirmado, em atendimento, concluído, não compareceu, cancelado), comandas aberta, fechada, estornada e avulsa, e uma venda de balcão. Clientes que faltaram sem justificativa aparecem com alerta na ficha do agendamento.
 - **Próximos 7 dias:** agenda parcialmente preenchida, com confirmados nos primeiros dias.
 - **Cliente online (Paula):** "Meus agendamentos" com atendimentos passados, uma reserva que ela mesma cancelou, uma que ela mesma reagendou e reservas futuras (o botão Reagendar aparece até 24 h antes).
+- **Plano:** a Barbearia Demo está no plano mais completo (Premium) e a Vizinha no básico (Essencial), que é o plano de toda barbearia nova. Veja em Configurações → Plano.
 - **Barbearia Vizinha:** outra cor (vinho, sem logo), um cliente, um atendimento de ontem e um de amanhã, para conferir o isolamento.
 
 As datas são relativas ao dia em que o seed rodou, e o sorteio do histórico usa semente fixa

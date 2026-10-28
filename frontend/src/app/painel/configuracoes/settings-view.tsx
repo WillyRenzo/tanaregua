@@ -15,6 +15,7 @@ import { errorMessage } from '@/lib/api/errors';
 import { zodResolver } from '@/lib/forms/zod-resolver';
 import { useBarbershop, useUpdateBarbershop, type BarbershopSettings } from '@/lib/queries';
 import { BrandSettings } from './brand-settings';
+import { PlanSettings } from './plan-settings';
 
 /** Fusos do Brasil (o Acre e o Amazonas ocidental têm fuso próprio). */
 const TIMEZONES = [
@@ -33,6 +34,7 @@ export function SettingsView() {
     <div className="grid gap-10">
       <SettingsForm settings={barbershop.data!} />
       <BrandSettings settings={barbershop.data!} />
+      <PlanSettings />
     </div>
   );
 }

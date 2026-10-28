@@ -7,11 +7,13 @@ import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { RefreshTokenService } from './refresh-token.service.js';
 import { SessionCookieService } from './session-cookie.service.js';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module.js';
 
 /** Global porque o AccessGuard (APP_GUARD) precisa do AccessTokenService. */
 @Global()
 @Module({
   imports: [
+    SubscriptionsModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env, true>) => ({

@@ -157,6 +157,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Planos, do mais básico ao mais completo, com os recursos de cada um */
+        get: operations["PlansController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/barbershop": {
         parameters: {
             query?: never;
@@ -1449,6 +1466,23 @@ export interface components {
                 };
             };
             permissions: string[];
+            subscription: components["schemas"]["SubscriptionSummary"] | null;
+        };
+        SubscriptionSummary: {
+            plan: {
+                key: string;
+                name: string;
+            };
+            /** @enum {string} */
+            status: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED";
+            features: components["schemas"]["Feature"][];
+        };
+        /** @enum {string} */
+        Feature: "online-payment" | "payroll" | "advanced-reports" | "assistant";
+        Plan: {
+            key: string;
+            name: string;
+            features: components["schemas"]["Feature"][];
         };
         BarbershopSettings: {
             /** Format: uuid */
@@ -1473,6 +1507,7 @@ export interface components {
             name: string;
             isSystem: boolean;
             permissions: string[];
+            subscription: components["schemas"]["SubscriptionSummary"] | null;
         };
         StaffMember: {
             /** Format: uuid */
@@ -2561,6 +2596,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionProfile"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    PlansController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plan"][];
                 };
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */

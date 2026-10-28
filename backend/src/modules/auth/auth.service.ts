@@ -10,6 +10,7 @@ import { hashPassword, verifyPassword } from './password.js';
 import { canUsePanel, DEFAULT_ROLES, isPermission } from './permissions.js';
 import { RefreshTokenService } from './refresh-token.service.js';
 import type { SessionProfile } from '../registry.responses.js';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 
 export interface Session {
   accessToken: string;
@@ -32,12 +33,13 @@ export class AuthService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AccessTokenService) private readonly accessTokens: AccessTokenService,
     @Inject(RefreshTokenService) private readonly refreshTokens: RefreshTokenService,
+    @Inject(SubscriptionsService) private readonly subscriptions: SubscriptionsService,
     @Inject(ConfigService) config: ConfigService<Env, true>,
   ) {
     this.accessTtlSeconds = config.get('JWT_ACCESS_TTL_SECONDS');
   }
 
-  /** Cria dono + barbearia + papéis padrão numa única transação. */
+  /** Cria dono + barbearia + papéis padrão + assinatura no plano padrão numa única transação. */
   async registerBarbershop(input: RegisterBarbershopInput): Promise<Session> {
     const passwordHash = await hashPassword(input.password);
 
@@ -56,6 +58,7 @@ export class AuthService {
         data: { name: input.barbershopName, slug: input.slug },
       });
       await setDbContext(tx, { barbershopId: barbershop.id, userId: user.id });
+      await this.subscriptions.startDefault(tx, barbershop.id);
 
       await tx.role.createMany({
         data: Object.values(DEFAULT_ROLES).map((role) => ({
@@ -182,6 +185,7 @@ export class AuthService {
           role: { key: role.key, name: role.name },
         },
         permissions: role.permissions.filter(isPermission),
+        subscription: await this.subscriptions.summary(tx, membership.barbershopId),
       };
     });
   }

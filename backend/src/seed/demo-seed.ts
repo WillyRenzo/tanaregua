@@ -19,6 +19,7 @@ import { PackagesService } from '../modules/packages/packages.service.js';
 import { ProductsService } from '../modules/products/products.service.js';
 import { PublicBookingService } from '../modules/public-booking/public-booking.service.js';
 import { StaffService } from '../modules/staff/staff.service.js';
+import { SubscriptionsService } from '../modules/subscriptions/subscriptions.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 /**
@@ -80,6 +81,8 @@ const minutes = (clock: Clock24) => {
 const DEMO_PRIMARY_COLOR = '#1f5f8b';
 const DEMO_SECONDARY_COLOR = '#e3c567';
 const NEIGHBOR_PRIMARY_COLOR = '#7a1f5c';
+/** A demo mostra tudo; a Vizinha fica no plano padrão (básico) e mostra o convite de upgrade. */
+const DEMO_PLAN_KEY = 'premium';
 
 const pickPayment = weighted<PaymentMethod>([
   [45, 'PIX'],
@@ -133,6 +136,7 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
     password: DEMO_PASSWORD,
     ownerIsProfessional: true,
   });
+  await app.get(SubscriptionsService).changePlan(owner.profile.barbershop.id, DEMO_PLAN_KEY);
 
   await as(owner, async () => {
     await staff.create({
@@ -712,7 +716,28 @@ export async function completeDemo(
     }
   });
 
+  if (await upgradeDemoPlan(app, slugs.demo)) added.push('plano Premium na demo');
+
   return added;
+}
+
+/**
+ * A demo antiga ganhou o plano padrão na migration: passa para o mais completo. Se alguém já
+ * trocou o plano dela (ex.: para testar o bloqueio), a troca fica como está.
+ */
+async function upgradeDemoPlan(app: INestApplicationContext, slug: string): Promise<boolean> {
+  const prisma = app.get(PrismaService);
+  const shop = await prisma.barbershop.findUnique({ where: { slug }, select: { id: true } });
+  if (!shop) return false;
+  const subscription = await prisma.withContext({ barbershopId: shop.id }, (tx) =>
+    tx.subscription.findUnique({
+      where: { barbershopId: shop.id },
+      select: { plan: { select: { isDefault: true } } },
+    }),
+  );
+  if (!subscription?.plan.isDefault) return false;
+  await app.get(SubscriptionsService).changePlan(shop.id, DEMO_PLAN_KEY);
+  return true;
 }
 
 /**
