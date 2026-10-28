@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasFeature, planIncluding, subscriptionStatusLabel, type Plan } from './plans';
+import { hasFeature, planIncluding, subscriptionStatusLabel, yearlyDiscount, type Plan } from './plans';
 import type { SessionProfile, SessionState } from './session/session-store';
 
 const prices = { monthlyCents: null, yearlyCents: null };
@@ -67,5 +67,22 @@ describe('subscriptionStatusLabel', () => {
     expect(subscriptionStatusLabel('TRIALING')).toBe('Em período de teste');
     expect(subscriptionStatusLabel('PAST_DUE')).toBe('Pagamento em atraso');
     expect(subscriptionStatusLabel('CANCELED')).toBe('Assinatura cancelada');
+  });
+});
+
+describe('yearlyDiscount', () => {
+  it('compara o anual com 12 mensalidades, em basis points', () => {
+    // 12 x R$ 99,90 = R$ 1.198,80; o anual de R$ 999,00 sai 16,67% mais barato.
+    expect(yearlyDiscount(9990, 99900)).toBe(1667);
+    expect(yearlyDiscount(10000, 120000)).toBe(0);
+  });
+
+  it('é negativo quando o anual sai mais caro', () => {
+    expect(yearlyDiscount(10000, 130000)).toBe(-833);
+  });
+
+  it('sem um dos preços, não há o que comparar', () => {
+    expect(yearlyDiscount(null, 99900)).toBeNull();
+    expect(yearlyDiscount(9990, null)).toBeNull();
   });
 });
