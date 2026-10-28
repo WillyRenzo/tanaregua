@@ -219,7 +219,13 @@ No Linux, o hot reload funciona nos dois apps sem configuração extra, porque o
 
 ## Atenção no deploy
 
+O passo a passo de produção (VPS, imagens, migrations, backup e restauração) está em
+[deploy/README.md](deploy/README.md).
+
 Com `NODE_ENV=production`, a API valida o ambiente na inicialização e **não sobe** se faltar algo:
+
+- **`TRUST_PROXY_HOPS` precisa ser pelo menos 1.** A API fica atrás do Caddy; com 0, o rate limit veria só o IP do proxy e todos os visitantes dividiriam o mesmo limite. O compose de produção já usa 1.
+- **`INTERNAL_API_TOKEN` é obrigatória** (`openssl rand -base64 48`). O mesmo valor vai para o frontend: é com ele que o SSR da página pública fica fora do rate limit por IP.
 
 - **`SECRETS_ENCRYPTION_KEY` é obrigatória.** Ela cifra os segredos de terceiros guardados no banco, como o token do WhatsApp de cada barbearia. Gere uma vez com `openssl rand -base64 32` e guarde junto com os outros segredos de produção, fora do repositório. **Não troque a chave depois:** se trocar, os tokens salvos deixam de abrir e cada barbearia precisa reconectar o WhatsApp.
 - `RATE_LIMIT_ENABLED=false` é recusado (só serve para o E2E local).
@@ -283,4 +289,4 @@ agent_docs/        regras de negócio, segurança, arquitetura e fluxo de trabal
 - [x] Aniversários e campanhas por e-mail e WhatsApp (com consentimento por canal)
 - [ ] Pagamento online (Pix e cartão)
 - [ ] Salários e folha
-- [ ] Deploy de produção
+- [ ] Deploy de produção (infraestrutura pronta em `deploy/`; falta subir na VPS)

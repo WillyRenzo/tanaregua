@@ -4,9 +4,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import type { Request } from 'express';
 import { ClsModule } from 'nestjs-cls';
 import { LoggerModule } from 'nestjs-pino';
 import { AccessGuard } from './common/auth/access.guard.js';
+import { isInternalRequest } from './common/http/internal-request.js';
 import { ProblemDetailsFilter } from './common/http/problem-details.filter.js';
 import { validateEnv, type Env } from './config/env.js';
 import { HealthModule } from './health/health.module.js';
@@ -59,7 +61,14 @@ import { StorageModule } from './common/storage/object-storage.js';
       useFactory: (config: ConfigService<Env, true>) => ({
         throttlers: [{ name: 'default', ttl: 60_000, limit: 120 }],
         // Testes (e2e do backend e Playwright) criam dezenas de contas por minuto do mesmo IP.
-        skipIf: () => config.get('NODE_ENV') === 'test' || !config.get('RATE_LIMIT_ENABLED'),
+        // O SSR do Next sai sempre do mesmo IP e se identifica pelo token interno (security.md).
+        skipIf: (context) =>
+          config.get('NODE_ENV') === 'test' ||
+          !config.get('RATE_LIMIT_ENABLED') ||
+          isInternalRequest(
+            context.switchToHttp().getRequest<Request>().headers,
+            config.get('INTERNAL_API_TOKEN'),
+          ),
       }),
     }),
     ScheduleModule.forRoot(),

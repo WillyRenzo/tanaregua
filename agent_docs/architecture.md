@@ -81,10 +81,30 @@ Regras para portas novas:
 
 - **Destino inicial:** VPS da Hostinger rodando Docker Compose de produção: Postgres, API, web e um proxy reverso com HTTPS automático (Caddy). É a mesma topologia do desenvolvimento, com imagens de produção (build multi-stage, `node:24-alpine`, usuário não-root).
 - **Nada específico da Hostinger no código ou nas imagens.** Toda configuração vem de variáveis de ambiente validadas na inicialização; o compose de produção e os scripts de deploy ficam em `deploy/`. Mudar para outro provedor (outra VPS, Fly, Render, AWS) é rodar as mesmas imagens em outro lugar.
-- **Migrations** rodam como passo separado do deploy (`prisma migrate deploy`) com o usuário de migração, nunca com `tanaregua_app`.
-- **Pipeline:** o CI publica as imagens num registry (GHCR); o deploy na VPS faz `pull` + `migrate` + `up -d` por SSH. Rollback = subir a tag anterior.
+- **Migrations** rodam como passo separado do deploy (`prisma migrate deploy`) com o usuário de migração, nunca com `tanaregua_app`. Ficam numa imagem própria (`tanaregua-migrate`, alvo `migrate` do `backend/Dockerfile`), com o CLI e o schema engine baixados no build.
+- **Compatibilidade entre versões (expand/contract):** o rollback troca o código, mas não desfaz migrations. Toda migration precisa funcionar com o código da versão anterior. Para remover ou renomear uma coluna:
+  1. a versão N adiciona a coluna nova e para de usar a antiga;
+  2. a versão N+1 remove a antiga.
+- **Pipeline:**
+  - O job `images` do CI, só no `main` e depois dos testes, publica `tanaregua-backend`, `tanaregua-migrate` e `tanaregua-frontend` no GHCR, com a tag igual ao SHA do commit.
+  - O deploy é manual (workflow **Deploy**): copia `deploy/` daquele commit para a VPS por SSH e roda `deploy.sh <sha>`, que faz `pull` + `migrate` + `up -d --wait`.
+  - Rollback = rodar o Deploy com o SHA anterior.
+  - Runbook em `deploy/README.md`.
+- **Topologia na VPS:**
+  - O Caddy é o único serviço com portas publicadas (80/443).
+  - `/api/*` vai direto ao NestJS, e o resto vai ao Next (o rewrite `/api` do Next só é usado em desenvolvimento).
+  - API, web e Postgres ficam só na rede interna. Se a API fosse alcançável direto, o `X-Forwarded-For` poderia ser forjado.
+  - O Next standalone congela o `next.config` no build: `API_INTERNAL_URL` entra como argumento do build da imagem.
+- **Rate limit atrás do proxy:**
+  - O Caddy descarta o `X-Forwarded-For` recebido de fora e grava o IP do visitante. Por isso, em produção, `TRUST_PROXY_HOPS=1`, e a API recusa subir com 0.
+  - As chamadas SSR do Next saem todas do mesmo IP. Elas se identificam com `INTERNAL_API_TOKEN` (cabeçalho `x-internal-token`, que o Caddy remove das requisições externas) e ficam fora do limite por IP (`common/http/internal-request.ts`).
+- **Baseline de performance (28/10/2026):** dados da demo (14 atendimentos no dia), 40 requisições sequenciais na stack de desenvolvimento. A agenda do dia e a disponibilidade (painel e pública) ficam em ~11 ms no p50 e ~15 ms no p95. Use esses números para comparar quando a agenda crescer.
 - **Domínio próprio da barbearia:** o Caddy emite certificado sob demanda (on-demand TLS) só para domínios que a API confirma estarem cadastrados e verificados (endpoint interno `ask`); o frontend resolve o `Host` para o slug da barbearia. Sem essa checagem, qualquer domínio apontado para a VPS geraria certificado.
-- **Dados:** backup diário criptografado do Postgres para fora da VPS (storage S3-compatível), com teste de restore. Volume do `ObjectStorage` local também entra no backup.
+- **Dados:**
+  - Backup diário do Postgres para fora da VPS, num storage S3-compatível. O volume do `ObjectStorage` local (logos) entra no mesmo arquivo.
+  - O serviço `backup` (`deploy/backup/`) junta o `pg_dump` (formato custom) com os logos, cifra com a **chave pública** age e envia com rclone. A retenção é configurável.
+  - A chave privada fica fora da VPS: quem invadir o servidor não lê os backups.
+  - A restauração (`restore.sh`) foi ensaiada num banco vazio: contagens, RLS e privilégios do `tanaregua_app` conferidos. O ensaio deve ser repetido a cada trimestre (runbook).
 
 ## Assistente de IA (fase 4, desenho previsto)
 

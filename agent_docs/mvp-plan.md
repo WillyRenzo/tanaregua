@@ -295,10 +295,21 @@
 O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
 `business-rules.md`; desenho técnico em `architecture.md`.
 
-### B7 · Endurecimento e deploy (próximo)
+### B7 · Endurecimento e deploy (em andamento)
 
-- Auditoria (`security-audit`, `code-review`), revisão de IDOR por endpoint, baseline de performance de `/availability` e da agenda do dia.
-- Deploy na **VPS da Hostinger** com Docker Compose de produção (`deploy/`): imagens multi-stage, Caddy com HTTPS, migrations com usuário próprio, imagens no GHCR publicadas pelo CI, backup criptografado fora da VPS.
+- **Auditoria e IDOR** (feito em 28/10/2026). Escopo `:own` conferido na agenda e nas comissões; nenhum vazamento entre tenants. Três correções:
+  - o login do painel caía no vínculo de cliente;
+  - o rate limit era dividido por todos atrás do proxy;
+  - a página pública guardava em cache uma falha da API como "não encontrada".
+- **Baseline de performance** (feito): agenda do dia e disponibilidade em ~11 ms no p50 e ~15 ms no p95 com os dados da demo (`architecture.md`).
+- **Infraestrutura de deploy** (feita, `deploy/`): ensaiada localmente, com HTTPS, rate limit atrás do Caddy e backup + restore. Inclui:
+  - imagens multi-stage não-root;
+  - Caddy com HTTPS;
+  - migrations numa imagem própria;
+  - imagens no GHCR publicadas pelo CI;
+  - workflow manual de deploy por SSH;
+  - backup diário cifrado (age) fora da VPS.
+- **Falta:** subir na VPS real (runbook em `deploy/README.md`) e o domínio próprio da barbearia.
 - Nada específico do provedor no código: trocar de hospedagem = rodar as mesmas imagens em outro lugar.
 - **Domínio próprio da barbearia (opcional):** a barbearia compra e aponta o DNS; a plataforma verifica e emite HTTPS automaticamente (Caddy on-demand TLS). Fica com o deploy porque só dá para testar de ponta a ponta com o servidor no ar.
 

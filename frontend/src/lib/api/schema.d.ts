@@ -2415,6 +2415,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description `about:blank`: A conta só tem cadastro de cliente: não tem acesso ao painel. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Muitas requisições do mesmo IP (rate limit). */
             429: {
                 headers: {

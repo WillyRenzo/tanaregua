@@ -8,6 +8,7 @@ em um SaaS multi-tenant que lida com dados pessoais, salários e pagamentos.
 - JWT próprio: **access token curto** (~15 min) e **refresh token rotativo**. O refresh token é guardado como hash no banco, revogado no logout e invalida toda a família de tokens quando há reuso detectado.
 - Refresh token vai em cookie `httpOnly`, `Secure`, `SameSite`. Nunca em `localStorage`.
 - **Painel e agendamento online são sessões separadas**, cada uma com o seu cookie: `tnr_refresh` (equipe, renovado em `/v1/auth/refresh`) e `tnr_client_refresh` (cliente final, renovado em `/v1/auth/client/refresh`). Login no painel nunca grava o cookie do cliente, e vice-versa. Assim, a mesma pessoa (ou o dono testando a própria página) pode estar logada nos dois no mesmo navegador sem que uma sessão substitua a outra. Não volte a unificar os cookies.
+- **O login do painel entra pelo vínculo de equipe.** A mesma conta pode ser cliente de uma barbearia e equipe de outra. O painel usa o primeiro vínculo cujo papel dá acesso a ele (`canUsePanel`: qualquer permissão além de `bookings:self`). A conta que só é cliente recebe 403.
 - Senhas com **argon2id**. Nunca logue senhas, tokens ou hashes.
 - O payload do JWT tem o mínimo: `sub`, `barbershopId`, papel/versão de permissões. Nada sensível, porque o payload é legível.
 - Rate limit (`@nestjs/throttler`) em login, refresh, recuperação de senha e nos endpoints públicos de agendamento.
@@ -100,9 +101,25 @@ em um SaaS multi-tenant que lida com dados pessoais, salários e pagamentos.
 
 ## Decisões de implementação e riscos residuais (MVP)
 
-- **Rate limit:** `@nestjs/throttler` global (120/min) e mais restrito em auth (10/min) e nas rotas públicas. `RATE_LIMIT_ENABLED=false` existe só para o E2E local; a aplicação **recusa subir** com isso em produção. Atrás de load balancer, configure `TRUST_PROXY_HOPS`, senão todos os clientes dividem o mesmo limite.
+- **Rate limit:**
+  - `@nestjs/throttler` global (120/min), mais restrito em auth (10/min) e nas rotas públicas.
+  - `RATE_LIMIT_ENABLED=false` existe só para o E2E local; a aplicação **recusa subir** com isso em produção.
+  - O limite é por IP do visitante. Em produção, o Caddy descarta o `X-Forwarded-For` vindo de fora e grava o IP real; a API usa `TRUST_PROXY_HOPS=1` e **recusa subir** com 0. Com 0, todos os visitantes dividiriam o limite do proxy.
+  - O SSR do Next (todas as chamadas saem do mesmo IP) se identifica com `INTERNAL_API_TOKEN`, obrigatório em produção e comparado em tempo constante. Essas chamadas ficam fora do limite por IP. Sem isso, ~20 slugs inexistentes por minuto derrubariam a página pública de todas as barbearias.
+  - O Caddy remove `x-internal-token` das requisições externas. O token só vale para o rate limit, não para autorização.
+  - A página pública só trata 404 como "barbearia inexistente". Outras falhas (429, 5xx) lançam erro, que não vai para o cache.
 - **Privilégios no banco:** o usuário da aplicação não é dono de nada, não lê `_prisma_migrations` e não tem UPDATE/DELETE nos lançamentos financeiros (há teste de regressão).
 - **Supply chain na prática:** `min-release-age=3` barrou o `next@16.4.3` (publicado havia menos de 3 dias); usamos o 16.4.2. Pacotes adicionados pelo CLI do shadcn (`cn`) foram verificados (mantenedor, dependência do CLI oficial, sem install scripts). `@hookform/resolvers` foi trocado por um resolver local de 15 linhas.
 - **Risco aceito:** cadastrar como funcionário um e-mail que já tem conta revela ao dono da barbearia o nome dessa pessoa. É o custo de permitir que um profissional trabalhe em duas barbearias com uma conta. Alternativa futura: convite por e-mail com aceite.
 - **Risco aceito:** o access token continua válido por até 15 min depois de um funcionário ser desativado (o refresh já falha). Se precisar de corte imediato, versionar permissões no token.
-- **Pendente para produção:** HTTPS (cookie `Secure` já vale com `NODE_ENV=production`), segredos no gerenciador da plataforma, backups criptografados, `MAIL_PROVIDER=resend` com domínio verificado.
+- **Produção (B7, `deploy/`):**
+  - HTTPS automático pelo Caddy, com HSTS. O cookie `Secure` vale com `NODE_ENV=production`.
+  - Imagens com usuário não-root. Só o Caddy expõe portas.
+  - Segredos num `.env` da VPS com `chmod 600`.
+  - Backup diário cifrado com a chave pública age (a chave privada fica fora da VPS), com o restore ensaiado.
+  - Cabeçalho `X-Powered-By` desligado no Next.
+  - Swagger desligado em produção.
+- **Pendente para produção:**
+  - `MAIL_PROVIDER=resend` com domínio verificado;
+  - o ensaio de restauração na VPS real (checklist em `deploy/README.md`).
+- **Risco aceito:** a imagem `node:24-alpine` costuma ter CVEs abertas nos pacotes do sistema. Mitigação: cada publicação no `main` reconstrói com `--pull`, e o Dependabot acompanha as imagens base. Uma CVE alcançável vira deploy fora do ciclo.

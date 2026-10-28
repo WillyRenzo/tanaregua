@@ -143,6 +143,50 @@ describe('Auth (e2e)', () => {
     expect(response.body.errors[0]).toMatch(/reservado/);
   });
 
+  it('no painel, entra pelo vínculo de equipe mesmo que a conta tenha virado cliente antes', async () => {
+    // O barbeiro era cliente da barbearia A e depois foi contratado pela B, com a mesma conta.
+    const clientShop = await registerTenant(app);
+    const employer = await registerTenant(app);
+    const email = `barbeiro-${Date.now()}@teste.com`;
+    await request(app.getHttpServer())
+      .post(`/v1/public/${clientShop.slug}/auth/register`)
+      .send({ name: 'Bia', email, password: 'senha-forte-123' })
+      .expect(201);
+    await as(app, employer.token)
+      .post('/v1/staff')
+      .send({
+        name: 'Bia',
+        email,
+        password: 'outra-senha-123',
+        roleKey: 'professional',
+        isProfessional: true,
+      })
+      .expect(201);
+
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'senha-forte-123' })
+      .expect(200);
+
+    expect(login.body.profile.barbershop.id).toBe(employer.barbershopId);
+    expect(login.body.profile.membership.role.key).toBe('professional');
+  });
+
+  it('no painel, recusa a conta que só é cliente', async () => {
+    const shop = await registerTenant(app);
+    const email = `so-cliente-${Date.now()}@teste.com`;
+    await request(app.getHttpServer())
+      .post(`/v1/public/${shop.slug}/auth/register`)
+      .send({ name: 'Cliente', email, password: 'senha-forte-123' })
+      .expect(201);
+
+    const login = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email, password: 'senha-forte-123' })
+      .expect(403);
+    expect(login.body.detail).toMatch(/não tem acesso ao painel/);
+  });
+
   it('sessão do painel e sessão de cliente no mesmo navegador são independentes', async () => {
     const shop = await registerTenant(app);
     // Agent guarda os cookies entre requisições, como um navegador.

@@ -79,3 +79,29 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  # Publica as imagens de produção no GHCR só depois de backend e frontend passarem, e só
+  # no main. A tag é o SHA do commit: deploy e rollback escolhem a versão por ele.
+  images:
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Login no GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Build e push das imagens
+        run: |
+          prefix="ghcr.io/$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')/tanaregua"
+          label="org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY"
+          docker build --pull --label "$label" --target runtime -t "$prefix-backend:$GITHUB_SHA" backend
+          docker build --pull --label "$label" --target migrate -t "$prefix-migrate:$GITHUB_SHA" backend
+          docker build --pull --label "$label" -t "$prefix-frontend:$GITHUB_SHA" frontend
+          for image in backend migrate frontend; do
+            docker push "$prefix-$image:$GITHUB_SHA"
+          done

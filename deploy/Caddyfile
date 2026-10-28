@@ -1,0 +1,26 @@
+# Proxy reverso com HTTPS automático (Let's Encrypt). Único ponto exposto da VPS.
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	# O token do SSR (security.md) só circula na rede interna: nunca aceito de fora.
+	request_header -X-Internal-Token
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# A API vai direto ao NestJS (mesmo domínio: cookie de refresh first-party).
+	# O Caddy ignora X-Forwarded-For recebido de fora e grava o IP real do visitante.
+	handle_path /api/* {
+		reverse_proxy backend:3333
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

@@ -9,8 +9,21 @@ export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3333),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
-  /** Proxies confiáveis à frente da API (load balancer). Sem isso, o rate limit vê o IP do proxy. */
+  /**
+   * Proxies confiáveis à frente da API que preenchem o X-Forwarded-For. Sem isso, o rate
+   * limit vê o IP do proxy e todos os visitantes dividem o mesmo limite. Em produção é 1:
+   * o Caddy grava o IP do visitante e o Next repassa o cabeçalho sem acrescentar o seu.
+   */
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+  /**
+   * Segredo que o servidor do Next envia nas chamadas SSR (cabeçalho x-internal-token).
+   * Essas chamadas saem todas do mesmo IP e não podem cair no rate limit dos visitantes.
+   * Obrigatório em produção; gere com `openssl rand -base64 48`.
+   */
+  INTERNAL_API_TOKEN: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(32).optional(),
+  ),
   /** Só para rodar o E2E local (muitos cadastros do mesmo IP). Nunca desligar em produção. */
   RATE_LIMIT_ENABLED: z
     .enum(['true', 'false'])
@@ -77,6 +90,13 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   }
   if (result.data.NODE_ENV === 'production' && !result.data.RATE_LIMIT_ENABLED) {
     throw new Error('RATE_LIMIT_ENABLED=false não é permitido em produção');
+  }
+  // Em produção a API sempre fica atrás de um proxy (Caddy, e o Next no caminho do /api).
+  if (result.data.NODE_ENV === 'production' && result.data.TRUST_PROXY_HOPS === 0) {
+    throw new Error('TRUST_PROXY_HOPS precisa ser pelo menos 1 em produção (a API fica atrás do proxy)');
+  }
+  if (result.data.NODE_ENV === 'production' && !result.data.INTERNAL_API_TOKEN) {
+    throw new Error('INTERNAL_API_TOKEN é obrigatória em produção');
   }
   return result.data;
 }

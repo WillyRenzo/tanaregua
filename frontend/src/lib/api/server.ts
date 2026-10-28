@@ -2,9 +2,19 @@ import 'server-only';
 import createClient from 'openapi-fetch';
 import { cacheLife, cacheTag } from 'next/cache';
 import type { components, paths } from './schema';
+import { toPublicPage } from './public-page';
 
-/** Cliente da API para Server Components: fala direto com o NestJS pela rede interna. */
-const serverApi = createClient<paths>({ baseUrl: process.env.API_INTERNAL_URL ?? 'http://localhost:3333' });
+const internalToken = process.env.INTERNAL_API_TOKEN;
+
+/**
+ * Cliente da API para Server Components: fala direto com o NestJS pela rede interna.
+ * Todas essas chamadas saem do mesmo IP; o token interno as tira do rate limit dos
+ * visitantes (security.md). Só existe no servidor: nunca use NEXT_PUBLIC_ para ele.
+ */
+const serverApi = createClient<paths>({
+  baseUrl: process.env.API_INTERNAL_URL ?? 'http://localhost:3333',
+  headers: internalToken ? { 'x-internal-token': internalToken } : undefined,
+});
 
 export interface PublicBarbershopPage {
   barbershop: components['schemas']['PublicBarbershop'];
@@ -27,6 +37,5 @@ export async function getPublicBarbershop(slug: string): Promise<PublicBarbersho
     serverApi.GET('/v1/public/{slug}/services', path),
     serverApi.GET('/v1/public/{slug}/professionals', path),
   ]);
-  if (info.response.status === 404 || !info.data) return null;
-  return { barbershop: info.data, services: services.data ?? [], professionals: professionals.data ?? [] };
+  return toPublicPage(info, services, professionals);
 }
