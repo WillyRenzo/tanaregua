@@ -353,6 +353,20 @@ export function useDayAgenda(date: string) {
   });
 }
 
+/** Agendamentos de um período (semana ou mês; a API aceita até 31 dias). */
+export function useAppointmentsRange(
+  query: { from: string; to: string; professionalId?: string },
+  enabled = true,
+) {
+  return useQuery({
+    // Sob 'agenda': as mutações de agendamento já invalidam essa chave.
+    queryKey: ['agenda', 'range', query.from, query.to, query.professionalId ?? 'all'] as const,
+    enabled,
+    queryFn: () => unwrap(api.GET('/v1/appointments', { params: { query } })),
+    refetchInterval: 60_000,
+  });
+}
+
 export function useAvailability(date: string, serviceIds: string[], professionalId?: string) {
   return useQuery({
     queryKey: queryKeys.availability(date, serviceIds, professionalId),

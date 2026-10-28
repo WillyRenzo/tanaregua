@@ -11,7 +11,7 @@ pequenos negócios.
 
 **Painel da barbearia**
 
-- **Agenda integrada:** uma coluna por profissional, com expediente, folgas e atendimentos do dia. O sistema não deixa marcar dois atendimentos no mesmo horário para o mesmo profissional.
+- **Agenda integrada:** uma coluna por profissional, com expediente, folgas e atendimentos do dia, além das visões de semana e de mês e do filtro por profissional. O sistema não deixa marcar dois atendimentos no mesmo horário para o mesmo profissional.
 - **Comandas:** abertas a partir do agendamento ou avulsas, com desconto por item. Ao fechar, a comissão de cada profissional é calculada e congelada.
 - **Comissões configuráveis:** por serviço, por profissional ou pela combinação dos dois, em percentual ou valor fixo.
 - **Caixa do dia e relatórios:** faturamento por dia, por profissional e por serviço, além da taxa de não comparecimento.
