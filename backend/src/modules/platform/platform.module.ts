@@ -116,7 +116,7 @@ export class PlatformController {
   @ApiOperation({
     summary: 'Define os preços mensal e anual de um plano',
     description:
-      'Valores em centavos; `null` tira o plano de venda naquele ciclo. Vale para as próximas contratações: assinaturas já contratadas mantêm o valor.',
+      'Valores em centavos; `null` tira o plano de venda naquele ciclo. O reajuste vale para todas as assinaturas do plano naquele ciclo, a partir da próxima cobrança.',
   })
   @Put('plans/:key/prices')
   setPrices(

@@ -1534,7 +1534,7 @@ export interface paths {
         get?: never;
         /**
          * Define os preços mensal e anual de um plano
-         * @description Valores em centavos; `null` tira o plano de venda naquele ciclo. Vale para as próximas contratações: assinaturas já contratadas mantêm o valor.
+         * @description Valores em centavos; `null` tira o plano de venda naquele ciclo. O reajuste vale para todas as assinaturas do plano naquele ciclo, a partir da próxima cobrança.
          *
          *     **Acesso:** administração da plataforma (token próprio; token de barbearia é recusado).
          */

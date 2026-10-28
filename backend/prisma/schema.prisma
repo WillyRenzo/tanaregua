@@ -844,8 +844,8 @@ enum BillingInterval {
 }
 
 /// Preço de um plano num ciclo de cobrança, configurado na administração da plataforma.
-/// Sem linha para o ciclo, o plano não é vendido nele. Mudar o preço não altera o valor
-/// de assinaturas já contratadas.
+/// Sem linha para o ciclo, o plano não é vendido nele. Mudar o preço reajusta todas as
+/// assinaturas do plano naquele ciclo, a partir da próxima cobrança (business-rules §12).
 model PlanPrice {
   id          String          @id @default(uuid(7)) @db.Uuid
   planId      String          @map("plan_id") @db.Uuid

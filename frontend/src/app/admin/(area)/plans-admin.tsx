@@ -32,7 +32,7 @@ export function PlansAdmin() {
     <>
       <PageHeader
         title="Planos e preços"
-        description="O preço vale para as próximas contratações; quem já assina mantém o valor contratado."
+        description="O reajuste vale para todas as assinaturas do plano naquele ciclo, a partir da próxima cobrança."
       />
       {plans.isPending ? (
         <LoadingRows rows={3} label="Carregando os planos" />

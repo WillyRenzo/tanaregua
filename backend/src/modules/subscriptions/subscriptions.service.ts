@@ -81,7 +81,8 @@ export class SubscriptionsService {
   /**
    * Define os preços de um plano. Só a administração da plataforma chama: a transação leva o
    * administrador no contexto, sem o qual o RLS de `plan_prices` recusa a escrita. Mudar o
-   * preço não altera assinaturas já contratadas (o valor é gravado na contratação).
+   * preço reajusta todas as assinaturas do plano naquele ciclo, a partir da próxima cobrança
+   * (com a cobrança recorrente, o novo valor é repassado ao gateway).
    */
   setPlanPrices(adminId: string, planKey: string, input: SetPlanPricesInput): Promise<PlanSummary> {
     return this.prisma.withContext({ platformAdminId: adminId }, async (tx) => {

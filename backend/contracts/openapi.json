@@ -8561,7 +8561,7 @@
     },
     "/v1/platform/plans/{key}/prices": {
       "put": {
-        "description": "Valores em centavos; `null` tira o plano de venda naquele ciclo. Vale para as próximas contratações: assinaturas já contratadas mantêm o valor.\n\n**Acesso:** administração da plataforma (token próprio; token de barbearia é recusado).",
+        "description": "Valores em centavos; `null` tira o plano de venda naquele ciclo. O reajuste vale para todas as assinaturas do plano naquele ciclo, a partir da próxima cobrança.\n\n**Acesso:** administração da plataforma (token próprio; token de barbearia é recusado).",
         "operationId": "PlatformController_setPrices",
         "parameters": [
           {
