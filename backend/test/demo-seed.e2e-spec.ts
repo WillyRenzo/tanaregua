@@ -233,6 +233,15 @@ describe('Seed de demonstração (e2e)', () => {
     expect(birthdays.body.some((entry: { consents: { email: boolean } }) => entry.consents.email)).toBe(true);
   });
 
+  it('a demo tem o pagamento online conectado numa conta de teste, com sinal opcional', async () => {
+    const owner = await loginPanel(DEMO_ACCOUNTS.owner.email);
+    const payments = await as(app, owner.accessToken).get('/v1/online-payments').expect(200);
+    expect(payments.body).toMatchObject({
+      account: { provider: 'fake', accountName: 'Conta de teste' },
+      settings: { mode: 'OPTIONAL', amount: 'DEPOSIT', depositBps: 3000 },
+    });
+  });
+
   it('a barbearia vizinha é isolada da demo', async () => {
     const neighbor = await loginPanel(DEMO_ACCOUNTS.neighborOwner.email);
     const clients = await as(app, neighbor.accessToken).get('/v1/clients').expect(200);
@@ -342,6 +351,7 @@ describe('Seed de demonstração (e2e)', () => {
       'pacotes (vendidos, em uso, reembolsado e vencido)',
       // Os clientes da demo antiga não têm consentimento: sem campanha, só o aniversário.
       'mensagem automática de aniversário',
+      'pagamento online (conta de teste, sinal opcional de 30%)',
       'cor da Barbearia Vizinha',
       'plano Premium (cortesia) na demo',
       'plano Essencial (cortesia) na Barbearia Vizinha',

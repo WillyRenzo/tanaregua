@@ -33,6 +33,7 @@ import { MarketingModule } from './modules/marketing/marketing.module.js';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module.js';
 import { PlatformModule } from './modules/platform/platform.module.js';
 import { BillingModule } from './modules/subscriptions/billing.module.js';
+import { OnlinePaymentsModule } from './modules/online-payments/online-payments.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { ClockModule } from './common/time/clock.js';
 import { StorageModule } from './common/storage/object-storage.js';
@@ -100,6 +101,7 @@ import { StorageModule } from './common/storage/object-storage.js';
     SubscriptionsModule,
     PlatformModule,
     BillingModule,
+    OnlinePaymentsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
