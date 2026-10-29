@@ -25,6 +25,7 @@ import { BarbershopsModule } from '../barbershops/barbershops.module.js';
 import { CatalogModule } from '../catalog/catalog.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module.js';
 import { BirthdaysService } from './birthdays.service.js';
 import { CampaignsService, MAX_CAMPAIGN_RECIPIENTS } from './campaigns.service.js';
 import { MarketingDeliveryService } from './marketing-delivery.service.js';
@@ -177,7 +178,14 @@ export class MarketingController {
 }
 
 @Module({
-  imports: [AppointmentsModule, BarbershopsModule, CatalogModule, ClientsModule, NotificationsModule],
+  imports: [
+    AppointmentsModule,
+    BarbershopsModule,
+    CatalogModule,
+    ClientsModule,
+    NotificationsModule,
+    SubscriptionsModule,
+  ],
   controllers: [MarketingController],
   providers: [
     { provide: SecretBox, useClass: AppSecretBox },
