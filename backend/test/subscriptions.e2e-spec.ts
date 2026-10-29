@@ -36,18 +36,28 @@ describe('Assinatura e planos (e2e)', () => {
     await app.close();
   });
 
-  const essential = { plan: { key: 'essential', name: 'Essencial' }, status: 'ACTIVE', features: [] };
+  const allFeatures = ['online-payment', 'payroll', 'advanced-reports', 'assistant'];
+  const trial = {
+    plan: { key: 'premium', name: 'Premium' },
+    status: 'TRIALING',
+    features: allFeatures,
+    access: { state: 'trial', until: expect.any(String) },
+  };
 
-  it('barbearia nova nasce no plano padrão, que aparece no cadastro, no login e no perfil', async () => {
+  it('barbearia nova nasce em teste grátis de 14 dias no plano mais completo, no login e no perfil', async () => {
+    const before = Date.now();
     const shop = await registerTenant(app);
     const me = await as(app, shop.token).get('/v1/auth/me').expect(200);
-    expect(me.body.subscription).toEqual(essential);
+    expect(me.body.subscription).toEqual(trial);
+    const days = (new Date(me.body.subscription.access.until).getTime() - before) / 86_400_000;
+    expect(days).toBeGreaterThan(13.99);
+    expect(days).toBeLessThan(14.01);
 
     const session = await request(app.getHttpServer())
       .post('/v1/auth/login')
       .send({ email: shop.email, password: shop.password })
       .expect(200);
-    expect(session.body.profile.subscription).toEqual(essential);
+    expect(session.body.profile.subscription).toEqual(trial);
   });
 
   it('lista os planos do mais básico ao mais completo, com os recursos de cada um', async () => {
@@ -75,13 +85,14 @@ describe('Assinatura e planos (e2e)', () => {
 
   it('trocar de plano muda os recursos da sessão sem precisar de token novo no perfil', async () => {
     const shop = await registerTenant(app);
-    await app.get(SubscriptionsService).changePlan(shop.barbershopId, 'premium');
+    await app.get(SubscriptionsService).grantPlan(shop.barbershopId, 'essential');
 
     const me = await as(app, shop.token).get('/v1/auth/me').expect(200);
     expect(me.body.subscription).toEqual({
-      plan: { key: 'premium', name: 'Premium' },
+      plan: { key: 'essential', name: 'Essencial' },
       status: 'ACTIVE',
-      features: ['online-payment', 'payroll', 'advanced-reports', 'assistant'],
+      features: [],
+      access: { state: 'active', until: null },
     });
     // A troca não mexe em nada da barbearia: o dono continua entrando normalmente.
     await login(app, shop.email, shop.password);
@@ -90,6 +101,7 @@ describe('Assinatura e planos (e2e)', () => {
   describe('@RequiresFeature', () => {
     it('recurso fora do plano responde 403 plan-upgrade-required', async () => {
       const shop = await registerTenant(app);
+      await app.get(SubscriptionsService).grantPlan(shop.barbershopId, 'essential');
       const response = await as(app, shop.token).get('/v1/feature-probe').expect(403);
       expect(response.body).toMatchObject({
         type: 'https://tanaregua.app/problems/plan-upgrade-required',
@@ -99,16 +111,17 @@ describe('Assinatura e planos (e2e)', () => {
 
     it('a troca de plano vale na hora, com o mesmo token (o plano não vai no JWT)', async () => {
       const shop = await registerTenant(app);
+      await app.get(SubscriptionsService).grantPlan(shop.barbershopId, 'essential');
       await as(app, shop.token).get('/v1/feature-probe').expect(403);
-      await app.get(SubscriptionsService).changePlan(shop.barbershopId, 'premium');
+      await app.get(SubscriptionsService).grantPlan(shop.barbershopId, 'premium');
       await as(app, shop.token).get('/v1/feature-probe').expect(200, { ok: true });
-      await app.get(SubscriptionsService).changePlan(shop.barbershopId, 'essential');
+      await app.get(SubscriptionsService).grantPlan(shop.barbershopId, 'essential');
       await as(app, shop.token).get('/v1/feature-probe').expect(403);
     });
 
     it('acesso efetivo = permissão do papel E recurso do plano', async () => {
       const shop = await registerTenant(app);
-      await app.get(SubscriptionsService).changePlan(shop.barbershopId, 'premium');
+      await app.get(SubscriptionsService).grantPlan(shop.barbershopId, 'premium');
       const email = `prof-${randomUUID().slice(0, 8)}@teste.com`;
       await as(app, shop.token)
         .post('/v1/staff')
@@ -125,13 +138,13 @@ describe('Assinatura e planos (e2e)', () => {
       expect(response.body.type).toBe('about:blank');
     });
 
-    it('assinatura cancelada não libera o recurso, mesmo no plano mais completo', async () => {
+    it('no modo só leitura, o que o plano tem continua liberado para consulta', async () => {
       const shop = await registerTenant(app);
-      await app.get(SubscriptionsService).changePlan(shop.barbershopId, 'premium');
+      await app.get(SubscriptionsService).grantPlan(shop.barbershopId, 'premium');
       await prisma.withContext({ barbershopId: shop.barbershopId }, (tx) =>
         tx.subscription.update({ where: { barbershopId: shop.barbershopId }, data: { status: 'CANCELED' } }),
       );
-      await as(app, shop.token).get('/v1/feature-probe').expect(403);
+      await as(app, shop.token).get('/v1/feature-probe').expect(200, { ok: true });
     });
 
     it('o contrato OpenAPI mostra o recurso exigido e o 403 de upgrade', () => {
@@ -148,7 +161,7 @@ describe('Assinatura e planos (e2e)', () => {
 
   it('plano inexistente não é aceito', async () => {
     const shop = await registerTenant(app);
-    await expect(app.get(SubscriptionsService).changePlan(shop.barbershopId, 'nao-existe')).rejects.toThrow();
+    await expect(app.get(SubscriptionsService).grantPlan(shop.barbershopId, 'nao-existe')).rejects.toThrow();
   });
 
   it('a assinatura é isolada por barbearia (RLS)', async () => {

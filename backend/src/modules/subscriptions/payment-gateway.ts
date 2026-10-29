@@ -34,11 +34,28 @@ export interface GatewaySubscription {
   status: GatewaySubscriptionStatus;
 }
 
-/** Notificação já verificada: só diz qual assinatura mudou. O estado vem de uma consulta. */
+/** Situação de uma cobrança de ciclo, já no vocabulário do TaNaRegua. */
+export type GatewayPaymentStatus = 'approved' | 'rejected' | 'pending';
+
+/** Cobrança de um ciclo da assinatura (a primeira, na autorização, e cada renovação). */
+export interface GatewayPayment {
+  id: string;
+  /** Id da assinatura no gateway. */
+  subscriptionId: string;
+  status: GatewayPaymentStatus;
+  chargedAt: Date;
+}
+
+/**
+ * Notificação já verificada: só diz o que mudou (a assinatura ou uma cobrança dela). O estado
+ * vem de uma consulta ao gateway.
+ */
 export interface GatewayNotice {
   /** Id da notificação no gateway, para não processar a mesma duas vezes. */
   eventId: string;
-  gatewaySubscriptionId: string;
+  kind: 'subscription' | 'payment';
+  /** Id da assinatura ou da cobrança no gateway, conforme `kind`. */
+  resourceId: string;
 }
 
 export interface IncomingNotification {
@@ -69,13 +86,14 @@ export abstract class PaymentGateway {
   abstract readonly provider: string | null;
   abstract createSubscription(request: SubscriptionRequest): Promise<GatewayCheckout>;
   abstract getSubscription(id: string): Promise<GatewaySubscription>;
+  abstract getPayment(id: string): Promise<GatewayPayment>;
   /** Novo valor por ciclo, a partir da próxima cobrança. Idempotente. */
   abstract updateSubscriptionAmount(id: string, amountCents: number): Promise<void>;
   /** Idempotente: cancelar uma assinatura já cancelada não é erro. */
   abstract cancelSubscription(id: string): Promise<void>;
   /**
-   * Confere a assinatura da notificação e extrai a assinatura que mudou. `null` = notificação
-   * válida que não é sobre assinatura (ex.: pagamento avulso), ignorada.
+   * Confere a assinatura da notificação e extrai o que mudou. `null` = notificação válida que
+   * não é sobre a assinatura nem as cobranças dela (ex.: pagamento avulso), ignorada.
    */
   abstract parseNotification(notification: IncomingNotification): GatewayNotice | null;
 }
@@ -102,6 +120,9 @@ export class DisabledPaymentGateway extends PaymentGateway {
     return this.fail();
   }
   getSubscription(): Promise<GatewaySubscription> {
+    return this.fail();
+  }
+  getPayment(): Promise<GatewayPayment> {
     return this.fail();
   }
   updateSubscriptionAmount(): Promise<void> {
@@ -132,6 +153,7 @@ export class FakePaymentGateway extends PaymentGateway {
   readonly provider = 'fake';
   private readonly logger = new Logger('PaymentGateway');
   private readonly subscriptions = new Map<string, FakeSubscription>();
+  private readonly payments = new Map<string, GatewayPayment>();
   private readonly secret: string;
 
   constructor(@Inject(ConfigService) config: ConfigService<Env, true>) {
@@ -156,6 +178,12 @@ export class FakePaymentGateway extends PaymentGateway {
     return { id, status: this.find(id).status };
   }
 
+  async getPayment(id: string): Promise<GatewayPayment> {
+    const payment = this.payments.get(id);
+    if (!payment) throw new PaymentGatewayError(404);
+    return { ...payment };
+  }
+
   async updateSubscriptionAmount(id: string, amountCents: number): Promise<void> {
     this.find(id).amountCents = amountCents;
   }
@@ -168,9 +196,23 @@ export class FakePaymentGateway extends PaymentGateway {
     return parseMercadoPagoNotification(notification, this.secret);
   }
 
-  /** Simula o pagador mudando a assinatura no gateway (aprovar, pausar, cancelar). */
+  /**
+   * Simula o pagador mudando a assinatura no gateway (aprovar, pausar, cancelar). Aprovar cobra
+   * o primeiro ciclo na hora, como o gateway real faz na autorização.
+   */
   setStatus(id: string, status: GatewaySubscriptionStatus): void {
-    this.find(id).status = status;
+    const subscription = this.find(id);
+    const firstApproval = status === 'authorized' && subscription.status === 'pending';
+    subscription.status = status;
+    if (firstApproval) this.charge(id);
+  }
+
+  /** Simula a cobrança de um ciclo (aprovada ou recusada); devolve o id do pagamento. */
+  charge(subscriptionId: string, status: GatewayPaymentStatus = 'approved', chargedAt = new Date()): string {
+    this.find(subscriptionId);
+    const id = `fake-payment-${randomUUID()}`;
+    this.payments.set(id, { id, subscriptionId, status, chargedAt });
+    return id;
   }
 
   /** Para os testes conferirem o que foi repassado ao gateway. */
@@ -178,17 +220,24 @@ export class FakePaymentGateway extends PaymentGateway {
     return { ...this.find(id) };
   }
 
-  /** Notificação assinada como o Mercado Pago enviaria, para o webhook. */
-  notification(id: string, eventId: string = randomUUID()) {
+  /**
+   * Notificação assinada como o Mercado Pago enviaria, para o webhook: da assinatura (padrão)
+   * ou de uma cobrança dela (`subscription_authorized_payment`).
+   */
+  notification(id: string, eventId: string = randomUUID(), type = MP_SUBSCRIPTION) {
     const requestId = randomUUID();
     return {
-      query: { type: 'subscription_preapproval', 'data.id': id },
+      query: { type, 'data.id': id },
       headers: {
         'x-signature': signMercadoPagoNotification(id, requestId, this.secret),
         'x-request-id': requestId,
       },
-      body: { id: eventId, type: 'subscription_preapproval', action: 'updated', data: { id } },
+      body: { id: eventId, type, action: 'updated', data: { id } },
     };
+  }
+
+  paymentNotification(paymentId: string, eventId: string = randomUUID()) {
+    return this.notification(paymentId, eventId, MP_PAYMENT);
   }
 
   private find(id: string): FakeSubscription {
@@ -210,10 +259,13 @@ const text = (value: unknown): string | undefined =>
       ? String(value)
       : undefined;
 
+const MP_SUBSCRIPTION = 'subscription_preapproval';
+const MP_PAYMENT = 'subscription_authorized_payment';
+
 /**
- * Notificação no formato do Mercado Pago: `?type=subscription_preapproval&data.id=<id>` com o
- * corpo `{ id, type, data: { id } }`. Só a assinatura (preapproval) interessa nesta entrega;
- * os pagamentos de cada ciclo (`subscription_authorized_payment`) entram com a inadimplência.
+ * Notificação no formato do Mercado Pago: `?type=<tipo>&data.id=<id>` com o corpo
+ * `{ id, type, data: { id } }`. Interessam a assinatura (`subscription_preapproval`) e as
+ * cobranças de cada ciclo dela (`subscription_authorized_payment`).
  */
 export function parseMercadoPagoNotification(
   notification: IncomingNotification,
@@ -232,7 +284,8 @@ export function parseMercadoPagoNotification(
   if (!valid) throw new InvalidNotificationError();
 
   const type = text(notification.query['type']) ?? text(notification.query['topic']) ?? text(body.type);
-  if (type !== 'subscription_preapproval' || !dataId) return null;
+  const kind = type === MP_SUBSCRIPTION ? 'subscription' : type === MP_PAYMENT ? 'payment' : null;
+  if (!kind || !dataId) return null;
   const eventId = text(body.id) ?? header(notification.headers, 'x-request-id') ?? randomUUID();
-  return { eventId, gatewaySubscriptionId: dataId };
+  return { eventId, kind, resourceId: dataId };
 }

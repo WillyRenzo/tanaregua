@@ -4,6 +4,7 @@ import { TenantDb } from '../../common/tenancy/tenant-db.service.js';
 import type { BillingInterval } from '../../generated/prisma/client.js';
 import { PrismaService, type Tx } from '../../prisma/prisma.service.js';
 import { OutboxService } from '../notifications/outbox.service.js';
+import { accessOf, trialEnd, type Access } from './access.js';
 import { grantedFeatures, isFeature, type Feature } from './features.js';
 import type { PlanSummary, SubscriptionSummary } from './subscriptions.responses.js';
 import type { SetPlanPricesInput } from './subscriptions.schemas.js';
@@ -75,26 +76,43 @@ export class SubscriptionsService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
   ) {}
 
-  /** Assinatura de uma barbearia recém-criada, no plano padrão (chamado pelo cadastro). */
-  async startDefault(tx: Tx, barbershopId: string): Promise<void> {
+  /** Barbearia recém-criada: teste grátis de 14 dias no plano do teste (chamado pelo cadastro, §12). */
+  async startTrial(tx: Tx, barbershopId: string): Promise<void> {
     const plan = await tx.plan.findFirst({ where: { isDefault: true }, select: { id: true } });
-    if (!plan) throw new Error('Nenhum plano padrão cadastrado');
-    await tx.subscription.create({ data: { barbershopId, planId: plan.id, status: 'ACTIVE' } });
+    if (!plan) throw new Error('Nenhum plano de teste cadastrado');
+    await tx.subscription.create({
+      data: { barbershopId, planId: plan.id, status: 'TRIALING', trialEndsAt: trialEnd() },
+    });
   }
 
   /** Resumo para o perfil da sessão. `null` só se a barbearia ficou sem assinatura (nada liberado). */
   async summary(tx: Tx, barbershopId: string): Promise<SubscriptionSummary | null> {
     const subscription = await tx.subscription.findUnique({
       where: { barbershopId },
-      select: { status: true, plan: { select: { key: true, name: true, features: true } } },
+      select: {
+        status: true,
+        trialEndsAt: true,
+        paidThrough: true,
+        gatewaySubscriptionId: true,
+        plan: { select: { key: true, name: true, features: true } },
+      },
     });
     if (!subscription) return null;
     const { status, plan } = subscription;
     return {
       plan: { key: plan.key, name: plan.name },
       status,
-      features: grantedFeatures(status, plan.features),
+      features: grantedFeatures(plan.features),
+      access: accessOf(subscription),
     };
+  }
+
+  /** Situação de uso da barbearia da requisição (o `ReadOnlyGuard` confere a cada escrita). */
+  currentAccess(): Promise<Access> {
+    return this.db.run(
+      async (tx, auth) =>
+        (await this.summary(tx, auth.barbershopId))?.access ?? { state: 'read-only', until: null },
+    );
   }
 
   /** Recursos liberados para a barbearia da requisição (lidos a cada checagem: o plano muda sem o token saber). */
@@ -174,13 +192,19 @@ export class SubscriptionsService {
   }
 
   /**
-   * Troca o plano da barbearia. Nunca chamado por rota da barbearia: só pela confirmação do
-   * gateway de pagamento (webhook verificado, próxima entrega) e pelo seed. Não apaga dados.
+   * Cortesia: plano ativo sem cobrança e sem prazo. Nunca chamado por rota: só pelo seed de
+   * desenvolvimento e pelos testes (em produção, só o suporte, direto no banco). Recusado numa
+   * assinatura paga, que só muda pelo gateway. Não apaga dados.
    */
-  changePlan(barbershopId: string, planKey: string): Promise<void> {
+  grantPlan(barbershopId: string, planKey: string): Promise<void> {
     return this.db.runAs(barbershopId, async (tx) => {
       const plan = await tx.plan.findUniqueOrThrow({ where: { key: planKey }, select: { id: true } });
-      await tx.subscription.update({ where: { barbershopId }, data: { planId: plan.id } });
+      const current = await tx.subscription.findUniqueOrThrow({ where: { barbershopId } });
+      if (current.gatewaySubscriptionId) throw new Error('Assinatura paga: o plano muda pelo gateway');
+      await tx.subscription.update({
+        where: { barbershopId },
+        data: { planId: plan.id, status: 'ACTIVE', trialEndsAt: null },
+      });
     });
   }
 }

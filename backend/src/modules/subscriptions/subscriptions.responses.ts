@@ -21,12 +21,24 @@ export const planSchema = z
   .meta({ id: 'Plan' });
 export type PlanSummary = z.infer<typeof planSchema>;
 
+/**
+ * Situação de uso (§12): `until` é o fim do teste, do período pago ou da carência; nulo em
+ * cortesia e no modo só leitura, em que o painel só consulta e a página pública continua.
+ */
+export const accessSchema = z
+  .object({
+    state: z.enum(['trial', 'active', 'canceled', 'grace', 'read-only']),
+    until: z.date().nullable(),
+  })
+  .meta({ id: 'SubscriptionAccess' });
+
 export const subscriptionSummarySchema = z
   .object({
     plan: z.object({ key: z.string(), name: z.string() }),
     status: z.enum(['TRIALING', 'ACTIVE', 'PAST_DUE', 'CANCELED']),
     /** O que a assinatura libera agora: o painel decide o que mostrar; a API revalida sempre. */
     features: z.array(featureSchema),
+    access: accessSchema,
   })
   .meta({ id: 'SubscriptionSummary' });
 export type SubscriptionSummary = z.infer<typeof subscriptionSummarySchema>;
@@ -38,6 +50,7 @@ export const subscriptionDetailSchema = z
   .object({
     plan: z.object({ key: z.string(), name: z.string() }),
     status: subscriptionSummarySchema.shape.status,
+    access: accessSchema,
     /** Ciclo e valor cobrados pelo gateway; `null` enquanto a barbearia não assinou. */
     interval: billingIntervalSchema.nullable(),
     amountCents: z.int().positive().nullable(),
@@ -55,8 +68,14 @@ export const subscriptionDetailSchema = z
       .nullable(),
     /** A assinatura online está ligada nesta instalação. */
     onlineBilling: z.boolean(),
-    /** Pode abrir um checkout agora (sem assinatura paga ativa; a troca de plano vem depois). */
+    /** Downgrade agendado: o plano muda no fim do período pago. */
+    scheduledPlan: z
+      .object({ plan: z.object({ key: z.string(), name: z.string() }), effectiveAt: z.date() })
+      .nullable(),
+    /** Pode abrir um checkout agora (sem assinatura paga ativa: teste, cortesia ou cancelada). */
     canSubscribe: z.boolean(),
+    /** Assinatura paga em dia: pode trocar de plano (no mesmo ciclo) e cancelar. */
+    canChangePlan: z.boolean(),
   })
   .meta({ id: 'SubscriptionDetail' });
 export type SubscriptionDetail = z.infer<typeof subscriptionDetailSchema>;

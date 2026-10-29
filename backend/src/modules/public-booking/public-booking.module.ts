@@ -25,6 +25,7 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
+import { AllowedWhenReadOnly } from '../../common/auth/read-only.js';
 import { Public, RequirePermissions } from '../../common/auth/decorators.js';
 import { slugSchema } from '../auth/auth.schemas.js';
 import { AppointmentsModule } from '../appointments/appointments.module.js';
@@ -57,6 +58,8 @@ const BOOKING_THROTTLE = { default: { limit: 20, ttl: 60_000 } };
 
 /** Rotas da página pública de cada barbearia: /v1/public/:slug/... */
 @ApiTags(API_TAGS.publicBooking[0])
+// A página pública segue funcionando no modo só leitura do painel (business-rules §12).
+@AllowedWhenReadOnly()
 @Controller('public/:slug')
 export class PublicBookingController {
   constructor(

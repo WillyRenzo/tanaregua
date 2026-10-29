@@ -17,6 +17,7 @@ import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { z } from 'zod';
 import { Public, RequirePermissions } from '../../common/auth/decorators.js';
+import { AllowedWhenReadOnly } from '../../common/auth/read-only.js';
 import { API_TAGS, ApiProblem, ApiResult } from '../../common/http/openapi.js';
 import type { Env } from '../../config/env.js';
 import { BarbershopsModule } from '../barbershops/barbershops.module.js';
@@ -31,7 +32,12 @@ import {
   type CheckoutView,
   type SubscriptionDetail,
 } from './subscriptions.responses.js';
-import { startCheckoutSchema, type StartCheckoutInput } from './subscriptions.schemas.js';
+import {
+  changePlanSchema,
+  startCheckoutSchema,
+  type ChangePlanInput,
+  type StartCheckoutInput,
+} from './subscriptions.schemas.js';
 
 /** O gateway reenvia notificações e pode mandar várias juntas; a assinatura HMAC barra o resto. */
 const WEBHOOK_THROTTLE = { default: { limit: 300, ttl: 60_000 } };
@@ -54,6 +60,8 @@ export class BillingController {
     return this.billing.detail();
   }
 
+  // Assinar é a saída do modo só leitura (§12).
+  @AllowedWhenReadOnly()
   @RequirePermissions('subscription:manage')
   @ApiResult(checkoutSchema, 201)
   @ApiOperation({
@@ -64,7 +72,7 @@ export class BillingController {
   @ApiProblem(
     409,
     'plan-change-unavailable',
-    'A barbearia já tem uma assinatura paga; a troca de plano vem depois.',
+    'A barbearia já tem uma assinatura paga: troque de plano em vez de assinar de novo.',
   )
   @ApiProblem(422, 'plan-not-for-sale', 'O plano não está à venda no ciclo escolhido.')
   @ApiProblem(502, 'billing-gateway-unavailable', 'O gateway de pagamento não respondeu.')
@@ -74,15 +82,53 @@ export class BillingController {
     return this.billing.startCheckout(input);
   }
 
+  @RequirePermissions('subscription:manage')
+  @HttpCode(HttpStatus.OK)
+  @ApiResult(subscriptionDetailSchema)
+  @ApiOperation({
+    summary: 'Troca o plano da assinatura paga, no mesmo ciclo',
+    description:
+      'Upgrade vale na hora; downgrade, no fim do período pago. O gateway passa a cobrar o valor do plano novo a partir da próxima cobrança, sem cobrança proporcional. Escolher o plano atual desfaz um downgrade agendado.',
+  })
+  @ApiProblem(409, 'plan-change-unavailable', 'Sem assinatura paga e em dia para trocar de plano.')
+  @ApiProblem(422, 'plan-not-for-sale', 'O plano não está à venda no ciclo da assinatura.')
+  @ApiProblem(503, 'billing-unavailable', 'A assinatura online está desligada nesta instalação.')
+  @Post('subscription/plan')
+  changePlan(@Body({ schema: changePlanSchema }) input: ChangePlanInput): Promise<SubscriptionDetail> {
+    return this.billing.changePlan(input);
+  }
+
+  // Parar de pagar precisa funcionar também no modo só leitura.
+  @AllowedWhenReadOnly()
+  @RequirePermissions('subscription:manage')
+  @HttpCode(HttpStatus.OK)
+  @ApiResult(subscriptionDetailSchema)
+  @ApiOperation({
+    summary: 'Cancela a assinatura paga',
+    description:
+      'Cancela a cobrança recorrente no gateway. A barbearia usa até o fim do período pago e depois fica só para consulta.',
+  })
+  @ApiProblem(409, 'subscription-not-active', 'A barbearia não tem assinatura paga para cancelar.')
+  @ApiProblem(503, 'billing-unavailable', 'A assinatura online está desligada nesta instalação.')
+  @Post('subscription/cancel')
+  cancel(): Promise<SubscriptionDetail> {
+    return this.billing.cancel();
+  }
+
   @Public()
   @Throttle(WEBHOOK_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiResult(webhookAckSchema)
   @ApiOperation({
-    summary: 'Notificação do gateway de pagamento sobre uma assinatura',
+    summary: 'Notificação do gateway de pagamento sobre uma assinatura ou uma cobrança dela',
     description:
       'Chamada pelo gateway, com assinatura HMAC conferida (401 se inválida). Só põe a consulta ao gateway na fila; notificação repetida é ignorada.',
   })
+  @ApiProblem(
+    502,
+    'billing-gateway-unavailable',
+    'O gateway não respondeu à consulta da cobrança; ele reenvia a notificação.',
+  )
   @Post('billing/webhook')
   async webhook(@Req() request: Request): Promise<{ received: boolean }> {
     await this.billing.receiveNotification({

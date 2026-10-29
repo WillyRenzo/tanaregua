@@ -1588,6 +1588,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/subscription/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Troca o plano da assinatura paga, no mesmo ciclo
+         * @description Upgrade vale na hora; downgrade, no fim do período pago. O gateway passa a cobrar o valor do plano novo a partir da próxima cobrança, sem cobrança proporcional. Escolher o plano atual desfaz um downgrade agendado.
+         *
+         *     **Permissões (basta uma):** `subscription:manage`
+         */
+        post: operations["BillingController_changePlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/subscription/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancela a assinatura paga
+         * @description Cancela a cobrança recorrente no gateway. A barbearia usa até o fim do período pago e depois fica só para consulta.
+         *
+         *     **Permissões (basta uma):** `subscription:manage`
+         */
+        post: operations["BillingController_cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/billing/webhook": {
         parameters: {
             query?: never;
@@ -1598,7 +1642,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Notificação do gateway de pagamento sobre uma assinatura
+         * Notificação do gateway de pagamento sobre uma assinatura ou uma cobrança dela
          * @description Chamada pelo gateway, com assinatura HMAC conferida (401 se inválida). Só põe a consulta ao gateway na fila; notificação repetida é ignorada.
          */
         post: operations["BillingController_webhook"];
@@ -1651,9 +1695,16 @@ export interface components {
             /** @enum {string} */
             status: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED";
             features: components["schemas"]["Feature"][];
+            access: components["schemas"]["SubscriptionAccess"];
         };
         /** @enum {string} */
         Feature: "online-payment" | "payroll" | "advanced-reports" | "assistant";
+        SubscriptionAccess: {
+            /** @enum {string} */
+            state: "trial" | "active" | "canceled" | "grace" | "read-only";
+            /** Format: date-time */
+            until: string | null;
+        };
         Plan: {
             key: string;
             name: string;
@@ -2364,6 +2415,7 @@ export interface components {
             };
             /** @enum {string} */
             status: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED";
+            access: components["schemas"]["SubscriptionAccess"];
             interval: components["schemas"]["BillingInterval"] | null;
             amountCents: number | null;
             scheduledChange: {
@@ -2383,7 +2435,16 @@ export interface components {
                 createdAt: string;
             } | null;
             onlineBilling: boolean;
+            scheduledPlan: {
+                plan: {
+                    key: string;
+                    name: string;
+                };
+                /** Format: date-time */
+                effectiveAt: string;
+            } | null;
             canSubscribe: boolean;
+            canChangePlan: boolean;
         };
         /** @enum {string} */
         BillingInterval: "MONTHLY" | "YEARLY";
@@ -2400,6 +2461,14 @@ export interface components {
         };
         SubscriptionCheckout: {
             checkoutUrl: string;
+        };
+        /**
+         * @example {
+         *       "planKey": "premium"
+         *     }
+         */
+        ChangePlanInput: {
+            planKey: string;
         };
         BillingWebhookAck: {
             received: boolean;
@@ -2985,6 +3054,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -3042,6 +3120,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -3091,6 +3178,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3232,6 +3328,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -3291,6 +3396,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3417,6 +3531,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3553,6 +3676,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -3593,6 +3725,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3728,6 +3869,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -3847,6 +3997,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -3898,6 +4057,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4019,6 +4187,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -4071,6 +4248,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4202,6 +4388,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -4232,6 +4427,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4355,6 +4559,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -4457,6 +4670,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4579,6 +4801,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -4637,6 +4868,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4774,6 +5014,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -4841,6 +5090,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4958,6 +5216,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5297,6 +5564,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -5424,6 +5700,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -5508,6 +5793,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -5574,6 +5868,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6451,6 +6754,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -6602,6 +6914,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -6654,6 +6975,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6736,6 +7066,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -6804,6 +7143,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6888,6 +7236,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -6954,6 +7311,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7123,6 +7489,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -7169,6 +7544,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7342,6 +7726,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7557,6 +7950,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
             403: {
                 headers: {
@@ -7646,6 +8048,15 @@ export interface operations {
             };
             /** @description Sem token ou token expirado. Use **Authorize**. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8026,7 +8437,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `plan-change-unavailable`: A barbearia já tem uma assinatura paga; a troca de plano vem depois. */
+            /** @description `plan-change-unavailable`: A barbearia já tem uma assinatura paga: troque de plano em vez de assinar de novo. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8046,6 +8457,149 @@ export interface operations {
             };
             /** @description `billing-gateway-unavailable`: O gateway de pagamento não respondeu. */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `billing-unavailable`: A assinatura online está desligada nesta instalação. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    BillingController_changePlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePlanInput"];
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionDetail"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `plan-change-unavailable`: Sem assinatura paga e em dia para trocar de plano. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `plan-not-for-sale`: O plano não está à venda no ciclo da assinatura. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `billing-unavailable`: A assinatura online está desligada nesta instalação. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    BillingController_cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionDetail"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `subscription-not-active`: A barbearia não tem assinatura paga para cancelar. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8084,6 +8638,15 @@ export interface operations {
             };
             /** @description Muitas requisições do mesmo IP (rate limit). */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `billing-gateway-unavailable`: O gateway não respondeu à consulta da cobrança; ele reenvia a notificação. */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -58,7 +58,7 @@ export class AuthService {
         data: { name: input.barbershopName, slug: input.slug },
       });
       await setDbContext(tx, { barbershopId: barbershop.id, userId: user.id });
-      await this.subscriptions.startDefault(tx, barbershop.id);
+      await this.subscriptions.startTrial(tx, barbershop.id);
 
       await tx.role.createMany({
         data: Object.values(DEFAULT_ROLES).map((role) => ({

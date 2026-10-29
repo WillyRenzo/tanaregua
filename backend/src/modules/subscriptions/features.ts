@@ -1,5 +1,3 @@
-import type { SubscriptionStatus } from '../../generated/prisma/client.js';
-
 /**
  * Catálogo único de recursos vendáveis (business-rules §12). Como as permissões, o código
  * checa recursos, nunca o nome do plano. O núcleo das fases 1 e 2 vale em todo plano e não
@@ -14,10 +12,11 @@ export function isFeature(value: string): value is Feature {
 }
 
 /**
- * Recursos que a assinatura libera agora. [PROPOSTA] Em atraso ainda libera (a carência e o
- * que acontece depois dela são decisões pendentes do §12); cancelada não libera nada.
+ * Recursos do plano da assinatura. Valem em qualquer situação: no modo só leitura (teste
+ * vencido, carência esgotada, cancelada) a barbearia ainda consulta tudo o que o plano tem, e
+ * quem barra as escritas é o `ReadOnlyGuard` (§12: trocar de plano ou parar de pagar nunca
+ * apaga nem esconde dados).
  */
-export function grantedFeatures(status: SubscriptionStatus, planFeatures: readonly string[]): Feature[] {
-  if (status === 'CANCELED') return [];
+export function grantedFeatures(planFeatures: readonly string[]): Feature[] {
   return planFeatures.filter(isFeature);
 }

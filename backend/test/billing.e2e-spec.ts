@@ -98,14 +98,17 @@ describe('Cobrança da assinatura (e2e)', () => {
   it('barbearia nova aparece sem cobrança e pode assinar; só quem tem a permissão vê', async () => {
     const shop = await registerTenant(app);
     expect(await detail(shop)).toEqual({
-      plan: { key: 'essential', name: 'Essencial' },
-      status: 'ACTIVE',
+      plan: { key: 'premium', name: 'Premium' },
+      status: 'TRIALING',
+      access: { state: 'trial', until: expect.any(String) },
       interval: null,
       amountCents: null,
       scheduledChange: null,
       pendingCheckout: null,
       onlineBilling: true,
+      scheduledPlan: null,
       canSubscribe: true,
+      canChangePlan: false,
     });
 
     const email = `recepcao-${randomUUID().slice(0, 8)}@teste.com`;
@@ -147,7 +150,7 @@ describe('Cobrança da assinatura (e2e)', () => {
     const back = await request(app.getHttpServer()).get(`/v1/billing/fake-checkout/${id}`).expect(303);
     expect(back.headers['location']).toBe(CHECKOUT_BACK_PATH);
     // Antes da consulta ao gateway (fila), nada muda: o retorno do navegador não vale.
-    expect((await detail(shop)).plan.key).toBe('essential');
+    expect((await detail(shop)).plan.key).toBe('premium');
 
     await drain(shop.barbershopId);
     expect(await detail(shop)).toMatchObject({
@@ -225,7 +228,8 @@ describe('Cobrança da assinatura (e2e)', () => {
       await drain(shop.barbershopId);
       expect(await detail(shop)).toMatchObject({ status: 'CANCELED', canSubscribe: true });
       const me = await as(app, shop.token).get('/v1/auth/me').expect(200);
-      expect(me.body.subscription.features).toEqual([]);
+      // Cancelada no gateway: usa até o fim do período pago e depois fica só para consulta.
+      expect(me.body.subscription.access.state).toBe('canceled');
     });
 
     it('notificação de assinatura desconhecida é aceita e ignorada', async () => {
@@ -272,7 +276,7 @@ describe('Cobrança da assinatura (e2e)', () => {
     gateway.setStatus(first, 'authorized');
     await notify(first).expect(200);
     await drain(shop.barbershopId);
-    expect((await detail(shop)).plan.key).toBe('essential');
+    expect((await detail(shop)).plan.key).toBe('premium');
     expect(gateway.inspect(first).status).toBe('cancelled');
 
     await request(app.getHttpServer()).get(`/v1/billing/fake-checkout/${second}`).expect(303);

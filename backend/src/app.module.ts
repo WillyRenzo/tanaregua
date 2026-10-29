@@ -8,6 +8,7 @@ import type { Request } from 'express';
 import { ClsModule } from 'nestjs-cls';
 import { LoggerModule } from 'nestjs-pino';
 import { AccessGuard } from './common/auth/access.guard.js';
+import { ReadOnlyGuard } from './common/auth/read-only.js';
 import { FeatureGuard } from './common/auth/requires-feature.js';
 import { isInternalRequest } from './common/http/internal-request.js';
 import { ProblemDetailsFilter } from './common/http/problem-details.filter.js';
@@ -105,6 +106,8 @@ import { StorageModule } from './common/storage/object-storage.js';
     { provide: APP_GUARD, useClass: AccessGuard },
     // Depois do AccessGuard: precisa do tenant autenticado para ler a assinatura.
     { provide: APP_GUARD, useClass: FeatureGuard },
+    // Modo só leitura da assinatura (§12): escrita barrada com teste vencido ou sem pagamento.
+    { provide: APP_GUARD, useClass: ReadOnlyGuard },
     { provide: APP_FILTER, useClass: ProblemDetailsFilter },
   ],
 })

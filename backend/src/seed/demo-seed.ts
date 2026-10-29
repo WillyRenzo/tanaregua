@@ -81,8 +81,13 @@ const minutes = (clock: Clock24) => {
 const DEMO_PRIMARY_COLOR = '#1f5f8b';
 const DEMO_SECONDARY_COLOR = '#e3c567';
 const NEIGHBOR_PRIMARY_COLOR = '#7a1f5c';
-/** A demo mostra tudo; a Vizinha fica no plano padrão (básico) e mostra o convite de upgrade. */
+/**
+ * Planos de cortesia (sem cobrança e sem prazo), para o desenvolvimento não cair no modo só
+ * leitura quando o teste grátis acabar: a demo mostra tudo; a Vizinha fica no básico e mostra
+ * o convite de upgrade.
+ */
 const DEMO_PLAN_KEY = 'premium';
+const NEIGHBOR_PLAN_KEY = 'essential';
 
 const pickPayment = weighted<PaymentMethod>([
   [45, 'PIX'],
@@ -136,7 +141,7 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
     password: DEMO_PASSWORD,
     ownerIsProfessional: true,
   });
-  await app.get(SubscriptionsService).changePlan(owner.profile.barbershop.id, DEMO_PLAN_KEY);
+  await app.get(SubscriptionsService).grantPlan(owner.profile.barbershop.id, DEMO_PLAN_KEY);
 
   await as(owner, async () => {
     await staff.create({
@@ -643,6 +648,7 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
     password: DEMO_PASSWORD,
     ownerIsProfessional: true,
   });
+  await app.get(SubscriptionsService).grantPlan(neighbor.profile.barbershop.id, NEIGHBOR_PLAN_KEY);
   await as(neighbor, async () => {
     const marta = neighbor.profile.membership.id;
     // Outra marca (vinho, sem logo): cada barbearia vê só a própria identidade.
@@ -716,27 +722,27 @@ export async function completeDemo(
     }
   });
 
-  if (await upgradeDemoPlan(app, slugs.demo)) added.push('plano Premium na demo');
+  if (await grantDemoPlan(app, slugs.demo, DEMO_PLAN_KEY)) added.push('plano Premium (cortesia) na demo');
+  if (await grantDemoPlan(app, slugs.neighbor, NEIGHBOR_PLAN_KEY)) {
+    added.push('plano Essencial (cortesia) na Barbearia Vizinha');
+  }
 
   return added;
 }
 
 /**
- * A demo antiga ganhou o plano padrão na migration: passa para o mais completo. Se alguém já
- * trocou o plano dela (ex.: para testar o bloqueio), a troca fica como está.
+ * Demo antiga que a migration pôs em teste grátis: passa para a cortesia do plano dela. Se
+ * alguém já assinou ou mudou a situação (ex.: para testar o bloqueio), fica como está.
  */
-async function upgradeDemoPlan(app: INestApplicationContext, slug: string): Promise<boolean> {
+async function grantDemoPlan(app: INestApplicationContext, slug: string, planKey: string): Promise<boolean> {
   const prisma = app.get(PrismaService);
   const shop = await prisma.barbershop.findUnique({ where: { slug }, select: { id: true } });
   if (!shop) return false;
   const subscription = await prisma.withContext({ barbershopId: shop.id }, (tx) =>
-    tx.subscription.findUnique({
-      where: { barbershopId: shop.id },
-      select: { plan: { select: { isDefault: true } } },
-    }),
+    tx.subscription.findUnique({ where: { barbershopId: shop.id }, select: { status: true } }),
   );
-  if (!subscription?.plan.isDefault) return false;
-  await app.get(SubscriptionsService).changePlan(shop.id, DEMO_PLAN_KEY);
+  if (subscription?.status !== 'TRIALING') return false;
+  await app.get(SubscriptionsService).grantPlan(shop.id, planKey);
   return true;
 }
 

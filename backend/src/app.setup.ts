@@ -126,6 +126,7 @@ interface Operation {
   'x-required-permissions'?: string[];
   'x-required-feature'?: string;
   'x-platform'?: boolean;
+  'x-allowed-when-read-only'?: boolean;
 }
 
 const problem = (description: string) => ({
@@ -182,6 +183,10 @@ function enrichOperations(document: OpenAPIObject): void {
         responses['403'] ??= problem('O papel do usuário não tem nenhuma das permissões exigidas.');
       if (path.includes('{')) responses['404'] ??= problem('Recurso inexistente ou de outra barbearia.');
       if (isPublic) responses['429'] ??= problem('Muitas requisições do mesmo IP (rate limit).');
+      if (!isPublic && !operation['x-platform'] && !operation['x-allowed-when-read-only'] && method !== 'get')
+        responses['402'] ??= problem(
+          'Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).',
+        );
     }
   }
 }

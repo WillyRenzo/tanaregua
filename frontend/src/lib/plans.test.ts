@@ -45,6 +45,7 @@ describe('hasFeature', () => {
       plan: { key: 'premium', name: 'Premium' },
       status: 'ACTIVE',
       features: ['assistant'],
+      access: { state: 'active', until: null },
     });
     expect(hasFeature(premium, 'assistant')).toBe(true);
     expect(hasFeature(premium, 'payroll')).toBe(false);

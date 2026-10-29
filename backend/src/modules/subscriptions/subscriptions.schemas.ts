@@ -14,3 +14,9 @@ export const startCheckoutSchema = z
   .strictObject({ planKey: z.string().min(1).max(64), interval: z.enum(['MONTHLY', 'YEARLY']) })
   .meta({ id: 'StartCheckoutInput', example: { planKey: 'professional', interval: 'MONTHLY' } });
 export type StartCheckoutInput = z.infer<typeof startCheckoutSchema>;
+
+/** Troca de plano com a assinatura paga, no mesmo ciclo (upgrade na hora, downgrade no fim do período). */
+export const changePlanSchema = z
+  .strictObject({ planKey: z.string().min(1).max(64) })
+  .meta({ id: 'ChangePlanInput', example: { planKey: 'premium' } });
+export type ChangePlanInput = z.infer<typeof changePlanSchema>;
