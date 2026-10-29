@@ -339,8 +339,16 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
      - **Verificar com o dono do produto** (decisões em aberto em `business-rules.md` §12):
        - valores reais dos preços e nomes definitivos dos planos (o seed usa preços fictícios);
        - confirmar as propostas da administração: senha com 12 caracteres, sessão de 12 h e entrada sem segundo fator (risco aceito em `security.md`);
-     - Fica para a entrega 4: troca de plano com assinatura paga (hoje recusada com 409), pagamentos de cada ciclo (`subscription_authorized_payment`), cancelamento pelo painel e a situação "pausada" (hoje vira "em atraso").
-  4. inadimplência, teste grátis e troca de plano, conforme as decisões pendentes em `business-rules.md` §12.
+  4. ciclo de vida da assinatura (feito em 30/10/2026, decisões no `business-rules.md` §12):
+     - teste grátis de 14 dias no Premium, sem cartão, para as novas e as que já existiam;
+     - período pago estendido por cada cobrança aprovada (`subscription_authorized_payment`), 7 dias de carência e depois modo só leitura (402 `subscription-inactive`), com a página pública no ar;
+     - troca de plano no mesmo ciclo (upgrade na hora, downgrade no fim do período pago, sem cobrança proporcional) e cancelamento pelo painel (usa até o fim do período pago);
+     - aviso da situação no topo do painel.
+     - **Antes de ligar o Mercado Pago**, somar ao checklist do sandbox da entrega 3:
+       - os campos de `GET /authorized_payments/{id}` (`preapproval_id`, `payment.status`, `debit_date`), também tirados dos tipos do SDK;
+       - se a notificação de cobrança chega como `subscription_authorized_payment` e quando (aprovada, recusada, nova tentativa);
+       - se o `PUT` do `transaction_amount` na troca de plano vale já na cobrança seguinte.
+     - Fica para depois: troca de ciclo (mensal ↔ anual) com assinatura paga.
   - A verificação de recursos precisa estar pronta **antes** de liberar qualquer recurso da fase 3 ou 4, senão o plano básico já nasceria com eles.
 - **Pagamento online** pela porta `PaymentGateway` (Mercado Pago como adapter inicial, trocável por configuração), webhook verificado e idempotente, reembolso de pacote pago antecipadamente.
 - **Salários e folha**, relatórios avançados.

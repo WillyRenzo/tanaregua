@@ -135,7 +135,33 @@ describe('MercadoPagoGateway', () => {
     expect(lastCall()).toMatchObject({ method: 'PUT', body: { status: 'cancelled' } });
   });
 
-  it('lê a notificação de assinatura só com a assinatura HMAC válida', () => {
+  it('consulta a cobrança de um ciclo e traduz o resultado', async () => {
+    fetchMock.mockResolvedValueOnce(
+      json(200, {
+        id: 7001,
+        preapproval_id: 'pre-1',
+        status: 'processed',
+        debit_date: '2026-11-29T10:00:00.000-03:00',
+        payment: { id: 55, status: 'approved' },
+      }),
+    );
+    await expect(gateway.getPayment('7001')).resolves.toEqual({
+      id: '7001',
+      subscriptionId: 'pre-1',
+      status: 'approved',
+      chargedAt: new Date('2026-11-29T13:00:00.000Z'),
+    });
+    expect(lastCall().url).toBe('https://api.mercadopago.com/authorized_payments/7001');
+
+    fetchMock.mockResolvedValueOnce(
+      json(200, { id: '7002', preapproval_id: 'pre-1', payment: { status: 'rejected' } }),
+    );
+    expect((await gateway.getPayment('7002')).status).toBe('rejected');
+    fetchMock.mockResolvedValueOnce(json(200, { id: '7003', preapproval_id: 'pre-1', status: 'scheduled' }));
+    expect((await gateway.getPayment('7003')).status).toBe('pending');
+  });
+
+  it('lê a notificação de assinatura e de cobrança só com a assinatura HMAC válida', () => {
     const headers = {
       'x-signature': signMercadoPagoNotification('pre-1', 'req-1', 'segredo-de-webhooks-de-teste'),
       'x-request-id': 'req-1',
@@ -143,15 +169,19 @@ describe('MercadoPagoGateway', () => {
     const query = { type: 'subscription_preapproval', 'data.id': 'pre-1' };
     expect(gateway.parseNotification({ headers, query, body: { id: 987, data: { id: 'pre-1' } } })).toEqual({
       eventId: '987',
-      gatewaySubscriptionId: 'pre-1',
+      kind: 'subscription',
+      resourceId: 'pre-1',
     });
-    // Pagamento de um ciclo: válido, mas fica para a entrega de inadimplência.
     expect(
       gateway.parseNotification({
         headers,
         query: { type: 'subscription_authorized_payment', 'data.id': 'pre-1' },
-        body: {},
+        body: { id: 988 },
       }),
+    ).toEqual({ eventId: '988', kind: 'payment', resourceId: 'pre-1' });
+    // Outro tipo (pagamento avulso): válido, mas não é da assinatura.
+    expect(
+      gateway.parseNotification({ headers, query: { type: 'payment', 'data.id': 'pre-1' }, body: {} }),
     ).toBeNull();
     expect(() =>
       gateway.parseNotification({ headers: { ...headers, 'x-request-id': 'outro' }, query, body: {} }),

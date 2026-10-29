@@ -798,6 +798,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -874,6 +884,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -930,6 +950,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1141,6 +1171,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -1232,6 +1272,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1457,6 +1507,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -1659,6 +1719,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -1717,6 +1787,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1934,6 +2014,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -2117,6 +2207,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -2184,6 +2284,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2368,6 +2478,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -2462,6 +2582,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2684,6 +2814,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -2724,6 +2864,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2919,6 +3069,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -3081,6 +3241,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3268,6 +3438,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -3366,6 +3546,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3600,6 +3790,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -3731,6 +3931,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3933,6 +4143,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4483,6 +4703,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -4671,6 +4901,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -4796,6 +5036,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -4899,6 +5149,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5069,6 +5329,7 @@
         "tags": [
           "Agendamento online"
         ],
+        "x-allowed-when-read-only": true,
         "x-public": true,
         "security": []
       }
@@ -5126,6 +5387,7 @@
         "tags": [
           "Agendamento online"
         ],
+        "x-allowed-when-read-only": true,
         "x-public": true,
         "security": []
       }
@@ -5185,6 +5447,7 @@
         "tags": [
           "Agendamento online"
         ],
+        "x-allowed-when-read-only": true,
         "x-public": true,
         "security": []
       }
@@ -5244,6 +5507,7 @@
         "tags": [
           "Agendamento online"
         ],
+        "x-allowed-when-read-only": true,
         "x-public": true,
         "security": []
       }
@@ -5338,6 +5602,7 @@
         "tags": [
           "Agendamento online"
         ],
+        "x-allowed-when-read-only": true,
         "x-public": true,
         "security": []
       }
@@ -5457,6 +5722,7 @@
         "tags": [
           "Agendamento online"
         ],
+        "x-allowed-when-read-only": true,
         "x-public": true,
         "security": []
       }
@@ -5551,6 +5817,7 @@
         "tags": [
           "Agendamento online"
         ],
+        "x-allowed-when-read-only": true,
         "x-public": true,
         "security": []
       }
@@ -5620,6 +5887,7 @@
         "tags": [
           "Agendamento online"
         ],
+        "x-allowed-when-read-only": true,
         "x-required-permissions": [
           "bookings:self"
         ],
@@ -5691,6 +5959,7 @@
         "tags": [
           "Agendamento online"
         ],
+        "x-allowed-when-read-only": true,
         "x-required-permissions": [
           "bookings:self"
         ],
@@ -5832,6 +6101,7 @@
         "tags": [
           "Agendamento online"
         ],
+        "x-allowed-when-read-only": true,
         "x-required-permissions": [
           "bookings:self"
         ],
@@ -5918,6 +6188,7 @@
         "tags": [
           "Agendamento online"
         ],
+        "x-allowed-when-read-only": true,
         "x-required-permissions": [
           "bookings:self"
         ],
@@ -6053,6 +6324,7 @@
         "tags": [
           "Agendamento online"
         ],
+        "x-allowed-when-read-only": true,
         "x-required-permissions": [
           "bookings:self"
         ],
@@ -6330,6 +6602,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -6583,6 +6865,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -6699,6 +6991,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -6772,6 +7074,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6890,6 +7202,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7022,6 +7344,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -7120,6 +7452,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7372,6 +7714,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -7421,6 +7773,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7677,6 +8039,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8085,6 +8457,16 @@
               }
             }
           },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
             "content": {
@@ -8269,6 +8651,16 @@
           },
           "401": {
             "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8745,7 +9137,7 @@
             }
           },
           "409": {
-            "description": "`plan-change-unavailable`: A barbearia já tem uma assinatura paga; a troca de plano vem depois.",
+            "description": "`plan-change-unavailable`: A barbearia já tem uma assinatura paga: troque de plano em vez de assinar de novo.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8789,6 +9181,180 @@
         "tags": [
           "Assinatura e planos"
         ],
+        "x-allowed-when-read-only": true,
+        "x-required-permissions": [
+          "subscription:manage"
+        ]
+      }
+    },
+    "/v1/subscription/plan": {
+      "post": {
+        "description": "Upgrade vale na hora; downgrade, no fim do período pago. O gateway passa a cobrar o valor do plano novo a partir da próxima cobrança, sem cobrança proporcional. Escolher o plano atual desfaz um downgrade agendado.\n\n**Permissões (basta uma):** `subscription:manage`",
+        "operationId": "BillingController_changePlan",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePlanInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`plan-change-unavailable`: Sem assinatura paga e em dia para trocar de plano.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`plan-not-for-sale`: O plano não está à venda no ciclo da assinatura.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`billing-unavailable`: A assinatura online está desligada nesta instalação.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Troca o plano da assinatura paga, no mesmo ciclo",
+        "tags": [
+          "Assinatura e planos"
+        ],
+        "x-required-permissions": [
+          "subscription:manage"
+        ]
+      }
+    },
+    "/v1/subscription/cancel": {
+      "post": {
+        "description": "Cancela a cobrança recorrente no gateway. A barbearia usa até o fim do período pago e depois fica só para consulta.\n\n**Permissões (basta uma):** `subscription:manage`",
+        "operationId": "BillingController_cancel",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`subscription-not-active`: A barbearia não tem assinatura paga para cancelar.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`billing-unavailable`: A assinatura online está desligada nesta instalação.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Cancela a assinatura paga",
+        "tags": [
+          "Assinatura e planos"
+        ],
+        "x-allowed-when-read-only": true,
         "x-required-permissions": [
           "subscription:manage"
         ]
@@ -8819,9 +9385,19 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "`billing-gateway-unavailable`: O gateway não respondeu à consulta da cobrança; ele reenvia a notificação.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         },
-        "summary": "Notificação do gateway de pagamento sobre uma assinatura",
+        "summary": "Notificação do gateway de pagamento sobre uma assinatura ou uma cobrança dela",
         "tags": [
           "Assinatura e planos"
         ],
@@ -9078,12 +9654,16 @@
             "items": {
               "$ref": "#/components/schemas/Feature"
             }
+          },
+          "access": {
+            "$ref": "#/components/schemas/SubscriptionAccess"
           }
         },
         "required": [
           "plan",
           "status",
-          "features"
+          "features",
+          "access"
         ],
         "additionalProperties": false
       },
@@ -9095,6 +9675,31 @@
           "advanced-reports",
           "assistant"
         ]
+      },
+      "SubscriptionAccess": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "trial",
+              "active",
+              "canceled",
+              "grace",
+              "read-only"
+            ]
+          },
+          "until": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "state",
+          "until"
+        ],
+        "additionalProperties": false
       },
       "Plan": {
         "type": "object",
@@ -11978,6 +12583,9 @@
               "CANCELED"
             ]
           },
+          "access": {
+            "$ref": "#/components/schemas/SubscriptionAccess"
+          },
           "interval": {
             "nullable": true,
             "allOf": [
@@ -12063,19 +12671,56 @@
           "onlineBilling": {
             "type": "boolean"
           },
+          "scheduledPlan": {
+            "nullable": true,
+            "type": "object",
+            "properties": {
+              "plan": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key",
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              "effectiveAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "plan",
+              "effectiveAt"
+            ],
+            "additionalProperties": false
+          },
           "canSubscribe": {
+            "type": "boolean"
+          },
+          "canChangePlan": {
             "type": "boolean"
           }
         },
         "required": [
           "plan",
           "status",
+          "access",
           "interval",
           "amountCents",
           "scheduledChange",
           "pendingCheckout",
           "onlineBilling",
-          "canSubscribe"
+          "scheduledPlan",
+          "canSubscribe",
+          "canChangePlan"
         ],
         "additionalProperties": false
       },
@@ -12123,6 +12768,23 @@
           "checkoutUrl"
         ],
         "additionalProperties": false
+      },
+      "ChangePlanInput": {
+        "type": "object",
+        "properties": {
+          "planKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "planKey"
+        ],
+        "additionalProperties": false,
+        "example": {
+          "planKey": "premium"
+        }
       },
       "BillingWebhookAck": {
         "type": "object",

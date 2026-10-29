@@ -17,6 +17,7 @@ import type { SessionState } from '@/lib/session/session-store';
 import { useSession } from '@/lib/session/use-session';
 import { cn } from '@/lib/utils';
 import { NAV_ITEMS } from './navigation';
+import { SubscriptionBanner } from './subscription-banner';
 
 /** Reconstrói a sessão pelo cookie httpOnly e protege a UX do painel. */
 export function PanelShell({ children }: { children: ReactNode }) {
@@ -60,6 +61,7 @@ export function PanelShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-col">
         <MobileBar session={session} pathname={pathname} />
         <main id="conteudo" className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:py-8">
+          <SubscriptionBanner />
           {children}
         </main>
       </div>

@@ -7,6 +7,7 @@ import {
 } from '../src/modules/marketing/whatsapp/whatsapp-sender.js';
 import { LogMailSender } from '../src/modules/notifications/mail-sender.js';
 import { OutboxProcessor } from '../src/modules/notifications/outbox.processor.js';
+import { SubscriptionsService } from '../src/modules/subscriptions/subscriptions.service.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { as, createTestApp, registerTenant, type Tenant, type TestApp } from './helpers/app.js';
 import { expectTenantIsolation, login } from './helpers/isolation.js';
@@ -257,6 +258,35 @@ describe('Aniversários e campanhas (e2e)', () => {
         .expect(200);
       expect(await birthdays.enqueueDue(at, { barbershopId: tenant.barbershopId })).toBe(1);
       expect((await messagesOf(tenant.barbershopId))[0]?.channel).toBe('EMAIL');
+    });
+
+    it('no modo só leitura (sem pagamento), a mensagem automática fica pausada', async () => {
+      const tenant = await registerTenant(app);
+      await as(app, tenant.token)
+        .put('/v1/birthday-settings')
+        .send({ enabled: true, emailText: null, whatsappTemplate: null })
+        .expect(200);
+      await createClient(tenant, {
+        name: 'Gil Pausado',
+        email: unique('gil'),
+        birthDate: '1990-09-10',
+        consents: { email: true },
+      });
+      const at = localTimeToInstant('2030-09-10', 10 * 60, TIMEZONE);
+
+      // Teste grátis vencido: o painel só consulta, e o aniversário não sai.
+      await prisma.withContext({ barbershopId: tenant.barbershopId }, (tx) =>
+        tx.subscription.update({
+          where: { barbershopId: tenant.barbershopId },
+          data: { trialEndsAt: new Date(Date.now() - 60_000) },
+        }),
+      );
+      expect(await birthdays.enqueueDue(at, { barbershopId: tenant.barbershopId })).toBe(0);
+      expect(await messagesOf(tenant.barbershopId)).toEqual([]);
+
+      // Voltou a ter assinatura: a mensagem do dia sai na rodada seguinte.
+      await app.get(SubscriptionsService).grantPlan(tenant.barbershopId, 'essential');
+      expect(await birthdays.enqueueDue(at, { barbershopId: tenant.barbershopId })).toBe(1);
     });
 
     it('revogar o consentimento depois de enfileirar impede o envio', async () => {

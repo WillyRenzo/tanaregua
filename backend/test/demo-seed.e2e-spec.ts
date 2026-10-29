@@ -255,13 +255,23 @@ describe('Seed de demonstração (e2e)', () => {
         .post('/v1/auth/login')
         .send({ email, password: DEMO_PASSWORD })
         .expect(200);
-      return response.body.profile.subscription as { plan: { key: string }; features: string[] };
+      return response.body.profile.subscription as {
+        plan: { key: string };
+        features: string[];
+        access: { state: string; until: string | null };
+      };
     };
     const demo = await plan(DEMO_ACCOUNTS.owner.email);
     expect(demo.plan.key).toBe('premium');
     expect(demo.features).toContain('assistant');
+    // Cortesia: o ambiente de desenvolvimento não cai no modo só leitura quando o teste acabaria.
+    expect(demo.access).toEqual({ state: 'active', until: null });
     const neighbor = await plan(DEMO_ACCOUNTS.neighborOwner.email);
-    expect(neighbor).toMatchObject({ plan: { key: 'essential' }, features: [] });
+    expect(neighbor).toMatchObject({
+      plan: { key: 'essential' },
+      features: [],
+      access: { state: 'active', until: null },
+    });
   });
 
   it('a administração da plataforma tem conta e os planos ganham preços fictícios, sem repetir', async () => {
@@ -333,7 +343,8 @@ describe('Seed de demonstração (e2e)', () => {
       // Os clientes da demo antiga não têm consentimento: sem campanha, só o aniversário.
       'mensagem automática de aniversário',
       'cor da Barbearia Vizinha',
-      'plano Premium na demo',
+      'plano Premium (cortesia) na demo',
+      'plano Essencial (cortesia) na Barbearia Vizinha',
     ]);
     const sold = await as(app, oldDemo.token).get('/v1/client-packages').expect(200);
     expect(new Set(sold.body.map((row: { status: string }) => row.status))).toEqual(

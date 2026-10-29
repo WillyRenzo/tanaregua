@@ -10,6 +10,7 @@ import {
   parseMercadoPagoNotification,
   type GatewayCheckout,
   type GatewayNotice,
+  type GatewayPayment,
   type GatewaySubscription,
   type IncomingNotification,
   type SubscriptionRequest,
@@ -25,6 +26,20 @@ const preapprovalSchema = z.object({
   id: z.string().min(1),
   status: z.string(),
   init_point: z.string().optional(),
+});
+
+/**
+ * Cobrança de um ciclo (`/authorized_payments/:id`). A referência oficial não abriu nas
+ * pesquisas: os campos vêm dos tipos do SDK oficial em Node e entram no checklist do sandbox
+ * (mvp-plan, entrega 4). O resultado do pagamento fica em `payment.status`.
+ */
+const authorizedPaymentSchema = z.object({
+  id: z.union([z.string(), z.number()]).transform(String),
+  preapproval_id: z.string().min(1),
+  status: z.string().optional(),
+  debit_date: z.string().optional(),
+  date_created: z.string().optional(),
+  payment: z.object({ status: z.string().optional() }).nullish(),
 });
 
 /**
@@ -76,6 +91,26 @@ export class MercadoPagoGateway extends PaymentGateway {
     const status = STATUSES.find((value) => value === found.status);
     if (!status) throw new PaymentGatewayError(502, `unknown_status_${found.status}`);
     return { id: found.id, status };
+  }
+
+  async getPayment(id: string): Promise<GatewayPayment> {
+    const found = authorizedPaymentSchema.parse(
+      await this.call('GET', `/authorized_payments/${encodeURIComponent(id)}`),
+    );
+    const result = found.payment?.status;
+    const status =
+      result === 'approved'
+        ? 'approved'
+        : result === 'rejected' || found.status === 'cancelled'
+          ? 'rejected'
+          : 'pending';
+    const when = found.debit_date ?? found.date_created;
+    return {
+      id: found.id,
+      subscriptionId: found.preapproval_id,
+      status,
+      chargedAt: when ? new Date(when) : new Date(),
+    };
   }
 
   async updateSubscriptionAmount(id: string, amountCents: number): Promise<void> {

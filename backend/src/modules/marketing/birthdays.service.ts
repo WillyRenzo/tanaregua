@@ -8,6 +8,7 @@ import type { Tx } from '../../prisma/prisma.service.js';
 import { BarbershopsService, type BirthdaySettingsRow } from '../barbershops/barbershops.module.js';
 import { ClientsService } from '../clients/clients.service.js';
 import { OutboxService } from '../notifications/outbox.service.js';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 import { reachableBy, type MessagingContact } from './audience.js';
 import { BIRTHDAY_SEND_HOUR, isBirthdayOn, localClock } from './birthdays.js';
 import type { BirthdayEntry, BirthdaySettingsView } from './marketing.responses.js';
@@ -48,6 +49,7 @@ export class BirthdaysService {
     @Inject(ClientsService) private readonly clients: ClientsService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(WhatsAppConnectionService) private readonly whatsapp: WhatsAppConnectionService,
+    @Inject(SubscriptionsService) private readonly subscriptions: SubscriptionsService,
     @Inject(ConfigService) config: ConfigService<Env, true>,
   ) {
     // Nos testes o job é chamado sob demanda (enqueueDue), para ser determinístico.
@@ -155,6 +157,10 @@ export class BirthdaysService {
   ): Promise<number> {
     const settings = await this.barbershops.birthdaySettings(tx, barbershopId);
     if (!settings.birthdayMessagesEnabled) return 0;
+    // Sem pagamento (modo só leitura, business-rules §12), a mensagem automática fica pausada.
+    // Pelo relógio real, como a API: volta na próxima rodada depois de assinar.
+    const subscription = await this.subscriptions.summary(tx, barbershopId);
+    if (!subscription || subscription.access.state === 'read-only') return 0;
     const whatsappReady =
       storedTemplate(settings.birthdayWhatsappTemplate) !== null &&
       (await this.whatsapp.isConnected(tx, barbershopId));

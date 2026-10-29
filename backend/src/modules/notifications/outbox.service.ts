@@ -17,7 +17,13 @@ export type DomainEvent =
   /** Reajuste agendado: avisar o dono por e-mail. */
   | { type: 'SubscriptionPriceChangeNotice'; payload: { subscriptionId: string } }
   /** Data do reajuste chegou: repassar o novo valor ao gateway. */
-  | { type: 'SubscriptionPriceChangeDue'; payload: { subscriptionId: string } };
+  | { type: 'SubscriptionPriceChangeDue'; payload: { subscriptionId: string } }
+  /** O gateway avisou de uma cobrança de ciclo: consultar e estender o período pago. */
+  | { type: 'GatewayPaymentChanged'; payload: { provider: string; paymentId: string } }
+  /** O valor por ciclo mudou (troca de plano): repassar o valor atual ao gateway. */
+  | { type: 'SubscriptionAmountSync'; payload: { subscriptionId: string } }
+  /** Fim do período pago com downgrade agendado: trocar o plano. */
+  | { type: 'SubscriptionPlanChangeDue'; payload: { subscriptionId: string } };
 
 @Injectable()
 export class OutboxService {

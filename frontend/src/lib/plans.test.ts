@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  hasFeature,
-  planIncluding,
-  priceFor,
-  subscriptionStatusLabel,
-  yearlyDiscount,
-  type Plan,
-} from './plans';
+import { hasFeature, planIncluding, priceFor, accessNotice, yearlyDiscount, type Plan } from './plans';
 import type { SessionProfile, SessionState } from './session/session-store';
 
 const prices = { monthlyCents: null, yearlyCents: null };
@@ -45,6 +38,7 @@ describe('hasFeature', () => {
       plan: { key: 'premium', name: 'Premium' },
       status: 'ACTIVE',
       features: ['assistant'],
+      access: { state: 'active', until: null },
     });
     expect(hasFeature(premium, 'assistant')).toBe(true);
     expect(hasFeature(premium, 'payroll')).toBe(false);
@@ -68,12 +62,32 @@ describe('planIncluding', () => {
   });
 });
 
-describe('subscriptionStatusLabel', () => {
-  it('só destaca o que não é a situação normal', () => {
-    expect(subscriptionStatusLabel('ACTIVE')).toBeNull();
-    expect(subscriptionStatusLabel('TRIALING')).toBe('Em período de teste');
-    expect(subscriptionStatusLabel('PAST_DUE')).toBe('Pagamento em atraso');
-    expect(subscriptionStatusLabel('CANCELED')).toBe('Assinatura cancelada');
+describe('accessNotice', () => {
+  const tz = 'America/Sao_Paulo';
+  const until = '2026-11-13T15:00:00.000Z';
+
+  it('assinatura em dia não tem aviso', () => {
+    expect(accessNotice({ state: 'active', until }, tz)).toBeNull();
+    expect(accessNotice({ state: 'active', until: null }, tz)).toBeNull();
+  });
+
+  it('teste, cancelada e carência dizem até quando, no fuso da barbearia', () => {
+    expect(accessNotice({ state: 'trial', until }, tz)).toMatchObject({
+      tone: 'info',
+      text: expect.stringContaining('Teste grátis até 13/11/2026'),
+    });
+    expect(accessNotice({ state: 'canceled', until }, tz)?.text).toContain('funciona até 13/11/2026');
+    expect(accessNotice({ state: 'grace', until }, tz)).toMatchObject({
+      tone: 'warning',
+      text: expect.stringContaining('até 13/11/2026'),
+    });
+  });
+
+  it('só leitura explica o motivo e a saída', () => {
+    expect(accessNotice({ state: 'read-only', until: null }, tz)).toEqual({
+      tone: 'warning',
+      text: expect.stringContaining('só para consulta'),
+    });
   });
 });
 

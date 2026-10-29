@@ -806,13 +806,14 @@ model Plan {
   features  String[]
   /// Ordem de exibição, do mais básico ao mais completo.
   position  Int      @unique
-  /// Plano de quem cria uma barbearia. No máximo um (constraint no SQL manual).
+  /// Plano do teste grátis de quem cria uma barbearia (§12). No máximo um (constraint no SQL manual).
   isDefault Boolean  @default(false) @map("is_default")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  subscriptions Subscription[]
-  checkouts     SubscriptionCheckout[]
-  prices        PlanPrice[]
+  subscriptions          Subscription[]
+  scheduledSubscriptions Subscription[]         @relation("SubscriptionScheduledPlan")
+  checkouts              SubscriptionCheckout[]
+  prices                 PlanPrice[]
 
   @@map("plans")
 }
@@ -842,11 +843,20 @@ model Subscription {
   /// depois do aviso por e-mail ao dono.
   scheduledAmountCents  Int?               @map("scheduled_amount_cents")
   scheduledAmountAt     DateTime?          @map("scheduled_amount_at") @db.Timestamptz
+  /// Fim do teste grátis (§12): só com status TRIALING.
+  trialEndsAt           DateTime?          @map("trial_ends_at") @db.Timestamptz
+  /// Fim do período já pago. Depois dele, 7 dias de carência e então só leitura; cancelada,
+  /// vale até aqui, sem carência. Nulo numa assinatura sem gateway (teste ou cortesia).
+  paidThrough           DateTime?          @map("paid_through") @db.Timestamptz
+  /// Downgrade agendado (§12): o plano muda em `scheduledPlanAt`, o fim do período pago.
+  scheduledPlanId       String?            @map("scheduled_plan_id") @db.Uuid
+  scheduledPlanAt       DateTime?          @map("scheduled_plan_at") @db.Timestamptz
   createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz
   updatedAt             DateTime           @updatedAt @map("updated_at") @db.Timestamptz
 
-  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "subscriptions_barbershop_fkey")
-  plan       Plan       @relation(fields: [planId], references: [id], map: "subscriptions_plan_fkey")
+  barbershop    Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "subscriptions_barbershop_fkey")
+  plan          Plan       @relation(fields: [planId], references: [id], map: "subscriptions_plan_fkey")
+  scheduledPlan Plan?      @relation("SubscriptionScheduledPlan", fields: [scheduledPlanId], references: [id], map: "subscriptions_scheduled_plan_fkey")
 
   @@unique([barbershopId, id], map: "subscriptions_tenant_id_key")
   @@unique([gatewayProvider, gatewaySubscriptionId])
