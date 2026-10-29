@@ -1534,12 +1534,74 @@ export interface paths {
         get?: never;
         /**
          * Define os preços mensal e anual de um plano
-         * @description Valores em centavos; `null` tira o plano de venda naquele ciclo. O reajuste vale para todas as assinaturas do plano naquele ciclo, a partir da próxima cobrança.
+         * @description Valores em centavos; `null` tira o plano de venda naquele ciclo (recusado enquanto houver assinatura paga nele). O reajuste vale para todas as assinaturas pagas do plano naquele ciclo: o dono é avisado por e-mail e o novo valor vale a partir da primeira cobrança depois de 30 dias.
          *
          *     **Acesso:** administração da plataforma (token próprio; token de barbearia é recusado).
          */
         put: operations["PlatformController_setPrices"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Assinatura da barbearia: plano, ciclo, valor, reajuste avisado e checkout aberto
+         * @description **Permissões (basta uma):** `subscription:manage`
+         */
+        get: operations["BillingController_detail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/subscription/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Abre o checkout do gateway para assinar um plano num ciclo
+         * @description O preço vem do catálogo. A assinatura só muda quando o gateway confirma o pagamento (notificação verificada), nunca pelo retorno do navegador.
+         *
+         *     **Permissões (basta uma):** `subscription:manage`
+         */
+        post: operations["BillingController_checkout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/billing/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Notificação do gateway de pagamento sobre uma assinatura
+         * @description Chamada pelo gateway, com assinatura HMAC conferida (401 se inválida). Só põe a consulta ao gateway na fila; notificação repetida é ignorada.
+         */
+        post: operations["BillingController_webhook"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2294,6 +2356,53 @@ export interface components {
         SetPlanPricesInput: {
             monthlyCents: number | null;
             yearlyCents: number | null;
+        };
+        SubscriptionDetail: {
+            plan: {
+                key: string;
+                name: string;
+            };
+            /** @enum {string} */
+            status: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED";
+            interval: components["schemas"]["BillingInterval"] | null;
+            amountCents: number | null;
+            scheduledChange: {
+                amountCents: number;
+                /** Format: date-time */
+                effectiveAt: string;
+            } | null;
+            pendingCheckout: {
+                plan: {
+                    key: string;
+                    name: string;
+                };
+                interval: components["schemas"]["BillingInterval"];
+                amountCents: number;
+                checkoutUrl: string;
+                /** Format: date-time */
+                createdAt: string;
+            } | null;
+            onlineBilling: boolean;
+            canSubscribe: boolean;
+        };
+        /** @enum {string} */
+        BillingInterval: "MONTHLY" | "YEARLY";
+        /**
+         * @example {
+         *       "planKey": "professional",
+         *       "interval": "MONTHLY"
+         *     }
+         */
+        StartCheckoutInput: {
+            planKey: string;
+            /** @enum {string} */
+            interval: "MONTHLY" | "YEARLY";
+        };
+        SubscriptionCheckout: {
+            checkoutUrl: string;
+        };
+        BillingWebhookAck: {
+            received: boolean;
         };
         /** @description Erro no formato RFC 9457. O final de `type` identifica o caso (ex.: appointment-conflict). */
         ProblemDetails: {
@@ -7812,6 +7921,169 @@ export interface operations {
             };
             /** @description Recurso inexistente ou de outra barbearia. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `plan-price-in-use`: O ciclo tem assinaturas pagas e não pode sair de venda. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    BillingController_detail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionDetail"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    BillingController_checkout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartCheckoutInput"];
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionCheckout"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `plan-change-unavailable`: A barbearia já tem uma assinatura paga; a troca de plano vem depois. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `plan-not-for-sale`: O plano não está à venda no ciclo escolhido. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `billing-gateway-unavailable`: O gateway de pagamento não respondeu. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `billing-unavailable`: A assinatura online está desligada nesta instalação. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    BillingController_webhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingWebhookAck"];
+                };
+            };
+            /** @description Muitas requisições do mesmo IP (rate limit). */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

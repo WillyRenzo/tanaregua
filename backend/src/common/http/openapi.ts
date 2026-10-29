@@ -104,7 +104,7 @@ export const API_TAGS = {
   ],
   subscription: [
     'Assinatura e planos',
-    'Planos da plataforma e os recursos de cada um. Recurso fora do plano responde 403 `plan-upgrade-required`.',
+    'Planos da plataforma, os recursos de cada um e a assinatura da barbearia, cobrada pelo gateway de pagamento. Recurso fora do plano responde 403 `plan-upgrade-required`.',
   ],
   platform: [
     'Administração da plataforma',

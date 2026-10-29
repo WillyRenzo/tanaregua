@@ -6,14 +6,38 @@ export type DomainEvent =
   | { type: 'AppointmentBooked'; payload: { appointmentId: string } }
   | { type: 'AppointmentCancelled'; payload: { appointmentId: string } }
   | { type: 'AppointmentRescheduled'; payload: { appointmentId: string } }
-  | { type: 'MarketingMessageQueued'; payload: { messageId: string } };
+  | { type: 'MarketingMessageQueued'; payload: { messageId: string } }
+  /** O gateway avisou que a assinatura mudou: consultar e aplicar a situação. */
+  | { type: 'GatewaySubscriptionChanged'; payload: { provider: string; gatewaySubscriptionId: string } }
+  /** Assinatura no gateway que não vale mais (checkout substituído): cancelar lá. */
+  | {
+      type: 'GatewaySubscriptionCancelRequested';
+      payload: { provider: string; gatewaySubscriptionId: string };
+    }
+  /** Reajuste agendado: avisar o dono por e-mail. */
+  | { type: 'SubscriptionPriceChangeNotice'; payload: { subscriptionId: string } }
+  /** Data do reajuste chegou: repassar o novo valor ao gateway. */
+  | { type: 'SubscriptionPriceChangeDue'; payload: { subscriptionId: string } };
 
 @Injectable()
 export class OutboxService {
-  /** Grava o evento na MESMA transação da mudança: ou os dois acontecem, ou nenhum. */
-  async publish(tx: Tx, barbershopId: string, event: DomainEvent): Promise<void> {
+  /**
+   * Grava o evento na MESMA transação da mudança: ou os dois acontecem, ou nenhum.
+   * `availableAt` adia o despacho (ex.: o reajuste que só vale 30 dias depois do aviso).
+   */
+  async publish(
+    tx: Tx,
+    barbershopId: string,
+    event: DomainEvent,
+    options: { availableAt?: Date } = {},
+  ): Promise<void> {
     await tx.outboxEvent.create({
-      data: { barbershopId, type: event.type, payload: event.payload },
+      data: {
+        barbershopId,
+        type: event.type,
+        payload: event.payload,
+        ...(options.availableAt ? { nextAttemptAt: options.availableAt } : {}),
+      },
     });
   }
 

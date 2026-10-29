@@ -18,6 +18,9 @@ Object.assign(process.env, {
   MAIL_PROVIDER: 'log',
   MAIL_FROM: 'TaNaRegua <teste@tanaregua.local>',
   // Logos enviados nos testes não vão para backend/storage.
+  // Assinatura com o gateway simulado: checkout e notificações sem rede.
+  PAYMENT_PROVIDER: 'fake',
+  PAYMENT_WEBHOOK_SECRET: 'test-webhook-secret-with-enough-length',
   STORAGE_DRIVER: 'local',
   STORAGE_LOCAL_DIR: join(tmpdir(), 'tanaregua-test-storage'),
 });

@@ -25,7 +25,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "openapi:export": "nest build && node dist/openapi.js contracts/openapi.json",
-    "db:seed": "nest build && node dist/seed.js"
+    "db:seed": "nest build && node dist/seed.js",
+    "db:seed:billing": "nest build && node dist/seed-billing.js"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",

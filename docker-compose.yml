@@ -46,6 +46,9 @@ services:
       RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
       # Administração da plataforma (/admin) em dev. Em produção vem do .env da VPS (deploy/).
       PLATFORM_JWT_SECRET: ${PLATFORM_JWT_SECRET:-dev-only-platform-secret-not-for-production}
+      # Assinatura com o gateway simulado em dev (o checkout aprova na hora, sem cobrar).
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-fake}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-dev-only-webhook-secret-not-for-production}
       # Bind mount do Windows não propaga eventos de arquivo: o watch do TypeScript usa polling.
       TSC_WATCHFILE: DynamicPriorityPolling
       TSC_WATCHDIRECTORY: DynamicPriorityPolling

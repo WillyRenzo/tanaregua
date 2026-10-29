@@ -18,6 +18,7 @@ export default defineConfig({
         'src/telemetry.ts',
         'src/openapi.ts',
         'src/seed.ts',
+        'src/seed-billing.ts',
       ],
       reporter: ['text-summary', 'html'],
       thresholds: { lines: 80, branches: 70 },

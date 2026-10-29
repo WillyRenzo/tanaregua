@@ -34,7 +34,7 @@ export function SettingsView() {
     <div className="grid gap-10">
       <SettingsForm settings={barbershop.data!} />
       <BrandSettings settings={barbershop.data!} />
-      <PlanSettings />
+      <PlanSettings timezone={barbershop.data!.timezone} />
     </div>
   );
 }

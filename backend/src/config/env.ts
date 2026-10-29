@@ -71,6 +71,22 @@ export const envSchema = z.object({
     .regex(/^v\d+\.\d+$/, 'Use o formato vNN.N.')
     .default('v23.0'),
   /**
+   * Gateway da cobrança da assinatura (business-rules §5 e §12): "none" desliga a assinatura
+   * online; "fake" simula o checkout e as notificações (dev/testes, recusado em produção);
+   * "mercadopago" cobra de verdade.
+   */
+  PAYMENT_PROVIDER: z.enum(['none', 'fake', 'mercadopago']).default('none'),
+  /** Segredo que assina as notificações do gateway (no Mercado Pago, o de Webhooks da aplicação). */
+  PAYMENT_WEBHOOK_SECRET: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(16).optional(),
+  ),
+  /** Access token de produção (ou de teste) da conta do TaNaRegua no Mercado Pago. */
+  MERCADOPAGO_ACCESS_TOKEN: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(16).optional(),
+  ),
+  /**
    * Chave (base64 de 32 bytes) que cifra segredos de terceiros no banco, como o token do
    * WhatsApp de cada barbearia. Gere com `openssl rand -base64 32`. Obrigatória em produção.
    */
@@ -112,6 +128,16 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   }
   if (result.data.PLATFORM_JWT_SECRET === result.data.JWT_ACCESS_SECRET) {
     throw new Error('PLATFORM_JWT_SECRET precisa ser diferente do JWT_ACCESS_SECRET');
+  }
+  // O gateway simulado aprova qualquer checkout: em produção, daria plano sem pagamento.
+  if (result.data.NODE_ENV === 'production' && result.data.PAYMENT_PROVIDER === 'fake') {
+    throw new Error('PAYMENT_PROVIDER=fake não é permitido em produção');
+  }
+  if (result.data.PAYMENT_PROVIDER !== 'none' && !result.data.PAYMENT_WEBHOOK_SECRET) {
+    throw new Error('PAYMENT_WEBHOOK_SECRET é obrigatória com um gateway de pagamento');
+  }
+  if (result.data.PAYMENT_PROVIDER === 'mercadopago' && !result.data.MERCADOPAGO_ACCESS_TOKEN) {
+    throw new Error('MERCADOPAGO_ACCESS_TOKEN é obrigatória quando PAYMENT_PROVIDER=mercadopago');
   }
   return result.data;
 }

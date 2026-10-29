@@ -13,8 +13,9 @@ Claude tenta rodar `git commit` (pela tool Bash ou PowerShell) e executa
 
 1. Bloqueia a mensagem de commit com caractere fora do ASCII (acento, cedilha, travessão, aspas curvas, `§`, `→`): mensagens são em inglês e só com ASCII (`.claude/rules/general.md`). Olha só o campo `command` da tool, com o caractere cru ou escapado no JSON (`\u00e7`). Roda antes do lint, que é lento. Mensagem passada por arquivo (`git commit -F arquivo`) não é inspecionada.
 2. Para cada app (`backend/`, `frontend/`) que já tiver `package.json`, roda `npm run lint` e `npm run typecheck` **dentro do container** do app (`docker compose run --rm --no-deps -T <app>`), porque o Node não está instalado no host. Se não houver Docker, usa o `npm` do host.
-3. Se algo falhar, sai com **exit 2**. O commit é bloqueado e o Claude recebe o motivo (ou as últimas linhas do erro) para corrigir.
-4. Apps ainda não criados são ignorados, então o hook não atrapalha durante o scaffold.
+3. Confere a formatação (`prettier --check`) **só dos arquivos do commit** em cada app, com o mesmo escopo do `format:check` do CI: no backend, os `.ts`; no frontend, tudo que o prettier conhece (o `.prettierignore` vale). Entram os arquivos staged e também os alterados ou novos ainda não staged, porque o comando costuma ser `git add … && git commit` e o hook roda antes do `git add`. Usa `--end-of-line auto`, porque no Windows o `autocrlf` deixa CRLF na cópia local e o CI, que vê LF, não reclamaria disso.
+4. Se algo falhar, sai com **exit 2**. O commit é bloqueado e o Claude recebe o motivo (ou as últimas linhas do erro) para corrigir.
+5. Apps ainda não criados são ignorados, então o hook não atrapalha durante o scaffold.
 
 Detalhes que importam (e que o exemplo genérico original do kit errava):
 

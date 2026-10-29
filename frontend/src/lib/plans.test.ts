@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { hasFeature, planIncluding, subscriptionStatusLabel, yearlyDiscount, type Plan } from './plans';
+import {
+  hasFeature,
+  planIncluding,
+  priceFor,
+  subscriptionStatusLabel,
+  yearlyDiscount,
+  type Plan,
+} from './plans';
 import type { SessionProfile, SessionState } from './session/session-store';
 
 const prices = { monthlyCents: null, yearlyCents: null };
@@ -84,5 +91,13 @@ describe('yearlyDiscount', () => {
   it('sem um dos preços, não há o que comparar', () => {
     expect(yearlyDiscount(null, 99900)).toBeNull();
     expect(yearlyDiscount(9990, null)).toBeNull();
+  });
+});
+
+describe('priceFor', () => {
+  it('devolve o preço do ciclo, ou null se o plano não é vendido nele', () => {
+    const plan: Plan = { ...plans[1]!, prices: { monthlyCents: 12990, yearlyCents: null } };
+    expect(priceFor(plan, 'MONTHLY')).toBe(12990);
+    expect(priceFor(plan, 'YEARLY')).toBeNull();
   });
 });

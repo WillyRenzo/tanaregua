@@ -327,16 +327,19 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
 - **Assinatura e planos (vem primeiro na fase 3):** o uso do TaNaRegua passa a exigir assinatura por barbearia, com vários planos. O básico cobre as fases 1 e 2; o mais caro inclui o assistente de IA (fase 4); proposta de um intermediário com a fase 3. Entregas, em ordem:
   1. catálogo de recursos, planos e assinatura por barbearia, com verificação na API (`@RequiresFeature`) e no painel (recurso fora do plano aparece como upgrade) (feito em 28/10/2026: o painel mostra o plano em Configurações, e o `<FeatureGate>` está pronto para os recursos da fase 3);
   2. administração da plataforma (`/admin`, login e token próprios) com os preços mensal e anual de cada plano (feito em 28/10/2026; a conta é criada por comando no servidor);
-  3. cobrança recorrente pela porta `PaymentGateway` (Mercado Pago), com webhook verificado e idempotente. Desenho previsto:
+  3. cobrança recorrente pela porta `PaymentGateway` (Mercado Pago), com webhook verificado e idempotente (feito em 29/10/2026, com o gateway simulado; desenho em `architecture.md`):
      - checkout hospedado do Mercado Pago (assinatura `preapproval` com `init_point`), sem cartão passando pelo TaNaRegua;
      - o webhook só avisa: o estado vem de uma consulta ao Mercado Pago com o token da plataforma, e a assinatura `x-signature` é conferida;
-     - o reajuste de preço vale para todas as assinaturas (business-rules §12): salvar um preço novo repassa o valor às assinaturas ativas no gateway (`PUT /preapproval/{id}` com o novo `transaction_amount`), de forma assíncrona e idempotente, pelo outbox;
-     - **Verificar com o dono do produto antes de começar** (decisões em aberto em `business-rules.md` §12; não implemente um default por conta própria):
-       - aviso prévio ao assinante antes do reajuste: se existe, com que antecedência e por qual canal;
-       - quem assina num ciclo que saiu de venda (preço apagado na administração): segue no último preço, migra de ciclo ou é cancelado;
+     - reajuste com aviso de 30 dias por e-mail e repasse ao gateway (`PUT /preapproval/{id}`) na data, pelo outbox; ciclo com assinante não sai de venda (decisões de 29/10/2026);
+     - **Antes de ligar o Mercado Pago em produção** (`PAYMENT_PROVIDER=mercadopago`), testar no sandbox com uma conta de teste:
+       - os campos do `POST /preapproval` (a referência oficial não abriu nas pesquisas de 28 e 29/10/2026; os campos vêm dos tipos do SDK oficial em Node): checkout com `init_point`, `back_url` aceito e assinatura `pending` sem `card_token_id`;
+       - a assinatura das notificações: o SDK usa o `data.id` como chegou, e um post da comunidade diz que vai em minúsculas (as duas formas são aceitas hoje). Conferir também se o reenvio a cada 15 min traz `ts` novo (a tolerância é de 1 hora);
+       - se o Mercado Pago exige `back_url` com HTTPS e domínio público, e se o `PUT` do `transaction_amount` vale para a cobrança seguinte;
+       - onde configurar a URL do webhook para assinaturas: a documentação diz que o painel de integrações não serve para assinaturas.
+     - **Verificar com o dono do produto** (decisões em aberto em `business-rules.md` §12):
        - valores reais dos preços e nomes definitivos dos planos (o seed usa preços fictícios);
        - confirmar as propostas da administração: senha com 12 caracteres, sessão de 12 h e entrada sem segundo fator (risco aceito em `security.md`);
-     - Conferir também os campos da API de assinaturas do Mercado Pago (`preapproval`) na referência oficial, que não abriu na pesquisa de 28/10/2026;
+     - Fica para a entrega 4: troca de plano com assinatura paga (hoje recusada com 409), pagamentos de cada ciclo (`subscription_authorized_payment`), cancelamento pelo painel e a situação "pausada" (hoje vira "em atraso").
   4. inadimplência, teste grátis e troca de plano, conforme as decisões pendentes em `business-rules.md` §12.
   - A verificação de recursos precisa estar pronta **antes** de liberar qualquer recurso da fase 3 ou 4, senão o plano básico já nasceria com eles.
 - **Pagamento online** pela porta `PaymentGateway` (Mercado Pago como adapter inicial, trocável por configuração), webhook verificado e idempotente, reembolso de pacote pago antecipadamente.

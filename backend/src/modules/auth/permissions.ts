@@ -4,6 +4,7 @@
  */
 export const PERMISSIONS = [
   'barbershop:manage',
+  'subscription:manage',
   'roles:manage',
   'staff:read',
   'staff:manage',

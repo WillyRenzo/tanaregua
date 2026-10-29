@@ -44,6 +44,8 @@ be npx prisma migrate deploy
 
 # Dados de demonstração: uma conta por papel; numa demo existente, só acrescenta módulos novos (README)
 be npm run db:seed
+# Assinatura paga com reajuste agendado na demo (fora do seed; usa a API rodando, README)
+be npm run db:seed:billing
 
 # Testes
 be npm test                    # unitários (Vitest)

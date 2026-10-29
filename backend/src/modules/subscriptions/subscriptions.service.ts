@@ -1,8 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { notFound } from '../../common/http/domain-error.js';
+import { conflict, notFound } from '../../common/http/domain-error.js';
 import { TenantDb } from '../../common/tenancy/tenant-db.service.js';
 import type { BillingInterval } from '../../generated/prisma/client.js';
 import { PrismaService, type Tx } from '../../prisma/prisma.service.js';
+import { OutboxService } from '../notifications/outbox.service.js';
 import { grantedFeatures, isFeature, type Feature } from './features.js';
 import type { PlanSummary, SubscriptionSummary } from './subscriptions.responses.js';
 import type { SetPlanPricesInput } from './subscriptions.schemas.js';
@@ -34,11 +35,44 @@ const toPlanSummary = (plan: PlanRow): PlanSummary => ({
 const readPlans = async (tx: Tx): Promise<PlanSummary[]> =>
   (await tx.plan.findMany({ select: PLAN_SELECT, orderBy: { position: 'asc' } })).map(toPlanSummary);
 
+/** Antecedência do aviso de reajuste ao dono, por e-mail (business-rules §12). */
+export const PRICE_CHANGE_NOTICE_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export const priceChangeEffectiveAt = (from: Date = new Date()): Date =>
+  new Date(from.getTime() + PRICE_CHANGE_NOTICE_DAYS * DAY_MS);
+
+/**
+ * Publica o aviso por e-mail (agora) e o repasse ao gateway (na data do reajuste). O repasse
+ * confere de novo o reajuste agendado: se outro o substituiu, não faz nada.
+ */
+export async function publishPriceChange(
+  outbox: OutboxService,
+  tx: Tx,
+  barbershopId: string,
+  subscriptionId: string,
+  effectiveAt: Date,
+): Promise<void> {
+  await outbox.publish(tx, barbershopId, {
+    type: 'SubscriptionPriceChangeNotice',
+    payload: { subscriptionId },
+  });
+  await outbox.publish(
+    tx,
+    barbershopId,
+    { type: 'SubscriptionPriceChangeDue', payload: { subscriptionId } },
+    { availableAt: effectiveAt },
+  );
+}
+
+const INTERVAL_LABELS: Record<BillingInterval, string> = { MONTHLY: 'mensal', YEARLY: 'anual' };
+
 @Injectable()
 export class SubscriptionsService {
   constructor(
     @Inject(TenantDb) private readonly db: TenantDb,
     @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
   ) {}
 
   /** Assinatura de uma barbearia recém-criada, no plano padrão (chamado pelo cadastro). */
@@ -80,9 +114,11 @@ export class SubscriptionsService {
 
   /**
    * Define os preços de um plano. Só a administração da plataforma chama: a transação leva o
-   * administrador no contexto, sem o qual o RLS de `plan_prices` recusa a escrita. Mudar o
-   * preço reajusta todas as assinaturas do plano naquele ciclo, a partir da próxima cobrança
-   * (com a cobrança recorrente, o novo valor é repassado ao gateway).
+   * administrador no contexto, sem o qual o RLS de `plan_prices` recusa a escrita.
+   *
+   * Mudar o preço reajusta todas as assinaturas pagas do plano naquele ciclo (§12): o dono de
+   * cada uma é avisado por e-mail e o novo valor passa ao gateway 30 dias depois, valendo a
+   * partir da cobrança seguinte. Tirar o ciclo de venda é recusado enquanto houver assinante.
    */
   setPlanPrices(adminId: string, planKey: string, input: SetPlanPricesInput): Promise<PlanSummary> {
     return this.prisma.withContext({ platformAdminId: adminId }, async (tx) => {
@@ -93,18 +129,48 @@ export class SubscriptionsService {
         ['YEARLY', input.yearlyCents],
       ];
       for (const [interval, amountCents] of prices) {
+        const where = { planId_interval: { planId: plan.id, interval } };
+        const current = await tx.planPrice.findUnique({ where, select: { amountCents: true } });
         if (amountCents === null) {
-          await tx.planPrice.deleteMany({ where: { planId: plan.id, interval } });
+          if (!current) continue;
+          await this.assertCycleWithoutSubscribers(tx, plan.id, interval);
+          await tx.planPrice.delete({ where });
         } else {
           await tx.planPrice.upsert({
-            where: { planId_interval: { planId: plan.id, interval } },
+            where,
             create: { planId: plan.id, interval, amountCents, updatedById: adminId },
             update: { amountCents, updatedById: adminId },
           });
+          if (current?.amountCents !== amountCents) {
+            await this.schedulePriceChange(tx, plan.id, interval, amountCents);
+          }
         }
       }
       return toPlanSummary(await tx.plan.findUniqueOrThrow({ where: { id: plan.id }, select: PLAN_SELECT }));
     });
+  }
+
+  private async assertCycleWithoutSubscribers(tx: Tx, planId: string, interval: BillingInterval) {
+    const [row] = await tx.$queryRaw<{ count: number }[]>`
+      SELECT plan_cycle_subscriber_count(${planId}::uuid, ${interval}::"BillingInterval") AS count`;
+    const count = row?.count ?? 0;
+    if (count > 0) {
+      throw conflict(
+        'plan-price-in-use',
+        `O ciclo ${INTERVAL_LABELS[interval]} tem ${count} ${count === 1 ? 'assinatura ativa' : 'assinaturas ativas'} e não pode sair de venda.`,
+      );
+    }
+  }
+
+  /** Agenda o reajuste em todas as barbearias do plano e ciclo (função SQL da plataforma). */
+  private async schedulePriceChange(tx: Tx, planId: string, interval: BillingInterval, amountCents: number) {
+    const effectiveAt = priceChangeEffectiveAt();
+    const scheduled = await tx.$queryRaw<{ barbershop_id: string; subscription_id: string }[]>`
+      SELECT barbershop_id, subscription_id
+        FROM schedule_plan_price_change(${planId}::uuid, ${interval}::"BillingInterval", ${amountCents}::int, ${effectiveAt}::timestamptz)`;
+    for (const row of scheduled) {
+      await publishPriceChange(this.outbox, tx, row.barbershop_id, row.subscription_id, effectiveAt);
+    }
   }
 
   /**
