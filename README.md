@@ -113,7 +113,7 @@ Senha de todas as contas: **`senha-forte-123`**.
 - **Próximos 7 dias:** agenda parcialmente preenchida, com confirmados nos primeiros dias.
 - **Cliente online (Paula):** "Meus agendamentos" com atendimentos passados, uma reserva que ela mesma cancelou, uma que ela mesma reagendou e reservas futuras (o botão Reagendar aparece até 24 h antes).
 - **Plano:** a Barbearia Demo está no plano mais completo (Premium) e a Vizinha no básico (Essencial), que é o plano de toda barbearia nova. Veja em Configurações → Plano.
-- **Preços dos planos:** valores **fictícios** de demonstração (Essencial R$ 79,90/mês, Profissional R$ 129,90, Premium R$ 199,90; o anual com dois meses de desconto). Mude em `/admin`. A conta da administração só é criada se o `backend/.env` tiver `DATABASE_MIGRATION_URL` (a aplicação não cria administradores).
+- **Preços dos planos:** valores **fictícios** de demonstração (Essencial R$ 79,90/mês, Profissional R$ 129,90, Premium R$ 199,90; o anual com dois meses de desconto). Mude em `/admin`. Em dev, a assinatura usa o gateway simulado: em Configurações → Plano, o dono escolhe um plano e o checkout aprova na hora, sem cobrar nada. A conta da administração só é criada se o `backend/.env` tiver `DATABASE_MIGRATION_URL` (a aplicação não cria administradores).
 - **Barbearia Vizinha:** outra cor (vinho, sem logo), um cliente, um atendimento de ontem e um de amanhã, para conferir o isolamento.
 
 As datas são relativas ao dia em que o seed rodou, e o sorteio do histórico usa semente fixa

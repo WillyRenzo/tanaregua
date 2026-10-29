@@ -61,6 +61,18 @@ em um SaaS multi-tenant que lida com dados pessoais, salários e pagamentos.
 - **Plano da assinatura (business-rules §12):** o recurso do plano é verificado na API em toda rota que depende dele (`@RequiresFeature`), nunca só escondido no frontend. O plano não vai no JWT (mudaria sem o token saber). Upgrade só vale depois de confirmado pelo gateway (webhook verificado), nunca pelo retorno do checkout no navegador.
 - A administração de planos é da plataforma, com autenticação separada; quem administra planos não ganha acesso aos dados das barbearias.
 
+### Cobrança da assinatura (implementado)
+
+- **Webhook** `POST /v1/billing/webhook`: rota pública com rate limit próprio (300/min).
+  - O adapter confere o `x-signature` (HMAC-SHA256 com `PAYMENT_WEBHOOK_SECRET`, comparação em tempo constante) e recusa assinatura ausente, errada ou com `ts` a mais de 1 hora: 401, sem enfileirar nada.
+  - A notificação não carrega estado: só diz qual assinatura mudou. A aplicação grava o id do evento em `billing_webhook_events` (unique, sem UPDATE/DELETE para a aplicação) e põe a consulta no outbox.
+  - O estado vem de um `GET` ao gateway com o token do TaNaRegua. Uma notificação forjada que passasse na assinatura só causaria uma consulta.
+- **Tenant do webhook:** a notificação chega sem tenant. A função `billing_tenant_of` (SECURITY DEFINER) devolve só o id da barbearia dona daquele id de assinatura; o resto roda com o RLS no tenant certo.
+- **Funções da plataforma:** `plan_cycle_subscriber_count` e `schedule_plan_price_change` (SECURITY DEFINER, cruzam barbearias) recusam a chamada sem `app.current_platform_admin`, e há teste disso. Uma rota de barbearia não consegue contar nem reajustar assinaturas de outras.
+- **Gateway simulado** (`PAYMENT_PROVIDER=fake`): aprova qualquer checkout por `GET /v1/billing/fake-checkout/:id`. A API **recusa subir** com ele em produção. Com `none` (padrão), não há checkout e o webhook responde 401.
+- **Segredos:** `MERCADOPAGO_ACCESS_TOKEN` e `PAYMENT_WEBHOOK_SECRET` só no `.env` do servidor. Erro do gateway vira log com status e código do provedor, sem corpo nem dados do pagador. O e-mail do pagador vai ao gateway só na criação do checkout.
+- **Cobrança em dobro:** com assinatura paga ativa, a API recusa outro checkout (409). Um checkout substituído que for aprovado depois é cancelado no gateway pelo outbox.
+
 ## Administração da plataforma (`/admin`)
 
 - **Conta separada:** tabela `platform_admins`, sem vínculo com barbearia. A aplicação **não tem INSERT nem UPDATE** nela: contas e troca de senha só pelo comando `platform-admin`, que roda no servidor com o usuário dono das tabelas. Uma falha na API não cria administrador.

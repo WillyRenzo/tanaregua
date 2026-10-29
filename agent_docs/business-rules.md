@@ -119,6 +119,7 @@ Não invente regra para preencher uma lacuna: pergunte.
 - **Novos papéis precisam ser possíveis sem reescrever guards.** Autorização é feita por **permissão** (ex.: `appointments:read:any`, `commissions:read:own`), e cada papel é um conjunto de permissões. O código checa permissões, nunca nomes de papéis. O catálogo fica em `backend/src/modules/auth/permissions.ts`; numa rota, basta UMA das permissões declaradas, e o escopo `:own` vs `:any` é aplicado no service.
 - Profissional: vê e gerencia a própria agenda e as próprias comissões.
 - Recepcionista: gerencia agenda de todos e caixa/comandas. Não vê salários.
+- Assinatura do TaNaRegua (plano, cobrança, checkout e avisos de reajuste): só o dono (`subscription:manage`).
 - Cliente final: agenda, cancela (dentro da política) e vê o próprio histórico. Não acessa o painel.
 
 ## 9. Clientes, aniversários e campanhas (LGPD)
@@ -144,9 +145,9 @@ Não invente regra para preencher uma lacuna: pergunte.
   - o plano **mais caro** inclui o **assistente de IA** (fase 4).
   - **[PROPOSTA]** três planos: **Essencial** (fases 1 e 2), **Profissional** (+ fase 3: pagamento online, salários e relatórios avançados) e **Premium** (+ assistente de IA). Nomes, preços e o conteúdo exato de cada um ainda serão definidos. Já estão cadastrados assim; mudar é dado, não código.
 - **Ciclos mensal e anual** (confirmado em 28/10/2026). Cada plano tem um preço por ciclo, em centavos, **configurado na administração da plataforma** (sem código nem migration). Sem preço num ciclo, o plano não é vendido nele; o desconto do anual é só a diferença entre os dois preços.
-  - **Reajuste vale para todos** (confirmado em 28/10/2026): mudar o preço de um plano num ciclo reajusta **todas as assinaturas** daquele plano e ciclo, a partir da próxima cobrança de cada uma (o mensal na próxima mensalidade, o anual na próxima renovação). Não existe "preço antigo" guardado por assinatura.
-  - **[PENDENTE]** aviso prévio ao assinante antes do reajuste (prazo e canal);
-  - **[PENDENTE]** o que acontece com quem assina num ciclo que saiu de venda (preço apagado): segue no último preço, migra de ciclo ou é cancelado.
+  - **Reajuste vale para todos** (confirmado em 28/10/2026): mudar o preço de um plano num ciclo reajusta **todas as assinaturas pagas** daquele plano e ciclo. Não existe "preço antigo" guardado por assinatura.
+  - **Aviso de 30 dias por e-mail** (confirmado em 29/10/2026): ao salvar o preço novo, quem cuida da assinatura (`subscription:manage`, o dono) recebe um e-mail com o valor atual, o novo e a data. O novo valor passa ao gateway **30 dias depois** e vale a partir da primeira cobrança seguinte (o mensal na mensalidade, o anual na renovação). Vale também para redução de preço. Mudar o preço de novo dentro dos 30 dias substitui o reajuste anterior (com novo aviso e novo prazo); voltar ao valor que a barbearia já paga desfaz o reajuste; salvar o mesmo valor não avisa de novo. Quem conclui um checkout aberto antes da mudança também recebe o aviso.
+  - **Ciclo com assinante não sai de venda** (confirmado em 29/10/2026): a administração não consegue apagar o preço de um plano num ciclo enquanto houver assinatura paga (não cancelada) nele.
 - **Administração da plataforma** (`/admin`): quem administra o TaNaRegua entra com conta e login próprios, separados das barbearias, e não vê dados de nenhuma barbearia. As contas são criadas só por comando no servidor (`deploy/README.md`), nunca pela aplicação.
   - **[PROPOSTA]** senha com no mínimo 12 caracteres e sessão de 12 horas.
 - **[PROPOSTA] Plano de quem chega:** a barbearia nova começa no plano padrão (hoje o Essencial), com a assinatura ativa; as que já existiam entraram nele. Vale até a decisão sobre o teste grátis.
@@ -156,6 +157,11 @@ Não invente regra para preencher uma lacuna: pergunte.
 - **Recurso fora do plano:** a API recusa (erro `plan-upgrade-required`) e o painel mostra o recurso como "disponível no plano X", com convite para trocar de plano. Esconder no frontend não basta: quem garante é a API.
 - **Trocar para um plano menor nunca apaga dados.** O que ficou fora do plano só fica inacessível até um novo upgrade (ex.: o histórico de folha continua no banco).
 - **Cobrança pela porta `PaymentGateway`** (§5): a mesma de pagamento online, Mercado Pago como adapter inicial. O status da assinatura só muda por **webhook verificado** ou consulta ao gateway, e o processamento é idempotente. O sistema nunca guarda dados de cartão.
+  - **Assinar:** em Configurações, o dono (`subscription:manage`) escolhe plano e ciclo e vai ao **checkout hospedado do gateway**; o preço vem sempre do catálogo. O plano só muda quando o gateway confirma a autorização, nunca pelo retorno do navegador.
+  - Clicar de novo no mesmo plano, ciclo e preço em até 1 hora reaproveita o checkout aberto. Abrir outro checkout cancela os abertos antes, também no gateway. Um checkout antigo aprovado depois disso não vale e é cancelado no gateway (nada de cobrança em dobro).
+  - **Com assinatura paga ativa, não se abre outro checkout:** a troca de plano entra com a entrega 4 (a regra de cobrança proporcional está pendente abaixo). Com a assinatura cancelada no gateway, o dono pode assinar de novo.
+  - **Situação vinda do gateway:** autorizada = ativa; pausada = em atraso (os recursos seguem liberados até a decisão sobre inadimplência); cancelada = cancelada.
+  - Sem gateway configurado na instalação (`PAYMENT_PROVIDER=none`), a assinatura online fica indisponível e o painel diz para falar com o suporte.
 - **[PENDENTE]**
   - valores dos preços e nomes definitivos (o seed de desenvolvimento usa preços fictícios);
   - período de teste grátis (duração e qual plano durante o teste);
