@@ -36,6 +36,7 @@ type Body<P extends keyof paths, M extends 'post' | 'patch' | 'put'> = NonNullab
 export const queryKeys = {
   barbershop: ['barbershop'] as const,
   plans: ['plans'] as const,
+  subscription: ['subscription'] as const,
   staff: ['staff'] as const,
   roles: ['roles'] as const,
   schedule: (id: string) => ['staff', id, 'schedule'] as const,
@@ -75,6 +76,27 @@ export function usePlans() {
     queryKey: queryKeys.plans,
     queryFn: () => unwrap(api.GET('/v1/plans')),
     staleTime: 60 * 60_000,
+  });
+}
+
+// ───────────── Assinatura ─────────────
+
+export type SubscriptionDetail = Schemas['SubscriptionDetail'];
+export type BillingInterval = Schemas['BillingInterval'];
+
+/** Assinatura da barbearia (quem assina e paga). Enquanto espera o gateway confirmar, consulta de novo. */
+export function useSubscription(options: { awaitingConfirmation?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.subscription,
+    queryFn: () => unwrap(api.GET('/v1/subscription')),
+    refetchInterval: options.awaitingConfirmation ? 3000 : false,
+  });
+}
+
+export function useStartCheckout() {
+  return useMutation({
+    mutationFn: (body: Body<'/v1/subscription/checkout', 'post'>) =>
+      unwrap(api.POST('/v1/subscription/checkout', { body })),
   });
 }
 

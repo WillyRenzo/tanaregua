@@ -45,3 +45,15 @@ export function yearlyDiscount(monthlyCents: number | null, yearlyCents: number 
   if (monthlyCents === null || yearlyCents === null || monthlyCents <= 0) return null;
   return Math.round(10_000 - (yearlyCents * 10_000) / (12 * monthlyCents));
 }
+
+export type BillingInterval = components['schemas']['BillingInterval'];
+
+export const INTERVAL_LABELS: Record<BillingInterval, { name: string; per: string }> = {
+  MONTHLY: { name: 'mensal', per: 'mês' },
+  YEARLY: { name: 'anual', per: 'ano' },
+};
+
+/** Preço do plano no ciclo, em centavos; `null` = não é vendido nele. */
+export function priceFor(plan: Plan, interval: BillingInterval): number | null {
+  return interval === 'MONTHLY' ? plan.prices.monthlyCents : plan.prices.yearlyCents;
+}

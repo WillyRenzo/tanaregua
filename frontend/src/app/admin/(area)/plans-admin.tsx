@@ -32,7 +32,7 @@ export function PlansAdmin() {
     <>
       <PageHeader
         title="Planos e preços"
-        description="O reajuste vale para todas as assinaturas do plano naquele ciclo, a partir da próxima cobrança."
+        description="O reajuste vale para todas as assinaturas pagas do plano naquele ciclo: o dono é avisado por e-mail e o novo valor vale a partir da primeira cobrança depois de 30 dias. Um ciclo com assinaturas não sai de venda."
       />
       {plans.isPending ? (
         <LoadingRows rows={3} label="Carregando os planos" />

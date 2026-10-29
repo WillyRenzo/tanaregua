@@ -61,3 +61,13 @@ export async function platformLogout(): Promise<void> {
   await api.POST('/v1/platform/auth/logout');
   platformSessionStore.set({ status: 'anonymous' });
 }
+
+/**
+ * Relê o perfil do painel sem trocar o token (ex.: o plano mudou depois da confirmação do
+ * pagamento). Os recursos do plano vêm no perfil, não no token.
+ */
+export async function refreshPanelProfile(): Promise<void> {
+  const profile = await unwrap(api.GET('/v1/auth/me'));
+  const current = sessionStore.get();
+  if (current.status === 'authenticated') sessionStore.set({ ...current, profile });
+}
