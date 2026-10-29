@@ -37,7 +37,9 @@ test('entra, muda o preço de um plano e sai', async ({ page }) => {
 
   try {
     await monthly.fill('149,90');
-    await expect(card.getByText(/mais barato que 12 mensalidades|mais caro que 12 mensalidades/)).toBeVisible();
+    await expect(
+      card.getByText(/mais barato que 12 mensalidades|mais caro que 12 mensalidades/),
+    ).toBeVisible();
     await card.getByRole('button', { name: 'Salvar preços' }).click();
     await expect(page.getByText('Preços do plano Profissional salvos.')).toBeVisible();
 
