@@ -29,3 +29,19 @@ const STATUS_LABELS: Record<SubscriptionStatus, string | null> = {
 export function subscriptionStatusLabel(status: SubscriptionStatus): string | null {
   return STATUS_LABELS[status];
 }
+
+export const FEATURE_LABELS: Record<Feature, string> = {
+  'online-payment': 'Pagamento online',
+  payroll: 'Salários e folha',
+  'advanced-reports': 'Relatórios avançados',
+  assistant: 'Assistente de IA',
+};
+
+/**
+ * Desconto do anual sobre 12 mensalidades, em basis points (1500 = 15%). Negativo quando o
+ * anual sai mais caro; `null` se faltar um dos preços.
+ */
+export function yearlyDiscount(monthlyCents: number | null, yearlyCents: number | null): number | null {
+  if (monthlyCents === null || yearlyCents === null || monthlyCents <= 0) return null;
+  return Math.round(10_000 - (yearlyCents * 10_000) / (12 * monthlyCents));
+}

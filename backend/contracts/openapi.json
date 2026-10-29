@@ -8372,6 +8372,265 @@
         ],
         "description": "**Permissões (basta uma):** `campaigns:manage`"
       }
+    },
+    "/v1/platform/auth/login": {
+      "post": {
+        "operationId": "PlatformController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformLoginInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Muitas requisições do mesmo IP (rate limit).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Entra na administração da plataforma",
+        "tags": [
+          "Administração da plataforma"
+        ],
+        "x-public": true,
+        "security": []
+      }
+    },
+    "/v1/platform/auth/refresh": {
+      "post": {
+        "operationId": "PlatformController_refresh",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSession"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Muitas requisições do mesmo IP (rate limit).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Renova o access token da administração usando o cookie de refresh",
+        "tags": [
+          "Administração da plataforma"
+        ],
+        "x-public": true,
+        "security": []
+      }
+    },
+    "/v1/platform/auth/logout": {
+      "post": {
+        "operationId": "PlatformController_logout",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "429": {
+            "description": "Muitas requisições do mesmo IP (rate limit).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Sai da administração e revoga a sessão",
+        "tags": [
+          "Administração da plataforma"
+        ],
+        "x-public": true,
+        "security": []
+      }
+    },
+    "/v1/platform/auth/me": {
+      "get": {
+        "operationId": "PlatformController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Quem está na administração da plataforma",
+        "tags": [
+          "Administração da plataforma"
+        ],
+        "x-platform": true,
+        "description": "**Acesso:** administração da plataforma (token próprio; token de barbearia é recusado)."
+      }
+    },
+    "/v1/platform/plans": {
+      "get": {
+        "operationId": "PlatformController_plans",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Plan"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Planos com recursos e preços",
+        "tags": [
+          "Administração da plataforma"
+        ],
+        "x-platform": true,
+        "description": "**Acesso:** administração da plataforma (token próprio; token de barbearia é recusado)."
+      }
+    },
+    "/v1/platform/plans/{key}/prices": {
+      "put": {
+        "description": "Valores em centavos; `null` tira o plano de venda naquele ciclo. O reajuste vale para todas as assinaturas do plano naquele ciclo, a partir da próxima cobrança.\n\n**Acesso:** administração da plataforma (token próprio; token de barbearia é recusado).",
+        "operationId": "PlatformController_setPrices",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPlanPricesInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso inexistente ou de outra barbearia.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Define os preços mensal e anual de um plano",
+        "tags": [
+          "Administração da plataforma"
+        ],
+        "x-platform": true
+      }
     }
   },
   "info": {
@@ -8436,6 +8695,10 @@
     {
       "name": "Assinatura e planos",
       "description": "Planos da plataforma e os recursos de cada um. Recurso fora do plano responde 403 `plan-upgrade-required`."
+    },
+    {
+      "name": "Administração da plataforma",
+      "description": "Planos e preços do TaNaRegua. Login e token próprios, separados dos das barbearias; nenhum dado de barbearia aparece aqui."
     },
     {
       "name": "Saúde",
@@ -8650,12 +8913,40 @@
             "items": {
               "$ref": "#/components/schemas/Feature"
             }
+          },
+          "prices": {
+            "$ref": "#/components/schemas/PlanPrices"
           }
         },
         "required": [
           "key",
           "name",
-          "features"
+          "features",
+          "prices"
+        ],
+        "additionalProperties": false
+      },
+      "PlanPrices": {
+        "type": "object",
+        "properties": {
+          "monthlyCents": {
+            "nullable": true,
+            "type": "integer",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "yearlyCents": {
+            "nullable": true,
+            "type": "integer",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "monthlyCents",
+          "yearlyCents"
         ],
         "additionalProperties": false
       },
@@ -11357,6 +11648,110 @@
           "messages"
         ],
         "additionalProperties": false
+      },
+      "PlatformLoginInput": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "additionalProperties": false,
+        "example": {
+          "email": "voce@tanaregua.app",
+          "password": "••••••••••••"
+        }
+      },
+      "PlatformSession": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "expiresIn": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "profile": {
+            "$ref": "#/components/schemas/PlatformProfile"
+          }
+        },
+        "required": [
+          "accessToken",
+          "expiresIn",
+          "profile"
+        ],
+        "additionalProperties": false
+      },
+      "PlatformProfile": {
+        "type": "object",
+        "properties": {
+          "admin": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "email"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "admin"
+        ],
+        "additionalProperties": false
+      },
+      "SetPlanPricesInput": {
+        "type": "object",
+        "properties": {
+          "monthlyCents": {
+            "nullable": true,
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 10000000
+          },
+          "yearlyCents": {
+            "nullable": true,
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 10000000
+          }
+        },
+        "required": [
+          "monthlyCents",
+          "yearlyCents"
+        ],
+        "additionalProperties": false,
+        "example": {
+          "monthlyCents": 9990,
+          "yearlyCents": 99900
+        }
       },
       "ProblemDetails": {
         "type": "object",

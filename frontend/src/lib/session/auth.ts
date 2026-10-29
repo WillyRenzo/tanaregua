@@ -1,6 +1,6 @@
 import { api, unwrap } from '@/lib/api/client';
 import type { components } from '@/lib/api/schema';
-import { clientSessionStore, sessionStore } from './session-store';
+import { clientSessionStore, platformSessionStore, sessionStore } from './session-store';
 
 type Body<T extends keyof components['schemas']> = components['schemas'][T];
 
@@ -49,3 +49,15 @@ export async function clientRegister(
 }
 
 export type SessionPayload = Body<'Session'>;
+
+/** Administração da plataforma: login e cookie próprios, sem relação com o painel. */
+export async function platformLogin(body: { email: string; password: string }) {
+  const session = await unwrap(api.POST('/v1/platform/auth/login', { body }));
+  platformSessionStore.fromResponse(session);
+  return session;
+}
+
+export async function platformLogout(): Promise<void> {
+  await api.POST('/v1/platform/auth/logout');
+  platformSessionStore.set({ status: 'anonymous' });
+}

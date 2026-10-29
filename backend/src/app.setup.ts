@@ -125,6 +125,7 @@ interface Operation {
   'x-public'?: boolean;
   'x-required-permissions'?: string[];
   'x-required-feature'?: string;
+  'x-platform'?: boolean;
 }
 
 const problem = (description: string) => ({
@@ -148,6 +149,14 @@ function enrichOperations(document: OpenAPIObject): void {
       const responses = (operation.responses ??= {});
 
       if (isPublic) operation.security = [];
+      if (operation['x-platform']) {
+        operation.description = [
+          operation.description,
+          '**Acesso:** administração da plataforma (token próprio; token de barbearia é recusado).',
+        ]
+          .filter(Boolean)
+          .join('\n\n');
+      }
       if (permissions) {
         const list = permissions.map((permission) => `\`${permission}\``).join(', ');
         operation.description = [operation.description, `**Permissões (basta uma):** ${list}`]

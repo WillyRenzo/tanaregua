@@ -35,6 +35,15 @@ export const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(32),
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
+  /**
+   * Segredo do access token da administração da plataforma (planos e preços). Diferente do
+   * JWT_ACCESS_SECRET: um token de barbearia nunca vale na administração, e vice-versa. Sem
+   * ele, a administração fica desligada (rotas respondem 404). Obrigatório em produção.
+   */
+  PLATFORM_JWT_SECRET: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(32).optional(),
+  ),
 
   CORS_ORIGINS: z
     .string()
@@ -97,6 +106,12 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   }
   if (result.data.NODE_ENV === 'production' && !result.data.INTERNAL_API_TOKEN) {
     throw new Error('INTERNAL_API_TOKEN é obrigatória em produção');
+  }
+  if (result.data.NODE_ENV === 'production' && !result.data.PLATFORM_JWT_SECRET) {
+    throw new Error('PLATFORM_JWT_SECRET é obrigatória em produção');
+  }
+  if (result.data.PLATFORM_JWT_SECRET === result.data.JWT_ACCESS_SECRET) {
+    throw new Error('PLATFORM_JWT_SECRET precisa ser diferente do JWT_ACCESS_SECRET');
   }
   return result.data;
 }

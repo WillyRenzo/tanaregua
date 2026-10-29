@@ -5,8 +5,19 @@ import { FEATURES } from './features.js';
 
 export const featureSchema = z.enum(FEATURES).meta({ id: 'Feature' });
 
+/** Centavos por ciclo; `null` = o plano não é vendido naquele ciclo. */
+export const planPricesSchema = z
+  .object({ monthlyCents: z.int().positive().nullable(), yearlyCents: z.int().positive().nullable() })
+  .meta({ id: 'PlanPrices' });
+export type PlanPrices = z.infer<typeof planPricesSchema>;
+
 export const planSchema = z
-  .object({ key: z.string(), name: z.string(), features: z.array(featureSchema) })
+  .object({
+    key: z.string(),
+    name: z.string(),
+    features: z.array(featureSchema),
+    prices: planPricesSchema,
+  })
   .meta({ id: 'Plan' });
 export type PlanSummary = z.infer<typeof planSchema>;
 

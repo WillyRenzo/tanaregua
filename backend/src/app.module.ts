@@ -30,6 +30,7 @@ import { PackagesModule } from './modules/packages/packages.module.js';
 import { ReportsModule } from './modules/reports/reports.module.js';
 import { MarketingModule } from './modules/marketing/marketing.module.js';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module.js';
+import { PlatformModule } from './modules/platform/platform.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { ClockModule } from './common/time/clock.js';
 import { StorageModule } from './common/storage/object-storage.js';
@@ -95,6 +96,7 @@ import { StorageModule } from './common/storage/object-storage.js';
     ReportsModule,
     MarketingModule,
     SubscriptionsModule,
+    PlatformModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

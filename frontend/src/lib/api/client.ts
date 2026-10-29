@@ -1,5 +1,5 @@
 import createClient, { type Middleware } from 'openapi-fetch';
-import { sessionStores, type SessionAudience, type SessionResponse } from '@/lib/session/session-store';
+import { sessionStores, type SessionAudience } from '@/lib/session/session-store';
 import { ApiError, isProblem } from './errors';
 import type { paths } from './schema';
 
@@ -17,22 +17,32 @@ const AUTH_PATHS = [
   '/v1/auth/client/refresh',
   '/v1/public/{slug}/auth/login',
   '/v1/public/{slug}/auth/register',
+  '/v1/platform/auth/login',
+  '/v1/platform/auth/refresh',
 ];
 
 const REFRESH_URLS: Record<SessionAudience, string> = {
   panel: '/api/v1/auth/refresh',
   client: '/api/v1/auth/client/refresh',
+  platform: '/api/v1/platform/auth/refresh',
 };
 
-const refreshing: Record<SessionAudience, Promise<boolean> | null> = { panel: null, client: null };
+const refreshing: Record<SessionAudience, Promise<boolean> | null> = {
+  panel: null,
+  client: null,
+  platform: null,
+};
 
-/** Rotas do agendamento online usam a sessão do cliente; o resto, a do painel. */
-const audienceOf = (schemaPath: string): SessionAudience =>
-  schemaPath.startsWith('/v1/public/') ? 'client' : 'panel';
+/** Agendamento online usa a sessão do cliente; a administração, a da plataforma; o resto, a do painel. */
+const audienceOf = (schemaPath: string): SessionAudience => {
+  if (schemaPath.startsWith('/v1/public/')) return 'client';
+  if (schemaPath.startsWith('/v1/platform/')) return 'platform';
+  return 'panel';
+};
 
 /**
  * Renova a sessão pelo cookie httpOnly. Uma única renovação por vez por sessão
- * (várias abas/queries); painel e cliente têm cookies e estados independentes.
+ * (várias abas/queries); cada sessão tem cookie e estado independentes.
  */
 export function refreshSession(audience: SessionAudience = 'panel'): Promise<boolean> {
   const store = sessionStores[audience];
@@ -43,7 +53,7 @@ export function refreshSession(audience: SessionAudience = 'panel'): Promise<boo
         store.set({ status: 'anonymous' });
         return false;
       }
-      store.fromResponse((await response.json()) as SessionResponse);
+      store.fromResponse((await response.json()) as { accessToken: string; profile: unknown });
       return true;
     } catch {
       store.set({ status: 'anonymous' });

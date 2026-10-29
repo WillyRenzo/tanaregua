@@ -48,7 +48,7 @@ da versão anterior (adicionar primeiro e remover numa versão seguinte).
 
    ```sh
    openssl rand -hex 32      # DB_OWNER_PASSWORD e APP_DB_PASSWORD (um para cada)
-   openssl rand -base64 48   # JWT_ACCESS_SECRET e INTERNAL_API_TOKEN (um para cada)
+   openssl rand -base64 48   # JWT_ACCESS_SECRET, PLATFORM_JWT_SECRET e INTERNAL_API_TOKEN (um para cada)
    openssl rand -base64 32   # SECRETS_ENCRYPTION_KEY (estável; trocar exige reconectar o WhatsApp)
    ```
 
@@ -59,6 +59,15 @@ da versão anterior (adicionar primeiro e remover numa versão seguinte).
      - A linha `public key: age1...` vai em `BACKUP_AGE_RECIPIENT`.
      - O arquivo `tanaregua-backup.key` fica guardado fora da VPS, num gerenciador de senhas. Sem ele, os backups não abrem.
 8. **Primeiro deploy.** Rode o workflow Deploy. O volume do Postgres é criado na primeira subida, e `db-init/` cria o usuário da aplicação com `APP_DB_PASSWORD`. Mudar essa senha depois exige `ALTER ROLE` no banco.
+9. **Administração da plataforma.** Crie a sua conta (a senha é pedida no terminal, sem eco, com no mínimo 12 caracteres) e entre em `https://<APP_DOMAIN>/admin` para definir os preços dos planos:
+
+   ```sh
+   TAG=$(cat .deployed-tag) docker compose run --rm platform-admin create --email voce@exemplo.com --name "Seu Nome"
+   TAG=$(cat .deployed-tag) docker compose run --rm platform-admin set-password --email voce@exemplo.com
+   ```
+
+   - O comando usa o usuário dono das tabelas: a aplicação não consegue criar administradores.
+   - Trocar a senha encerra as sessões abertas daquele administrador.
 
 ## Operação
 

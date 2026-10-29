@@ -11,19 +11,27 @@ import { ClsService } from 'nestjs-cls';
 import type { Request } from 'express';
 import type { Permission } from '../../modules/auth/permissions.js';
 import { AccessTokenService } from '../../modules/auth/access-token.service.js';
+import { PlatformTokenService } from '../../modules/platform/platform-token.service.js';
 import type { AuthContext, RequestContext } from '../tenancy/request-context.js';
-import { ANY_AUTHENTICATED, IS_PUBLIC, REQUIRED_PERMISSIONS } from './decorators.js';
+import {
+  ANY_AUTHENTICATED,
+  IS_PLATFORM,
+  IS_PUBLIC,
+  REQUIRED_PERMISSIONS,
+  type PlatformAdminRequest,
+} from './decorators.js';
 
 /**
  * Guard global único: autentica (Bearer JWT) e autoriza (permissões).
- * Deny by default: rota sem @Public, @AnyAuthenticated ou @RequirePermissions é negada,
- * para que esquecer o decorator nunca deixe uma rota aberta.
+ * Deny by default: rota sem @Public, @AnyAuthenticated, @RequirePermissions ou
+ * @PlatformAdminOnly é negada, para que esquecer o decorator nunca deixe uma rota aberta.
  */
 @Injectable()
 export class AccessGuard implements CanActivate {
   constructor(
     @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(AccessTokenService) private readonly tokens: AccessTokenService,
+    @Inject(PlatformTokenService) private readonly platformTokens: PlatformTokenService,
     @Inject(ClsService) private readonly cls: ClsService<RequestContext>,
   ) {}
 
@@ -33,7 +41,20 @@ export class AccessGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<Request & { auth?: AuthContext }>();
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & PlatformAdminRequest & { auth?: AuthContext }>();
+
+    // Administração da plataforma: só o token dela, e nenhum tenant no contexto.
+    if (this.reflector.getAllAndOverride<boolean>(IS_PLATFORM, targets)) {
+      this.platformTokens.assertEnabled();
+      const token = bearerToken(request);
+      request.platformAdmin = await this.platformTokens.verify(token).catch(() => {
+        throw new UnauthorizedException('Sessão expirada ou inválida.');
+      });
+      return true;
+    }
+
     const auth = await this.authenticate(request);
     request.auth = auth;
     this.cls.set('auth', auth);
@@ -53,14 +74,19 @@ export class AccessGuard implements CanActivate {
   }
 
   private async authenticate(request: Request): Promise<AuthContext> {
-    const [scheme, token] = request.headers.authorization?.split(' ') ?? [];
-    if (scheme !== 'Bearer' || !token) {
-      throw new UnauthorizedException('Autenticação necessária.');
-    }
+    const token = bearerToken(request);
     try {
       return await this.tokens.verify(token);
     } catch {
       throw new UnauthorizedException('Sessão expirada ou inválida.');
     }
   }
+}
+
+function bearerToken(request: Request): string {
+  const [scheme, token] = request.headers.authorization?.split(' ') ?? [];
+  if (scheme !== 'Bearer' || !token) {
+    throw new UnauthorizedException('Autenticação necessária.');
+  }
+  return token;
 }

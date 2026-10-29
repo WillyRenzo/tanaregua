@@ -38,7 +38,7 @@ npm run db:generate              # regenera o client
 ## Testes
 
 - Backend e2e: Testcontainers sobe um Postgres efêmero via o Docker do host (socket montado no container). Nada compartilhado entre execuções.
-- Frontend E2E: `RATE_LIMIT_ENABLED=false docker compose up -d backend frontend` e depois `docker compose --profile e2e run --rm --no-deps e2e`. No Windows, se o frontend ganhou arquivo novo, rode `docker compose restart frontend` antes (ver "Hot reload no Windows"). Ao terminar, `docker compose up -d backend` religa o rate limit. A imagem oficial do Playwright tem a mesma versão do `@playwright/test`; ao atualizar um, atualize o outro. Relatório em `frontend/playwright-report/`.
+- Frontend E2E: `RATE_LIMIT_ENABLED=false docker compose up -d backend frontend` e depois `docker compose --profile e2e run --rm --no-deps e2e`. No Windows, se o frontend ganhou arquivo novo, rode `docker compose restart frontend` antes (ver "Hot reload no Windows"). Ao terminar, `docker compose up -d backend` religa o rate limit. O `e2e/platform-admin.spec.ts` usa a conta da administração criada pelo `db:seed` (a aplicação não cria administradores): rode o seed antes. A imagem oficial do Playwright tem a mesma versão do `@playwright/test`; ao atualizar um, atualize o outro. Relatório em `frontend/playwright-report/`.
 - O dev server do Next só serve `/_next/*` para origens liberadas; `frontend` (o host visto pelo container de E2E) está em `allowedDevOrigins`.
 
 ## GitHub CLI (`gh`)

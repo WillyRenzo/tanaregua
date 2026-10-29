@@ -77,6 +77,7 @@ backend/contracts/        openapi.json versionado (fonte do cliente tipado do fr
 backend/test/             e2e (Testcontainers) e helpers (expectTenantIsolation)
 frontend/src/app/painel/  painel da barbearia (client-side, protegido por sessão)
 frontend/src/app/[slug]/  página pública de agendamento de cada barbearia (SSR)
+frontend/src/app/admin/   administração da plataforma (planos e preços; login e sessão próprios)
 frontend/src/lib/         cliente da API (gerado), sessão, queries React Query, formatação
 frontend/e2e/             Playwright
 deploy/                   produção: compose, Caddy, backup cifrado e runbook (README.md)

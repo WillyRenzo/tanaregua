@@ -118,18 +118,26 @@ Regras para portas novas:
 ## Assinatura e planos (regras em business-rules §12)
 
 O mesmo princípio das permissões: **o código checa recursos, nunca nomes de plano**.
-Implementado: catálogo, planos, assinatura e verificação (módulo `subscriptions`). A
-cobrança e o ciclo de vida da assinatura entram nas próximas entregas.
+Implementado: catálogo, planos, assinatura e verificação (módulo `subscriptions`), preços e
+administração da plataforma (módulo `platform`). A cobrança e o ciclo de vida da assinatura
+entram nas próximas entregas.
 
 - **Catálogo de recursos em código** (`FEATURES` em `subscriptions/features.ts`, como `PERMISSIONS` em `auth/permissions.ts`): uma chave por capacidade vendável (`online-payment`, `payroll`, `advanced-reports`, `assistant`). O núcleo das fases 1 e 2 vale em todo plano e não tem chave própria. Chave desconhecida gravada num plano é ignorada.
-- **Planos no banco**, catálogo global (sem tenant e sem RLS): `plans` com chave, nome, lista de recursos, ordem de exibição e o plano padrão (no máximo um, por exclusion constraint). A aplicação **só lê** (`REVOKE INSERT, UPDATE, DELETE`); os planos vêm por migration até existir a administração da plataforma. Preço, ciclo e limites entram com a cobrança.
+- **Planos no banco**, catálogo global (sem tenant e sem RLS): `plans` com chave, nome, lista de recursos, ordem de exibição e o plano padrão (no máximo um, por exclusion constraint). A aplicação **só lê** (`REVOKE INSERT, UPDATE, DELETE`); plano novo ou mudança de recursos ainda vem por migration. Limites entram quando forem decididos.
+- **Preços** em `plan_prices` (um por plano e ciclo `MONTHLY`/`YEARLY`, centavos, CHECK > 0, quem mudou e quando). Sem linha, o plano não é vendido no ciclo. Leitura livre (o painel mostra os preços em `GET /v1/plans`); escrita só pelo `SubscriptionsService.setPlanPrices`, numa transação com `platformAdminId` no contexto, que é o que o RLS da tabela exige. O preço é um só para todas as assinaturas do plano e ciclo (o reajuste vale para todos): na cobrança, a assinatura não guarda um valor próprio, e salvar um preço novo enfileira no outbox a atualização do valor de cada assinatura ativa no gateway.
 - **Assinatura por barbearia**: `subscriptions` (uma por tenant, com RLS) com plano e status (`TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELED`). O cadastro da barbearia cria a assinatura no plano padrão na mesma transação. A aplicação não tem `DELETE`: trocar de plano nunca apaga nada. Na cobrança entram fim do período, `provider`, `externalId` e a tabela de eventos do gateway com unique no ID do evento (idempotência).
 - **Troca de plano** só por `SubscriptionsService.changePlan`, que nenhuma rota da barbearia chama: hoje só o seed, depois a confirmação do gateway (webhook verificado).
 - **Verificação na API**: `@RequiresFeature('assistant')` (`common/auth/requires-feature.ts`) + `FeatureGuard` global depois do `AccessGuard`, que lê os recursos da assinatura a cada rota que exige um (uma consulta por chave única; cache só se a medição pedir). Fora do plano: 403 com `type` `plan-upgrade-required`. Acesso efetivo = permissão **e** recurso. Só em rota autenticada: o tenant vem do token. O OpenAPI mostra o recurso na descrição da rota, e o teste do contrato exige isso.
 - **Plano não vai no JWT**: muda com pagamento a qualquer momento e o token vive 15 min. O perfil da sessão (`/v1/auth/me`, login, refresh) devolve `subscription` com o plano, o status e os recursos liberados; `GET /v1/plans` lista os planos com os recursos. No painel, `hasFeature()` e `<FeatureGate>` decidem entre mostrar o recurso e o convite "disponível no plano X"; a API revalida sempre.
 - **Cobrança** pela porta `PaymentGateway` (assinatura recorrente no Mercado Pago como adapter inicial). Webhook verificado → atualiza a assinatura → efeitos (e-mail de cobrança, aviso de inadimplência) saem pelo outbox.
-- **Administração dos planos** é da plataforma, não das barbearias: superfície separada, com autenticação própria e sem acesso aos dados dos tenants. **[PENDENTE]** quando e como (por enquanto, os planos vêm por migration).
-- **Seed**: a Barbearia Demo fica no plano mais completo (mostra tudo) e a Vizinha no básico (mostra o bloqueio e o convite de upgrade). Numa demo existente, o complemento troca o plano só se ela ainda estiver no padrão.
+- **Administração da plataforma** (módulo `platform`, rotas `/v1/platform/*`, tela `/admin`): superfície separada das barbearias, detalhada em `security.md`.
+  - Conta em `platform_admins`, criada só pelo comando `platform-admin` (`src/platform-admin.ts`, serviço `platform-admin` do `deploy/compose.yml`) com o usuário dono das tabelas.
+  - Token com segredo e audiência próprios (`PlatformTokenService`), cookie e refresh rotativo próprios (`PlatformSessionService`, tabela `platform_refresh_tokens`).
+  - Rota marcada com `@PlatformAdminOnly()`: o `AccessGuard` autentica com o token da plataforma e não define tenant, então o RLS esconde os dados das barbearias.
+  - Hoje edita só os preços. Criar planos e mudar recursos pela tela fica para quando for preciso.
+- **Seed**:
+  - A Barbearia Demo fica no plano mais completo (mostra tudo) e a Vizinha no básico (mostra o bloqueio e o convite de upgrade). Numa demo existente, o complemento troca o plano só se ela ainda estiver no padrão.
+  - `seedPlatform` cria a conta `plataforma@tanaregua.dev` e põe preços fictícios nos planos sem preço (precisa de `DATABASE_MIGRATION_URL`; nunca sobrescreve um preço).
 
 ## Frontend
 
@@ -137,7 +145,7 @@ cobrança e o ciclo de vida da assinatura entram nas próximas entregas.
 - `/[slug]`: Server Component com `'use cache'` (minutos) para os dados públicos; a disponibilidade e a reserva rodam no cliente, sem cache.
 - `proxy.ts` só redireciona quem não tem cookie (UX). A API revalida tudo.
 - **Identidade visual:** a API guarda só as cores escolhidas (hex) e o logo; quem deriva o tema é `lib/brand.ts` (função pura e testada), que ajusta as cores até o contraste AA e gera um `<style>` com os tokens no `:root` (vale também para diálogos em portal). Os tokens base em hex ali espelham o `globals.css`: mudou o tema, atualize os dois. O logo é servido pela API em `/v1/public/{slug}/logo?v=<versão>`.
-- **Duas sessões independentes no navegador** (ver `security.md`): `sessionStore` (painel) e `clientSessionStore` (agendamento online), em `lib/session/session-store.ts`. O cliente da API escolhe o token pela rota: `/v1/public/...` usa a sessão do cliente, o resto usa a do painel, e cada uma se renova pelo seu cookie (`refreshSession('panel' | 'client')`). Unificar as duas fazia o F5 do painel cair na página da barbearia quando o dono entrava como cliente no mesmo navegador (teste `e2e/sessions.spec.ts`).
+- **Duas sessões independentes no navegador** (ver `security.md`): `sessionStore` (painel) e `clientSessionStore` (agendamento online), em `lib/session/session-store.ts`. O cliente da API escolhe o token pela rota: `/v1/public/...` usa a sessão do cliente, o resto usa a do painel, e cada uma se renova pelo seu cookie (`refreshSession('panel' | 'client')`). Unificar as duas fazia o F5 do painel cair na página da barbearia quando o dono entrava como cliente no mesmo navegador (teste `e2e/sessions.spec.ts`). A administração da plataforma é a terceira sessão (`platformSessionStore`, rotas `/v1/platform/...`, `refreshSession('platform')`), reconstruída no `PlatformShell` de `/admin`.
 
 ## AFAs do Z3t@ no MVP
 

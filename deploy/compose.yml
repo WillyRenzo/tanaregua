@@ -49,6 +49,7 @@ services:
       # O Caddy grava o IP do visitante no X-Forwarded-For (security.md, rate limit).
       TRUST_PROXY_HOPS: 1
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?defina INTERNAL_API_TOKEN no .env}
+      PLATFORM_JWT_SECRET: ${PLATFORM_JWT_SECRET:?defina PLATFORM_JWT_SECRET no .env}
       SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:?defina SECRETS_ENCRYPTION_KEY no .env}
       MAIL_PROVIDER: ${MAIL_PROVIDER:-resend}
       MAIL_FROM: ${MAIL_FROM:?defina MAIL_FROM no .env}
@@ -59,6 +60,18 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     volumes:
       - storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Contas da administração da plataforma, sob demanda (a aplicação não cria administradores):
+  #   TAG=$(cat .deployed-tag) docker compose run --rm platform-admin create --email ... --name "..."
+  platform-admin:
+    image: ${IMAGE_PREFIX}-backend:${TAG}
+    profiles: [admin]
+    entrypoint: ["node", "dist/platform-admin.js"]
+    environment:
+      DATABASE_MIGRATION_URL: postgresql://tanaregua:${DB_OWNER_PASSWORD}@db:5432/tanaregua
     depends_on:
       db:
         condition: service_healthy

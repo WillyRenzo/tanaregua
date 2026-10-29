@@ -1,11 +1,18 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { clientSessionStore, sessionStore, type SessionState, type SessionStore } from './session-store';
+import {
+  clientSessionStore,
+  platformSessionStore,
+  sessionStore,
+  type PlatformProfile,
+  type SessionState,
+  type SessionStore,
+} from './session-store';
 
-const serverSnapshot: SessionState = { status: 'loading' };
+const serverSnapshot = { status: 'loading' } as const;
 
-const useStore = (store: SessionStore): SessionState =>
+const useStore = <Profile>(store: SessionStore<Profile>): SessionState<Profile> =>
   useSyncExternalStore(store.subscribe, store.get, () => serverSnapshot);
 
 /** Sessão do painel. */
@@ -16,6 +23,11 @@ export function useSession(): SessionState {
 /** Sessão do cliente final (agendamento online), independente da do painel. */
 export function useClientSessionState(): SessionState {
   return useStore(clientSessionStore);
+}
+
+/** Sessão da administração da plataforma, independente das outras duas. */
+export function usePlatformSession(): SessionState<PlatformProfile> {
+  return useStore(platformSessionStore);
 }
 
 /** Para telas que só renderizam com sessão (dentro do layout do painel). */

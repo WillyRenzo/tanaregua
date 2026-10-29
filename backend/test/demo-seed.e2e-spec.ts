@@ -8,6 +8,7 @@ import {
   NEIGHBOR_SLUG,
   seedDemo,
 } from '../src/seed/demo-seed.js';
+import { PLATFORM_ADMIN_EMAIL, seedPlatform } from '../src/seed/platform-seed.js';
 import { as, createTestApp, registerTenant, type TestApp } from './helpers/app.js';
 
 /** O README promete estas credenciais: o seed precisa entregá-las de verdade. */
@@ -254,6 +255,39 @@ describe('Seed de demonstração (e2e)', () => {
     expect(demo.features).toContain('assistant');
     const neighbor = await plan(DEMO_ACCOUNTS.neighborOwner.email);
     expect(neighbor).toMatchObject({ plan: { key: 'essential' }, features: [] });
+  });
+
+  it('a administração da plataforma tem conta e os planos ganham preços fictícios, sem repetir', async () => {
+    expect(await seedPlatform(app)).toEqual({
+      available: true,
+      added: ['conta da administração da plataforma', 'preços fictícios dos planos'],
+    });
+
+    const login = await request(app.getHttpServer())
+      .post('/v1/platform/auth/login')
+      .send({ email: PLATFORM_ADMIN_EMAIL, password: DEMO_PASSWORD })
+      .expect(200);
+    const plans = await as(app, login.body.accessToken).get('/v1/platform/plans').expect(200);
+    const real = (plans.body as { key: string; prices: Record<string, number | null> }[]).filter(
+      (item) => !item.key.startsWith('test-'),
+    );
+    expect(real).toHaveLength(3);
+    for (const item of real) {
+      expect(item.prices.monthlyCents, item.key).toBeGreaterThan(0);
+      expect(item.prices.yearlyCents, item.key).toBeGreaterThan(0);
+    }
+
+    // De novo: nada muda, e um preço definido na administração nunca é sobrescrito.
+    await as(app, login.body.accessToken)
+      .put('/v1/platform/plans/premium/prices')
+      .send({ monthlyCents: 25000, yearlyCents: null })
+      .expect(200);
+    expect(await seedPlatform(app)).toEqual({ available: true, added: [] });
+    const premium = await as(app, login.body.accessToken).get('/v1/platform/plans').expect(200);
+    expect(premium.body.find((item: { key: string }) => item.key === 'premium').prices).toEqual({
+      monthlyCents: 25000,
+      yearlyCents: null,
+    });
   });
 
   it('demo criada por versão anterior do seed ganha só os módulos que faltam', async () => {

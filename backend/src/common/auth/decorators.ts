@@ -3,6 +3,7 @@ import { ApiExtension } from '@nestjs/swagger';
 import type { Request } from 'express';
 import type { Permission } from '../../modules/auth/permissions.js';
 import type { AuthContext } from '../tenancy/request-context.js';
+import type { PlatformAuth } from '../../modules/platform/platform-token.service.js';
 
 export const IS_PUBLIC = 'auth:isPublic';
 export const REQUIRED_PERMISSIONS = 'auth:requiredPermissions';
@@ -36,3 +37,26 @@ export const CurrentAuth = createParamDecorator((_data: unknown, context: Execut
   if (!request.auth) throw new Error('CurrentAuth usado em rota sem autenticação');
   return request.auth;
 });
+
+export const IS_PLATFORM = 'auth:isPlatform';
+
+/** Quem administra a plataforma, autenticado pelo token próprio dela (nunca o de uma barbearia). */
+export interface PlatformAdminRequest {
+  platformAdmin?: PlatformAuth;
+}
+
+/**
+ * Rota da administração da plataforma. O AccessGuard autentica com o token da plataforma
+ * (segredo próprio) em vez do token da barbearia; sem tenant, o RLS não mostra dado de
+ * nenhuma barbearia.
+ */
+export const PlatformAdminOnly = () =>
+  applyDecorators(SetMetadata(IS_PLATFORM, true), ApiExtension('x-platform', true));
+
+export const CurrentPlatformAdmin = createParamDecorator(
+  (_data: unknown, context: ExecutionContext): PlatformAuth => {
+    const request = context.switchToHttp().getRequest<Request & PlatformAdminRequest>();
+    if (!request.platformAdmin) throw new Error('CurrentPlatformAdmin usado em rota sem @PlatformAdminOnly');
+    return request.platformAdmin;
+  },
+);

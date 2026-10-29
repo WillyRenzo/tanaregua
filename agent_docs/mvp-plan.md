@@ -326,8 +326,18 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
 
 - **Assinatura e planos (vem primeiro na fase 3):** o uso do TaNaRegua passa a exigir assinatura por barbearia, com vários planos. O básico cobre as fases 1 e 2; o mais caro inclui o assistente de IA (fase 4); proposta de um intermediário com a fase 3. Entregas, em ordem:
   1. catálogo de recursos, planos e assinatura por barbearia, com verificação na API (`@RequiresFeature`) e no painel (recurso fora do plano aparece como upgrade) (feito em 28/10/2026: o painel mostra o plano em Configurações, e o `<FeatureGate>` está pronto para os recursos da fase 3);
-  2. cobrança recorrente pela porta `PaymentGateway` (Mercado Pago), com webhook verificado e idempotente;
-  3. inadimplência, teste grátis e troca de plano, conforme as decisões pendentes em `business-rules.md` §12.
+  2. administração da plataforma (`/admin`, login e token próprios) com os preços mensal e anual de cada plano (feito em 28/10/2026; a conta é criada por comando no servidor);
+  3. cobrança recorrente pela porta `PaymentGateway` (Mercado Pago), com webhook verificado e idempotente. Desenho previsto:
+     - checkout hospedado do Mercado Pago (assinatura `preapproval` com `init_point`), sem cartão passando pelo TaNaRegua;
+     - o webhook só avisa: o estado vem de uma consulta ao Mercado Pago com o token da plataforma, e a assinatura `x-signature` é conferida;
+     - o reajuste de preço vale para todas as assinaturas (business-rules §12): salvar um preço novo repassa o valor às assinaturas ativas no gateway (`PUT /preapproval/{id}` com o novo `transaction_amount`), de forma assíncrona e idempotente, pelo outbox;
+     - **Verificar com o dono do produto antes de começar** (decisões em aberto em `business-rules.md` §12; não implemente um default por conta própria):
+       - aviso prévio ao assinante antes do reajuste: se existe, com que antecedência e por qual canal;
+       - quem assina num ciclo que saiu de venda (preço apagado na administração): segue no último preço, migra de ciclo ou é cancelado;
+       - valores reais dos preços e nomes definitivos dos planos (o seed usa preços fictícios);
+       - confirmar as propostas da administração: senha com 12 caracteres, sessão de 12 h e entrada sem segundo fator (risco aceito em `security.md`);
+     - Conferir também os campos da API de assinaturas do Mercado Pago (`preapproval`) na referência oficial, que não abriu na pesquisa de 28/10/2026;
+  4. inadimplência, teste grátis e troca de plano, conforme as decisões pendentes em `business-rules.md` §12.
   - A verificação de recursos precisa estar pronta **antes** de liberar qualquer recurso da fase 3 ou 4, senão o plano básico já nasceria com eles.
 - **Pagamento online** pela porta `PaymentGateway` (Mercado Pago como adapter inicial, trocável por configuração), webhook verificado e idempotente, reembolso de pacote pago antecipadamente.
 - **Salários e folha**, relatórios avançados.

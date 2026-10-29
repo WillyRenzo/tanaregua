@@ -142,7 +142,13 @@ Não invente regra para preencher uma lacuna: pergunte.
 - **Vários planos.** Cada plano é um conjunto de **recursos** (e, se preciso, limites). Confirmado:
   - o plano **mais básico** inclui só as **fases 1 e 2** (agenda, agendamento online, comanda, comissões, caixa, relatórios básicos, estoque, pacotes, aniversários, identidade visual…);
   - o plano **mais caro** inclui o **assistente de IA** (fase 4).
-  - **[PROPOSTA]** três planos: **Essencial** (fases 1 e 2), **Profissional** (+ fase 3: pagamento online, salários e relatórios avançados) e **Premium** (+ assistente de IA). Nomes, preços e o conteúdo exato de cada um ainda serão definidos. Já estão cadastrados assim, sem preço; mudar é dado, não código.
+  - **[PROPOSTA]** três planos: **Essencial** (fases 1 e 2), **Profissional** (+ fase 3: pagamento online, salários e relatórios avançados) e **Premium** (+ assistente de IA). Nomes, preços e o conteúdo exato de cada um ainda serão definidos. Já estão cadastrados assim; mudar é dado, não código.
+- **Ciclos mensal e anual** (confirmado em 28/10/2026). Cada plano tem um preço por ciclo, em centavos, **configurado na administração da plataforma** (sem código nem migration). Sem preço num ciclo, o plano não é vendido nele; o desconto do anual é só a diferença entre os dois preços.
+  - **Reajuste vale para todos** (confirmado em 28/10/2026): mudar o preço de um plano num ciclo reajusta **todas as assinaturas** daquele plano e ciclo, a partir da próxima cobrança de cada uma (o mensal na próxima mensalidade, o anual na próxima renovação). Não existe "preço antigo" guardado por assinatura.
+  - **[PENDENTE]** aviso prévio ao assinante antes do reajuste (prazo e canal);
+  - **[PENDENTE]** o que acontece com quem assina num ciclo que saiu de venda (preço apagado): segue no último preço, migra de ciclo ou é cancelado.
+- **Administração da plataforma** (`/admin`): quem administra o TaNaRegua entra com conta e login próprios, separados das barbearias, e não vê dados de nenhuma barbearia. As contas são criadas só por comando no servidor (`deploy/README.md`), nunca pela aplicação.
+  - **[PROPOSTA]** senha com no mínimo 12 caracteres e sessão de 12 horas.
 - **[PROPOSTA] Plano de quem chega:** a barbearia nova começa no plano padrão (hoje o Essencial), com a assinatura ativa; as que já existiam entraram nele. Vale até a decisão sobre o teste grátis.
 - **[PROPOSTA] Situação da assinatura:** em teste, ativa ou em atraso, os recursos do plano continuam liberados (a carência ainda está pendente); cancelada, nenhum recurso de plano fica liberado. O núcleo das fases 1 e 2 não depende disso por enquanto.
 - **Criar ou mudar planos não exige código.** Assim como as permissões (§8), o sistema checa **recursos**, nunca o nome do plano. Um plano novo é um registro novo com a lista de recursos dele.
@@ -151,7 +157,7 @@ Não invente regra para preencher uma lacuna: pergunte.
 - **Trocar para um plano menor nunca apaga dados.** O que ficou fora do plano só fica inacessível até um novo upgrade (ex.: o histórico de folha continua no banco).
 - **Cobrança pela porta `PaymentGateway`** (§5): a mesma de pagamento online, Mercado Pago como adapter inicial. O status da assinatura só muda por **webhook verificado** ou consulta ao gateway, e o processamento é idempotente. O sistema nunca guarda dados de cartão.
 - **[PENDENTE]**
-  - preços, nomes definitivos, ciclo (mensal/anual) e desconto anual;
+  - valores dos preços e nomes definitivos (o seed de desenvolvimento usa preços fictícios);
   - período de teste grátis (duração e qual plano durante o teste);
   - inadimplência: dias de carência, o que acontece depois (ex.: painel só leitura, página pública de agendamento continua ou para) e reativação;
   - troca de plano no meio do ciclo (cobrança proporcional ou só no próximo ciclo);
