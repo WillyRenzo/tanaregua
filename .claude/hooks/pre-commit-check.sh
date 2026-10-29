@@ -25,18 +25,32 @@ failed=0
 report=""
 
 # O Node deste projeto roda em container (docker-compose.yml); npm no host é só fallback.
-run_script() {
-  local app="$1" script="$2"
+# Roda um comando dentro do app (ex.: `npm run lint`, `npx prettier ...`).
+run_in_app() {
+  local app="$1"
+  shift
   if command -v docker >/dev/null 2>&1 && [ -f "$root/docker-compose.yml" ]; then
     # cd em vez de `-f`: no Git Bash o MSYS_NO_PATHCONV (necessário para os paths do container)
     # impediria a conversão de /c/... para C:\... no argumento -f.
-    (cd "$root" && MSYS_NO_PATHCONV=1 docker compose run --rm --no-deps -T "$app" npm run "$script")
+    (cd "$root" && MSYS_NO_PATHCONV=1 docker compose run --rm --no-deps -T "$app" "$@")
   elif command -v npm >/dev/null 2>&1; then
-    npm --prefix "$root/$app" run "$script"
+    (cd "$root/$app" && "$@")
   else
     echo "nem docker nem npm disponíveis para validar $app/"
     return 1
   fi
+}
+
+# Arquivos do app que entram no commit, relativos à pasta do app: os staged e também os
+# alterados ou novos ainda não staged, porque o comando costuma ser `git add ... && git commit`
+# e o hook roda antes do `git add`. Apagados ficam de fora.
+changed_files() {
+  local app="$1"
+  {
+    git -C "$root" diff --cached --name-only --diff-filter=d -- "$app/"
+    git -C "$root" diff --name-only --diff-filter=d -- "$app/"
+    git -C "$root" ls-files --others --exclude-standard -- "$app/"
+  } | sort -u | sed "s#^$app/##"
 }
 
 for app in backend frontend; do
@@ -44,11 +58,28 @@ for app in backend frontend; do
   [ -f "$root/$app/package.json" ] || continue
 
   for script in lint typecheck; do
-    if ! output="$(run_script "$app" "$script" 2>&1)"; then
+    if ! output="$(run_in_app "$app" npm run "$script" 2>&1)"; then
       failed=1
       report+=$'\n'"=== $app: npm run $script falhou ==="$'\n'"$(printf '%s' "$output" | tail -n 40)"$'\n'
     fi
   done
+
+  # Formatação só dos arquivos do commit, com o mesmo escopo do `format:check` do CI: no
+  # backend, os .ts; no frontend, tudo que o prettier conhece. O .prettierignore vale para
+  # arquivos passados pelo nome. `--end-of-line auto`: no Windows, o autocrlf deixa CRLF na
+  # cópia local, e o CI (que vê LF) não reclamaria disso.
+  files=()
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    if [ "$app" = backend ] && [[ "$file" != *.ts ]]; then continue; fi
+    files+=("$file")
+  done < <(changed_files "$app")
+  if [ "${#files[@]}" -gt 0 ]; then
+    if ! output="$(run_in_app "$app" npx prettier --check --end-of-line auto --ignore-unknown -- "${files[@]}" 2>&1)"; then
+      failed=1
+      report+=$'\n'"=== $app: formatação (prettier --check) falhou; rode prettier --write só nesses arquivos ==="$'\n'"$(printf '%s' "$output" | tail -n 40)"$'\n'
+    fi
+  fi
 done
 
 if [ "$failed" -ne 0 ]; then
