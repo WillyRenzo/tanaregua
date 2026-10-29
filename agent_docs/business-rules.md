@@ -150,8 +150,11 @@ Não invente regra para preencher uma lacuna: pergunte.
   - **Ciclo com assinante não sai de venda** (confirmado em 29/10/2026): a administração não consegue apagar o preço de um plano num ciclo enquanto houver assinatura paga (não cancelada) nele.
 - **Administração da plataforma** (`/admin`): quem administra o TaNaRegua entra com conta e login próprios, separados das barbearias, e não vê dados de nenhuma barbearia. As contas são criadas só por comando no servidor (`deploy/README.md`), nunca pela aplicação.
   - **[PROPOSTA]** senha com no mínimo 12 caracteres e sessão de 12 horas.
-- **[PROPOSTA] Plano de quem chega:** a barbearia nova começa no plano padrão (hoje o Essencial), com a assinatura ativa; as que já existiam entraram nele. Vale até a decisão sobre o teste grátis.
-- **[PROPOSTA] Situação da assinatura:** em teste, ativa ou em atraso, os recursos do plano continuam liberados (a carência ainda está pendente); cancelada, nenhum recurso de plano fica liberado. O núcleo das fases 1 e 2 não depende disso por enquanto.
+- **Teste grátis** (confirmado em 30/10/2026): a barbearia nova começa com **14 dias no plano mais completo (Premium), sem cartão**. As que já existiam sem assinatura paga ganharam o mesmo teste, contado a partir do lançamento (a migration). Quem assina durante o teste **paga na hora**, e o teste acaba ali.
+- **Período pago e carência** (confirmado em 30/10/2026): cada cobrança aprovada libera um ciclo a partir dela. Passado o fim do período pago sem nova cobrança aprovada, há **7 dias de carência** com tudo funcionando e um aviso no painel; o gateway tenta cobrar de novo nesse meio tempo.
+- **Modo só leitura** (confirmado em 30/10/2026): com o teste vencido, a carência esgotada ou a assinatura cancelada depois do período pago, **o painel só consulta** (a API recusa toda escrita com 402 `subscription-inactive`) e **a página pública de agendamento continua** para os clientes. Assinar volta tudo ao normal na hora; cancelar continua possível. Nada é apagado, e a consulta inclui o que o plano tinha.
+  - **[PROPOSTA]** as mensagens automáticas já configuradas (aniversário) continuam saindo no modo só leitura, como a página pública.
+- **Cortesia:** assinatura ativa sem gateway não vence. Não há como criar isso pela aplicação: só o seed de desenvolvimento e o suporte, direto no banco.
 - **Criar ou mudar planos não exige código.** Assim como as permissões (§8), o sistema checa **recursos**, nunca o nome do plano. Um plano novo é um registro novo com a lista de recursos dele.
 - **Acesso efetivo = permissão do papel E recurso do plano.** Ex.: a recepcionista tem `assistant:use`, mas só usa o assistente se a barbearia estiver num plano com o recurso do assistente.
 - **Recurso fora do plano:** a API recusa (erro `plan-upgrade-required`) e o painel mostra o recurso como "disponível no plano X", com convite para trocar de plano. Esconder no frontend não basta: quem garante é a API.
@@ -159,14 +162,17 @@ Não invente regra para preencher uma lacuna: pergunte.
 - **Cobrança pela porta `PaymentGateway`** (§5): a mesma de pagamento online, Mercado Pago como adapter inicial. O status da assinatura só muda por **webhook verificado** ou consulta ao gateway, e o processamento é idempotente. O sistema nunca guarda dados de cartão.
   - **Assinar:** em Configurações, o dono (`subscription:manage`) escolhe plano e ciclo e vai ao **checkout hospedado do gateway**; o preço vem sempre do catálogo. O plano só muda quando o gateway confirma a autorização, nunca pelo retorno do navegador.
   - Clicar de novo no mesmo plano, ciclo e preço em até 1 hora reaproveita o checkout aberto. Abrir outro checkout cancela os abertos antes, também no gateway. Um checkout antigo aprovado depois disso não vale e é cancelado no gateway (nada de cobrança em dobro).
-  - **Com assinatura paga ativa, não se abre outro checkout:** a troca de plano entra com a entrega 4 (a regra de cobrança proporcional está pendente abaixo). Com a assinatura cancelada no gateway, o dono pode assinar de novo.
-  - **Situação vinda do gateway:** autorizada = ativa; pausada = em atraso (os recursos seguem liberados até a decisão sobre inadimplência); cancelada = cancelada.
+  - **Com assinatura paga ativa, não se abre outro checkout:** muda-se de plano pela troca de plano. Com a assinatura cancelada, o dono pode assinar de novo (um checkout novo, cobrado na hora).
+  - **Troca de plano** (confirmado em 30/10/2026), só com a assinatura paga em dia e **no mesmo ciclo**:
+    - **upgrade vale na hora**; o gateway passa a cobrar o valor novo **a partir da próxima cobrança**, sem cobrança proporcional;
+    - **downgrade vale no fim do período pago**: até lá, a barbearia segue no plano atual; a próxima cobrança já sai no valor do plano novo;
+    - escolher de novo o plano atual desfaz um downgrade agendado; um reajuste avisado do plano antigo deixa de valer (o valor é o do plano novo no catálogo).
+    - **Troca de ciclo** (mensal ↔ anual) fica para depois: por enquanto, cancela e assina de novo no outro ciclo.
+  - **Cancelamento pelo painel** (confirmado em 30/10/2026): cancela a cobrança recorrente no gateway na hora; a barbearia **usa até o fim do período pago** e depois fica só para consulta. Uma notificação antiga do gateway não reativa uma assinatura cancelada.
+  - **Situação vinda do gateway:** autorizada = ativa; pausada = em atraso; cancelada = cancelada. O acesso não depende do rótulo: segue o período pago e a carência acima.
   - Sem gateway configurado na instalação (`PAYMENT_PROVIDER=none`), a assinatura online fica indisponível e o painel diz para falar com o suporte.
 - **[PENDENTE]**
   - valores dos preços e nomes definitivos (o seed de desenvolvimento usa preços fictícios);
-  - período de teste grátis (duração e qual plano durante o teste);
-  - inadimplência: dias de carência, o que acontece depois (ex.: painel só leitura, página pública de agendamento continua ou para) e reativação;
-  - troca de plano no meio do ciclo (cobrança proporcional ou só no próximo ciclo);
+  - troca de ciclo (mensal ↔ anual) com a assinatura paga;
   - limites por plano (ex.: número de profissionais, uso do assistente);
-  - emissão de nota fiscal da assinatura;
-  - plano das barbearias que já existirem quando a cobrança começar.
+  - emissão de nota fiscal da assinatura.

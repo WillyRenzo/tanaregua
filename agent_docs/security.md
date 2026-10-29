@@ -72,6 +72,8 @@ em um SaaS multi-tenant que lida com dados pessoais, salários e pagamentos.
 - **Gateway simulado** (`PAYMENT_PROVIDER=fake`): aprova qualquer checkout por `GET /v1/billing/fake-checkout/:id`. A API **recusa subir** com ele em produção. Com `none` (padrão), não há checkout e o webhook responde 401.
 - **Segredos:** `MERCADOPAGO_ACCESS_TOKEN` e `PAYMENT_WEBHOOK_SECRET` só no `.env` do servidor. Erro do gateway vira log com status e código do provedor, sem corpo nem dados do pagador. O e-mail do pagador vai ao gateway só na criação do checkout.
 - **Cobrança em dobro:** com assinatura paga ativa, a API recusa outro checkout (409). Um checkout substituído que for aprovado depois é cancelado no gateway pelo outbox.
+- **Notificação de cobrança** (`subscription_authorized_payment`): também passa pela assinatura HMAC e pela tabela de eventos. Ela não diz de qual assinatura é: a API consulta a cobrança no gateway (com timeout) para achar a assinatura e o tenant. Cobrança de outra assinatura (antiga ou de outra aplicação) é ignorada, e o período pago só se estende com cobrança **aprovada** na consulta.
+- **Modo só leitura** (`ReadOnlyGuard`): a situação é lida no banco a cada escrita, não vem do token, e quem barra é a API (402 `subscription-inactive`); o aviso do painel é só UX. As exceções são explícitas (`@AllowedWhenReadOnly()`: checkout, cancelamento e página pública), e o contrato OpenAPI mostra quais escritas recebem o 402.
 
 ## Administração da plataforma (`/admin`)
 
