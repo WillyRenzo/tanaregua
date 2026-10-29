@@ -146,6 +146,20 @@ docker compose restart backend   # a API precisa recarregar o client do Prisma
 docker compose run --rm --no-deps backend npm run db:seed
 ```
 
+**Assinatura paga com reajuste agendado** (para testar a cobrança sem passar pelo checkout à mão; fica fora do seed, porque a demo começa sem assinatura paga para o dono poder experimentar o checkout):
+
+```bash
+docker compose up -d backend   # o script usa a API em execução, com o gateway simulado
+docker compose run --rm --no-deps backend npm run db:seed:billing
+```
+
+O script entra como o dono da Barbearia Demo, assina o Premium mensal pelo checkout simulado e,
+pela administração da plataforma, sobe o preço do Premium mensal em R$ 10,00 no catálogo local.
+Assim, a assinatura fica paga e com o reajuste agendado para dali a 30 dias, e o e-mail de aviso
+sai no log da API. Rodar de novo não repete nada. O gateway simulado guarda as assinaturas na
+memória da API: depois de reiniciá-la, ele não reconhece mais a assinatura, e o repasse do
+reajuste ao gateway falha. Para um estado consistente, recrie o banco e rode o script de novo.
+
 **Recriar o banco do zero** (banco com problema, ou demo com datas atuais). ⚠️ Apaga **todos** os dados locais:
 
 ```bash

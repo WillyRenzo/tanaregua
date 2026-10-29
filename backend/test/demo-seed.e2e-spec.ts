@@ -1,5 +1,9 @@
+import type { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import request from 'supertest';
+import { OutboxProcessor } from '../src/modules/notifications/outbox.processor.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
+import { BILLING_DEMO_RAISE_CENTS, seedBillingDemo } from '../src/seed/billing-demo.js';
 import {
   completeDemo,
   DEMO_ACCOUNTS,
@@ -10,16 +14,19 @@ import {
 } from '../src/seed/demo-seed.js';
 import { PLATFORM_ADMIN_EMAIL, seedPlatform } from '../src/seed/platform-seed.js';
 import { as, createTestApp, registerTenant, type TestApp } from './helpers/app.js';
+import { createTestPlan, createTestPlatformAdmin, ownerClient } from './helpers/platform.js';
 
 /** O README promete estas credenciais: o seed precisa entregá-las de verdade. */
 describe('Seed de demonstração (e2e)', () => {
   let app: TestApp;
 
+  // O seed gera ~5 semanas de histórico pelos services: na suíte completa, com a cobertura e as
+  // outras suítes em paralelo, passa do hookTimeout padrão (120 s).
   beforeAll(async () => {
     app = await createTestApp();
     const result = await seedDemo(app);
     expect(result.created).toBe(true);
-  });
+  }, 300_000);
 
   afterAll(async () => {
     await app.close();
@@ -350,5 +357,48 @@ describe('Seed de demonstração (e2e)', () => {
 
     // Segunda execução: nada mais a acrescentar.
     expect(await completeDemo(app, slugs)).toEqual([]);
+  });
+
+  it('o script da cobrança assina a demo pelo checkout simulado e agenda um reajuste, sem repetir', async () => {
+    // Plano só deste teste: o reajuste mexe no preço do catálogo, compartilhado entre as suítes.
+    const owner = ownerClient();
+    const planKey = await createTestPlan(owner);
+    const plan = await owner.plan.findUniqueOrThrow({ where: { key: planKey } });
+    await owner.planPrice.create({ data: { planId: plan.id, interval: 'MONTHLY', amountCents: 5000 } });
+    const admin = await createTestPlatformAdmin(owner);
+    await owner.$disconnect();
+
+    await app.listen(0, '127.0.0.1');
+    const { port } = (app.getHttpServer() as unknown as Server).address() as AddressInfo;
+    const processor = app.get(OutboxProcessor);
+    const options = {
+      apiUrl: `http://127.0.0.1:${port}`,
+      owner: { email: DEMO_ACCOUNTS.owner.email, password: DEMO_PASSWORD },
+      platformAdmin: admin,
+      planKey,
+      interval: 'MONTHLY' as const,
+      // A fila tem o histórico gerado pelo seed: esvazia tudo, como o worker da API faria.
+      settle: async () => {
+        while ((await processor.processBatch()) > 0) {
+          // processa até esvaziar a fila
+        }
+      },
+      timeoutMs: 10_000,
+    };
+
+    const first = await seedBillingDemo(options);
+    expect(first.added).toEqual([`assinatura paga do plano ${plan.name}`, 'reajuste agendado']);
+    expect(first.subscription).toMatchObject({
+      plan: { key: planKey },
+      status: 'ACTIVE',
+      interval: 'MONTHLY',
+      amountCents: 5000,
+      canSubscribe: false,
+      scheduledChange: { amountCents: 5000 + BILLING_DEMO_RAISE_CENTS },
+    });
+
+    const again = await seedBillingDemo(options);
+    expect(again.added).toEqual([]);
+    expect(again.subscription.scheduledChange).toEqual(first.subscription.scheduledChange);
   });
 });
