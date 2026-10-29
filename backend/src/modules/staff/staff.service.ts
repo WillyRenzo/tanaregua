@@ -4,7 +4,7 @@ import { toClock } from '../../common/time/clock-time.js';
 import { TenantDb } from '../../common/tenancy/tenant-db.service.js';
 import type { Tx } from '../../prisma/prisma.service.js';
 import { hashPassword } from '../auth/password.js';
-import { DEFAULT_ROLES } from '../auth/permissions.js';
+import { DEFAULT_ROLES, type Permission } from '../auth/permissions.js';
 import type { ScheduleInterval, StaffMember } from '../registry.responses.js';
 import type {
   CreateStaffInput,
@@ -232,6 +232,30 @@ export class StaffService {
       select: { userId: true, user: { select: { name: true } } },
     });
     return new Map(rows.map((row) => [row.userId, row.user.name]));
+  }
+
+  /** Funcionários ativos cujo papel tem a permissão (ex.: quem recebe avisos da assinatura). */
+  async contactsWithPermission(
+    tx: Tx,
+    barbershopId: string,
+    permission: Permission,
+  ): Promise<{ name: string; email: string }[]> {
+    const rows = await tx.membership.findMany({
+      where: { barbershopId, active: true, role: { permissions: { has: permission } } },
+      select: { user: { select: { name: true, email: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map((row) => row.user);
+  }
+
+  /** Nome e e-mail de um funcionário ativo desta barbearia, pelo usuário. */
+  async contactOf(tx: Tx, barbershopId: string, userId: string): Promise<{ name: string; email: string }> {
+    const row = await tx.membership.findFirst({
+      where: { barbershopId, userId, active: true },
+      select: { user: { select: { name: true, email: true } } },
+    });
+    if (!row) throw notFound('Funcionário');
+    return row.user;
   }
 
   /** Profissional ativo que atende (aparece na agenda). 422 se não puder receber agendamentos. */

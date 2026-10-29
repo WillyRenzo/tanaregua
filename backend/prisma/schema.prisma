@@ -51,6 +51,7 @@ model Barbershop {
   whatsappConnection WhatsAppConnection?
   campaigns          Campaign[]
   subscription       Subscription?
+  checkouts          SubscriptionCheckout[]
 
   @@map("barbershops")
 }
@@ -810,6 +811,7 @@ model Plan {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   subscriptions Subscription[]
+  checkouts     SubscriptionCheckout[]
   prices        PlanPrice[]
 
   @@map("plans")
@@ -824,18 +826,75 @@ enum SubscriptionStatus {
 
 /// Assinatura da barbearia: uma por tenant. Trocar de plano nunca apaga dados (§12).
 model Subscription {
-  id           String             @id @default(uuid(7)) @db.Uuid
-  barbershopId String             @unique @map("barbershop_id") @db.Uuid
-  planId       String             @map("plan_id") @db.Uuid
-  status       SubscriptionStatus @default(ACTIVE)
-  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+  id                    String             @id @default(uuid(7)) @db.Uuid
+  barbershopId          String             @unique @map("barbershop_id") @db.Uuid
+  planId                String             @map("plan_id") @db.Uuid
+  status                SubscriptionStatus @default(ACTIVE)
+  /// Cobrança pelo gateway (§5): os três campos abaixo ficam nulos enquanto a barbearia não
+  /// assinou (plano padrão de quem chega, sem cobrança). Colunas genéricas: trocar de
+  /// gateway não muda a tabela.
+  interval              BillingInterval?
+  gatewayProvider       String?            @map("gateway_provider")
+  gatewaySubscriptionId String?            @map("gateway_subscription_id")
+  /// Valor por ciclo que o gateway cobra hoje, em centavos.
+  amountCents           Int?               @map("amount_cents")
+  /// Reajuste avisado (§12): o novo valor passa ao gateway em `scheduledAmountAt`, 30 dias
+  /// depois do aviso por e-mail ao dono.
+  scheduledAmountCents  Int?               @map("scheduled_amount_cents")
+  scheduledAmountAt     DateTime?          @map("scheduled_amount_at") @db.Timestamptz
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime           @updatedAt @map("updated_at") @db.Timestamptz
 
   barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "subscriptions_barbershop_fkey")
   plan       Plan       @relation(fields: [planId], references: [id], map: "subscriptions_plan_fkey")
 
   @@unique([barbershopId, id], map: "subscriptions_tenant_id_key")
+  @@unique([gatewayProvider, gatewaySubscriptionId])
+  @@index([planId, interval])
   @@map("subscriptions")
+}
+
+enum CheckoutStatus {
+  PENDING
+  COMPLETED
+  CANCELED
+}
+
+/// Tentativa de assinar pelo checkout do gateway. Vira a assinatura da barbearia só quando
+/// o gateway confirma (webhook verificado + consulta), nunca pelo retorno do navegador.
+model SubscriptionCheckout {
+  id                    String          @id @default(uuid(7)) @db.Uuid
+  barbershopId          String          @map("barbershop_id") @db.Uuid
+  planId                String          @map("plan_id") @db.Uuid
+  interval              BillingInterval
+  /// Preço do plano no ciclo quando o checkout foi criado, em centavos.
+  amountCents           Int             @map("amount_cents")
+  gatewayProvider       String          @map("gateway_provider")
+  gatewaySubscriptionId String          @map("gateway_subscription_id")
+  checkoutUrl           String          @map("checkout_url")
+  status                CheckoutStatus  @default(PENDING)
+  createdAt             DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  plan       Plan       @relation(fields: [planId], references: [id])
+
+  @@unique([barbershopId, id])
+  @@unique([gatewayProvider, gatewaySubscriptionId])
+  @@index([barbershopId, status])
+  @@map("subscription_checkouts")
+}
+
+/// Notificações do gateway já recebidas: a mesma notificação entregue duas vezes não gera
+/// duas consultas (idempotência, security.md). Sem tenant e sem dado pessoal: só IDs.
+model BillingWebhookEvent {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  provider   String
+  eventId    String   @map("event_id")
+  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz
+
+  @@unique([provider, eventId])
+  @@map("billing_webhook_events")
 }
 
 enum BillingInterval {

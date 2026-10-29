@@ -18,7 +18,7 @@ import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { CurrentPlatformAdmin, PlatformAdminOnly, Public } from '../../common/auth/decorators.js';
-import { API_TAGS, ApiResult } from '../../common/http/openapi.js';
+import { API_TAGS, ApiProblem, ApiResult } from '../../common/http/openapi.js';
 import { SessionCookieService } from '../auth/session-cookie.service.js';
 import { planSchema, type PlanSummary } from '../subscriptions/subscriptions.responses.js';
 import { setPlanPricesSchema, type SetPlanPricesInput } from '../subscriptions/subscriptions.schemas.js';
@@ -116,8 +116,9 @@ export class PlatformController {
   @ApiOperation({
     summary: 'Define os preços mensal e anual de um plano',
     description:
-      'Valores em centavos; `null` tira o plano de venda naquele ciclo. O reajuste vale para todas as assinaturas do plano naquele ciclo, a partir da próxima cobrança.',
+      'Valores em centavos; `null` tira o plano de venda naquele ciclo (recusado enquanto houver assinatura paga nele). O reajuste vale para todas as assinaturas pagas do plano naquele ciclo: o dono é avisado por e-mail e o novo valor vale a partir da primeira cobrança depois de 30 dias.',
   })
+  @ApiProblem(409, 'plan-price-in-use', 'O ciclo tem assinaturas pagas e não pode sair de venda.')
   @Put('plans/:key/prices')
   setPrices(
     @CurrentPlatformAdmin() admin: PlatformAuth,

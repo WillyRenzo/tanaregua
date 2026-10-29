@@ -46,6 +46,29 @@ describe('validateEnv', () => {
     );
   });
 
+  it('sem configurar, a assinatura online fica desligada', () => {
+    expect(validateEnv(base).PAYMENT_PROVIDER).toBe('none');
+  });
+
+  it('em produção, recusa o gateway simulado (aprovaria plano sem pagamento)', () => {
+    expect(() =>
+      validateEnv({ ...production, PAYMENT_PROVIDER: 'fake', PAYMENT_WEBHOOK_SECRET: 'w'.repeat(32) }),
+    ).toThrow(/PAYMENT_PROVIDER=fake/);
+  });
+
+  it('gateway de pagamento exige o segredo das notificações e, no Mercado Pago, o access token', () => {
+    expect(() => validateEnv({ ...base, PAYMENT_PROVIDER: 'fake' })).toThrow(/PAYMENT_WEBHOOK_SECRET/);
+    const mercadopago = {
+      ...production,
+      PAYMENT_PROVIDER: 'mercadopago',
+      PAYMENT_WEBHOOK_SECRET: 'w'.repeat(32),
+    };
+    expect(() => validateEnv(mercadopago)).toThrow(/MERCADOPAGO_ACCESS_TOKEN/);
+    expect(
+      validateEnv({ ...mercadopago, MERCADOPAGO_ACCESS_TOKEN: 'APP_USR-' + '1'.repeat(40) }).PAYMENT_PROVIDER,
+    ).toBe('mercadopago');
+  });
+
   it('recusa token interno curto', () => {
     expect(() => validateEnv({ ...base, INTERNAL_API_TOKEN: 'curto' })).toThrow(/INTERNAL_API_TOKEN/);
   });

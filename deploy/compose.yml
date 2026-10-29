@@ -51,6 +51,10 @@ services:
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?defina INTERNAL_API_TOKEN no .env}
       PLATFORM_JWT_SECRET: ${PLATFORM_JWT_SECRET:?defina PLATFORM_JWT_SECRET no .env}
       SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:?defina SECRETS_ENCRYPTION_KEY no .env}
+      # Cobrança da assinatura: "none" até ligar o Mercado Pago (a API recusa "fake" em produção).
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-none}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
+      MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
       MAIL_PROVIDER: ${MAIL_PROVIDER:-resend}
       MAIL_FROM: ${MAIL_FROM:?defina MAIL_FROM no .env}
       RESEND_API_KEY: ${RESEND_API_KEY:-}

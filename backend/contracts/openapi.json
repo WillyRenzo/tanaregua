@@ -8561,7 +8561,7 @@
     },
     "/v1/platform/plans/{key}/prices": {
       "put": {
-        "description": "Valores em centavos; `null` tira o plano de venda naquele ciclo. O reajuste vale para todas as assinaturas do plano naquele ciclo, a partir da próxima cobrança.\n\n**Acesso:** administração da plataforma (token próprio; token de barbearia é recusado).",
+        "description": "Valores em centavos; `null` tira o plano de venda naquele ciclo (recusado enquanto houver assinatura paga nele). O reajuste vale para todas as assinaturas pagas do plano naquele ciclo: o dono é avisado por e-mail e o novo valor vale a partir da primeira cobrança depois de 30 dias.\n\n**Acesso:** administração da plataforma (token próprio; token de barbearia é recusado).",
         "operationId": "PlatformController_setPrices",
         "parameters": [
           {
@@ -8623,6 +8623,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "`plan-price-in-use`: O ciclo tem assinaturas pagas e não pode sair de venda.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         },
         "summary": "Define os preços mensal e anual de um plano",
@@ -8630,6 +8640,193 @@
           "Administração da plataforma"
         ],
         "x-platform": true
+      }
+    },
+    "/v1/subscription": {
+      "get": {
+        "operationId": "BillingController_detail",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Assinatura da barbearia: plano, ciclo, valor, reajuste avisado e checkout aberto",
+        "tags": [
+          "Assinatura e planos"
+        ],
+        "x-required-permissions": [
+          "subscription:manage"
+        ],
+        "description": "**Permissões (basta uma):** `subscription:manage`"
+      }
+    },
+    "/v1/subscription/checkout": {
+      "post": {
+        "description": "O preço vem do catálogo. A assinatura só muda quando o gateway confirma o pagamento (notificação verificada), nunca pelo retorno do navegador.\n\n**Permissões (basta uma):** `subscription:manage`",
+        "operationId": "BillingController_checkout",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartCheckoutInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionCheckout"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`plan-change-unavailable`: A barbearia já tem uma assinatura paga; a troca de plano vem depois.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`plan-not-for-sale`: O plano não está à venda no ciclo escolhido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`billing-gateway-unavailable`: O gateway de pagamento não respondeu.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`billing-unavailable`: A assinatura online está desligada nesta instalação.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Abre o checkout do gateway para assinar um plano num ciclo",
+        "tags": [
+          "Assinatura e planos"
+        ],
+        "x-required-permissions": [
+          "subscription:manage"
+        ]
+      }
+    },
+    "/v1/billing/webhook": {
+      "post": {
+        "description": "Chamada pelo gateway, com assinatura HMAC conferida (401 se inválida). Só põe a consulta ao gateway na fila; notificação repetida é ignorada.",
+        "operationId": "BillingController_webhook",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingWebhookAck"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Muitas requisições do mesmo IP (rate limit).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Notificação do gateway de pagamento sobre uma assinatura",
+        "tags": [
+          "Assinatura e planos"
+        ],
+        "x-public": true,
+        "security": []
       }
     }
   },
@@ -8694,7 +8891,7 @@
     },
     {
       "name": "Assinatura e planos",
-      "description": "Planos da plataforma e os recursos de cada um. Recurso fora do plano responde 403 `plan-upgrade-required`."
+      "description": "Planos da plataforma, os recursos de cada um e a assinatura da barbearia, cobrada pelo gateway de pagamento. Recurso fora do plano responde 403 `plan-upgrade-required`."
     },
     {
       "name": "Administração da plataforma",
@@ -11752,6 +11949,192 @@
           "monthlyCents": 9990,
           "yearlyCents": 99900
         }
+      },
+      "SubscriptionDetail": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "key",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "TRIALING",
+              "ACTIVE",
+              "PAST_DUE",
+              "CANCELED"
+            ]
+          },
+          "interval": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BillingInterval"
+              }
+            ]
+          },
+          "amountCents": {
+            "nullable": true,
+            "type": "integer",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "scheduledChange": {
+            "nullable": true,
+            "type": "object",
+            "properties": {
+              "amountCents": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true,
+                "maximum": 9007199254740991
+              },
+              "effectiveAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "amountCents",
+              "effectiveAt"
+            ],
+            "additionalProperties": false
+          },
+          "pendingCheckout": {
+            "nullable": true,
+            "type": "object",
+            "properties": {
+              "plan": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key",
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              "interval": {
+                "$ref": "#/components/schemas/BillingInterval"
+              },
+              "amountCents": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true,
+                "maximum": 9007199254740991
+              },
+              "checkoutUrl": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "plan",
+              "interval",
+              "amountCents",
+              "checkoutUrl",
+              "createdAt"
+            ],
+            "additionalProperties": false
+          },
+          "onlineBilling": {
+            "type": "boolean"
+          },
+          "canSubscribe": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "plan",
+          "status",
+          "interval",
+          "amountCents",
+          "scheduledChange",
+          "pendingCheckout",
+          "onlineBilling",
+          "canSubscribe"
+        ],
+        "additionalProperties": false
+      },
+      "BillingInterval": {
+        "type": "string",
+        "enum": [
+          "MONTHLY",
+          "YEARLY"
+        ]
+      },
+      "StartCheckoutInput": {
+        "type": "object",
+        "properties": {
+          "planKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "interval": {
+            "type": "string",
+            "enum": [
+              "MONTHLY",
+              "YEARLY"
+            ]
+          }
+        },
+        "required": [
+          "planKey",
+          "interval"
+        ],
+        "additionalProperties": false,
+        "example": {
+          "planKey": "professional",
+          "interval": "MONTHLY"
+        }
+      },
+      "SubscriptionCheckout": {
+        "type": "object",
+        "properties": {
+          "checkoutUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkoutUrl"
+        ],
+        "additionalProperties": false
+      },
+      "BillingWebhookAck": {
+        "type": "object",
+        "properties": {
+          "received": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "received"
+        ],
+        "additionalProperties": false
       },
       "ProblemDetails": {
         "type": "object",
