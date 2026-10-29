@@ -3,6 +3,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, idempotencyKey, unwrap } from '@/lib/api/client';
 import type { components, paths } from '@/lib/api/schema';
+import { refreshPanelProfile } from '@/lib/session/auth';
 
 /** Tipos de resposta, direto do contrato OpenAPI do backend. */
 export type Schemas = components['schemas'];
@@ -97,6 +98,30 @@ export function useStartCheckout() {
   return useMutation({
     mutationFn: (body: Body<'/v1/subscription/checkout', 'post'>) =>
       unwrap(api.POST('/v1/subscription/checkout', { body })),
+  });
+}
+
+/** Troca de plano (upgrade na hora, downgrade no fim do período pago). A sessão relê os recursos. */
+export function useChangePlan() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Body<'/v1/subscription/plan', 'post'>) =>
+      unwrap(api.POST('/v1/subscription/plan', { body })),
+    onSuccess: async (data) => {
+      client.setQueryData(queryKeys.subscription, data);
+      await refreshPanelProfile();
+    },
+  });
+}
+
+export function useCancelSubscription() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(api.POST('/v1/subscription/cancel')),
+    onSuccess: async (data) => {
+      client.setQueryData(queryKeys.subscription, data);
+      await refreshPanelProfile();
+    },
   });
 }
 

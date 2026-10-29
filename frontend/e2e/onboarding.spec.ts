@@ -22,9 +22,9 @@ test('dono cadastra a barbearia e cai no painel', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Olá, Carla' })).toBeVisible();
   expect(await page.evaluate(() => Object.keys(localStorage).length)).toBe(0);
 
-  // Barbearia nova nasce no plano padrão (business-rules §12).
+  // Barbearia nova nasce em teste grátis de 14 dias no plano mais completo (business-rules §12).
   await open(page, '/painel/configuracoes#plano');
-  await expect(page.getByText('Sua barbearia está no plano Essencial.')).toBeVisible();
+  await expect(page.getByText('Sua barbearia está no plano Premium.')).toBeVisible();
 });
 
 test('painel sem sessão redireciona para o login', async ({ page }) => {

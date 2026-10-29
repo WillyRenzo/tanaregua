@@ -1,4 +1,5 @@
 import type { components } from '@/lib/api/schema';
+import { formatDate } from '@/lib/format';
 import type { SessionState } from '@/lib/session/session-store';
 
 export type Plan = components['schemas']['Plan'];
@@ -19,15 +20,44 @@ export function planIncluding(feature: Feature, plans: readonly Plan[]): Plan | 
   return plans.find((plan) => plan.features.includes(feature));
 }
 
-const STATUS_LABELS: Record<SubscriptionStatus, string | null> = {
-  ACTIVE: null,
-  TRIALING: 'Em período de teste',
-  PAST_DUE: 'Pagamento em atraso',
-  CANCELED: 'Assinatura cancelada',
-};
+export type SubscriptionAccess = components['schemas']['SubscriptionAccess'];
 
-export function subscriptionStatusLabel(status: SubscriptionStatus): string | null {
-  return STATUS_LABELS[status];
+export interface AccessNotice {
+  /** `warning`: o painel já está (ou vai ficar logo) só para consulta. */
+  tone: 'info' | 'warning';
+  text: string;
+}
+
+/**
+ * Aviso da situação da assinatura (business-rules §12) para o topo do painel e a tela de
+ * plano. Assinatura em dia não tem aviso.
+ */
+export function accessNotice(access: SubscriptionAccess, timezone: string): AccessNotice | null {
+  const until = access.until ? formatDate(access.until, timezone) : '';
+  switch (access.state) {
+    case 'trial':
+      return {
+        tone: 'info',
+        text: `Teste grátis até ${until}. Assine um plano para continuar criando e alterando depois disso.`,
+      };
+    case 'canceled':
+      return {
+        tone: 'info',
+        text: `Assinatura cancelada. O painel funciona até ${until}; depois, fica só para consulta.`,
+      };
+    case 'grace':
+      return {
+        tone: 'warning',
+        text: `O pagamento da assinatura não foi confirmado. Confira a forma de pagamento até ${until} para o painel não ficar só para consulta.`,
+      };
+    case 'read-only':
+      return {
+        tone: 'warning',
+        text: 'O painel está só para consulta: o teste grátis terminou ou a assinatura não está em dia. Assine um plano para voltar a criar e alterar.',
+      };
+    case 'active':
+      return null;
+  }
 }
 
 export const FEATURE_LABELS: Record<Feature, string> = {
