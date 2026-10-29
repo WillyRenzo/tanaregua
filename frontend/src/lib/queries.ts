@@ -22,6 +22,8 @@ export type ClientPackage = Schemas['ClientPackage'];
 export type MyPackage = Schemas['MyPackage'];
 export type WhatsAppTemplate = Schemas['WhatsAppTemplate'];
 export type BirthdaySettings = Schemas['BirthdaySettings'];
+export type OnlinePayment = Schemas['OnlinePayment'];
+export type OnlinePaymentSettings = OnlinePayment['settings'];
 export type TemplateConfig = NonNullable<BirthdaySettings['whatsappTemplate']>;
 export type BirthdayEntry = Schemas['BirthdayEntry'];
 export type Campaign = Schemas['Campaign'];
@@ -62,6 +64,7 @@ export const queryKeys = {
   clientPackages: (clientId?: string, status?: string) =>
     ['client-packages', clientId ?? 'all', status ?? 'all'] as const,
   whatsapp: ['whatsapp'] as const,
+  onlinePayment: ['online-payment'] as const,
   whatsappTemplates: ['whatsapp-templates'] as const,
   birthdaySettings: ['birthday-settings'] as const,
   birthdays: (month: number) => ['birthdays', month] as const,
@@ -781,5 +784,41 @@ export function useCreateCampaign() {
     mutationFn: (body: Body<'/v1/campaigns', 'post'>) =>
       unwrap(api.POST('/v1/campaigns', { body, headers: { 'Idempotency-Key': idempotencyKey() } })),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.campaigns }),
+  });
+}
+
+// ───────────── Pagamento online (conta da barbearia no gateway) ─────────────
+
+export function useOnlinePayment(options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.onlinePayment,
+    queryFn: () => unwrap(api.GET('/v1/online-payments')),
+    enabled: options.enabled ?? true,
+  });
+}
+
+export function useConnectPaymentAccount() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Body<'/v1/online-payments/account', 'put'>) =>
+      unwrap(api.PUT('/v1/online-payments/account', { body })),
+    onSuccess: (data) => client.setQueryData(queryKeys.onlinePayment, data),
+  });
+}
+
+export function useDisconnectPaymentAccount() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(api.DELETE('/v1/online-payments/account')),
+    onSuccess: () => void client.invalidateQueries({ queryKey: queryKeys.onlinePayment }),
+  });
+}
+
+export function useUpdateOnlinePaymentSettings() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Body<'/v1/online-payments/settings', 'put'>) =>
+      unwrap(api.PUT('/v1/online-payments/settings', { body })),
+    onSuccess: (data) => client.setQueryData(queryKeys.onlinePayment, data),
   });
 }
