@@ -91,13 +91,19 @@ em um SaaS multi-tenant que lida com dados pessoais, salários e pagamentos.
 - Cores entram só como hexadecimal validado (`#RRGGBB`) e viram CSS custom properties. Nunca interpole texto livre da barbearia em CSS ou HTML.
 - Domínio próprio: só é ativado depois de verificado (DNS apontando para a plataforma), é único entre barbearias e o HTTPS sob demanda só é emitido para domínios ativos. O `Host` da requisição nunca define o tenant de rotas autenticadas; ele só resolve a página pública, como o slug.
 
-## Segredos de terceiros guardados por barbearia (WhatsApp)
+## Segredos de terceiros guardados por barbearia (WhatsApp e conta de pagamento)
 
-- Token de fornecedor de cada barbearia (hoje, o token do WhatsApp) é guardado cifrado com AES-256-GCM (`common/crypto/secret-box.ts`). O id da barbearia entra como dado autenticado: o texto cifrado copiado para a linha de outro tenant não decifra.
-- A chave fica em `SECRETS_ENCRYPTION_KEY` (base64 de 32 bytes), fora do repositório; é obrigatória em produção (a API não sobe sem ela). Trocar a chave exige que as barbearias reconectem o WhatsApp.
+- Token de fornecedor de cada barbearia (o do WhatsApp e as credenciais da conta de pagamento) é guardado cifrado com AES-256-GCM (`common/crypto/secret-box.ts`). O id da barbearia entra como dado autenticado: o texto cifrado copiado para a linha de outro tenant não decifra.
+- A chave fica em `SECRETS_ENCRYPTION_KEY` (base64 de 32 bytes), fora do repositório; é obrigatória em produção (a API não sobe sem ela). Trocar a chave exige que as barbearias reconectem o WhatsApp e a conta de pagamento.
 - O token nunca volta ao navegador (a API devolve só os dados conferidos na Meta) nem aparece em logs. Credencial recusada pela Meta vira 422 sem detalhes do provedor.
 - IDs da Meta são validados como numéricos: entram no caminho da URL da Graph API e não podem virar outro caminho.
 - Envio de aniversário e campanha registra só IDs, canal e resultado; destinatário, variáveis e texto da mensagem nunca vão para logs.
+- **Conta de pagamento da barbearia** (business-rules §5):
+  - o access token e a assinatura secreta das notificações ficam cifrados em `payment_accounts`;
+  - são conferidos no gateway antes de salvar (credencial recusada = 422, sem detalhes do provedor);
+  - nunca voltam ao navegador: o painel mostra só o id e o apelido da conta;
+  - a URL de notificação de cada conta usa uma chave aleatória (`webhook_key`), nunca o id do tenant;
+  - configurar exige `barbershop:manage` e o recurso `online-payment` do plano.
 
 ## Assistente de IA
 

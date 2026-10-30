@@ -16,6 +16,8 @@ import { CampaignsService } from '../modules/marketing/campaigns.service.js';
 import { OrdersService } from '../modules/orders/orders.service.js';
 import type { OrderItemInput } from '../modules/orders/orders.schemas.js';
 import { PackagesService } from '../modules/packages/packages.service.js';
+import { MerchantGateway } from '../modules/online-payments/merchant-gateway.js';
+import { OnlinePaymentsService } from '../modules/online-payments/online-payments.service.js';
 import { ProductsService } from '../modules/products/products.service.js';
 import { PublicBookingService } from '../modules/public-booking/public-booking.service.js';
 import { StaffService } from '../modules/staff/staff.service.js';
@@ -633,6 +635,7 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
     // ───────────── Aniversários e campanhas ─────────────
 
     await addDemoMarketing(app);
+    await addDemoOnlinePayment(app);
 
     // LGPD: cliente que pediu exclusão. Some da lista, o histórico fica como "Cliente anonimizado".
     await clients.anonymize(client.Ricardo!);
@@ -712,6 +715,8 @@ export async function completeDemo(
     }
     const marketing = await addDemoMarketing(app);
     if (marketing) added.push(marketing);
+    const onlinePayment = await addDemoOnlinePayment(app);
+    if (onlinePayment) added.push(onlinePayment);
   });
 
   await asOwnerOf(app, slugs.neighbor, async () => {
@@ -1177,4 +1182,21 @@ function mulberry32(seed: number): () => number {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/**
+ * Pagamento online da demo (business-rules §5): conta de teste conectada no gateway simulado,
+ * com sinal de 30% à escolha do cliente. Só com PAYMENT_PROVIDER=fake (o padrão do compose de
+ * desenvolvimento); não mexe em quem já conectou. Devolve a descrição, ou null.
+ */
+async function addDemoOnlinePayment(app: INestApplicationContext): Promise<string | null> {
+  if (app.get(MerchantGateway).provider !== 'fake') return null;
+  const payments = app.get(OnlinePaymentsService);
+  if ((await payments.get()).account) return null;
+  await payments.connect({
+    accessToken: 'demo-token-da-conta-de-teste',
+    webhookSecret: 'demo-segredo-de-webhooks-da-conta',
+  });
+  await payments.updateSettings({ mode: 'OPTIONAL', amount: 'DEPOSIT', depositBps: 3000 });
+  return 'pagamento online (conta de teste, sinal opcional de 30%)';
 }

@@ -1652,6 +1652,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/online-payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Conta conectada no gateway e como a reserva online é paga
+         * @description **Permissões (basta uma):** `barbershop:manage`
+         *
+         *     **Recurso do plano:** `online-payment`
+         */
+        get: operations["OnlinePaymentsController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/online-payments/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Conecta a conta da barbearia no gateway de pagamento
+         * @description As credenciais são conferidas no gateway e guardadas cifradas; nunca voltam ao navegador. Reconectar troca as credenciais e mantém a configuração.
+         *
+         *     **Permissões (basta uma):** `barbershop:manage`
+         *
+         *     **Recurso do plano:** `online-payment`
+         */
+        put: operations["OnlinePaymentsController_connect"];
+        post?: never;
+        /**
+         * Desconecta a conta e desliga o pagamento online
+         * @description **Permissões (basta uma):** `barbershop:manage`
+         *
+         *     **Recurso do plano:** `online-payment`
+         */
+        delete: operations["OnlinePaymentsController_disconnect"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/online-payments/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Define como a reserva online é paga
+         * @description Desligado, à escolha do cliente ou exigido; o total dos serviços ou um sinal (basis points, de 1% a 99%).
+         *
+         *     **Permissões (basta uma):** `barbershop:manage`
+         *
+         *     **Recurso do plano:** `online-payment`
+         */
+        put: operations["OnlinePaymentsController_updateSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2472,6 +2548,47 @@ export interface components {
         };
         BillingWebhookAck: {
             received: boolean;
+        };
+        OnlinePayment: {
+            available: boolean;
+            account: {
+                provider: string;
+                accountId: string;
+                accountName: string;
+                /** Format: date-time */
+                connectedAt: string;
+            } | null;
+            settings: {
+                /** @enum {string} */
+                mode: "OFF" | "OPTIONAL" | "REQUIRED";
+                /** @enum {string} */
+                amount: "FULL" | "DEPOSIT";
+                depositBps: number | null;
+            };
+        };
+        /**
+         * @example {
+         *       "accessToken": "APP_USR-0000000000000000-000000",
+         *       "webhookSecret": "segredo-de-webhooks-da-conta"
+         *     }
+         */
+        ConnectPaymentAccountInput: {
+            accessToken: string;
+            webhookSecret: string;
+        };
+        /**
+         * @example {
+         *       "mode": "OPTIONAL",
+         *       "amount": "DEPOSIT",
+         *       "depositBps": 3000
+         *     }
+         */
+        OnlinePaymentSettingsInput: {
+            /** @enum {string} */
+            mode: "OFF" | "OPTIONAL" | "REQUIRED";
+            /** @enum {string} */
+            amount: "FULL" | "DEPOSIT";
+            depositBps: number | null;
         };
         /** @description Erro no formato RFC 9457. O final de `type` identifica o caso (ex.: appointment-conflict). */
         ProblemDetails: {
@@ -8647,6 +8764,244 @@ export interface operations {
             };
             /** @description `billing-gateway-unavailable`: O gateway não respondeu à consulta da cobrança; ele reenvia a notificação. */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    OnlinePaymentsController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnlinePayment"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel não tem as permissões exigidas ou o recurso não está no plano da barbearia (`plan-upgrade-required`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    OnlinePaymentsController_connect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectPaymentAccountInput"];
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnlinePayment"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel não tem as permissões exigidas ou o recurso não está no plano da barbearia (`plan-upgrade-required`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `payment-account-invalid-credentials`: O gateway recusou as credenciais. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `payment-gateway-unavailable`: O gateway não respondeu. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `online-payment-unavailable`: O pagamento online está desligado nesta instalação. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    OnlinePaymentsController_disconnect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel não tem as permissões exigidas ou o recurso não está no plano da barbearia (`plan-upgrade-required`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    OnlinePaymentsController_updateSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnlinePaymentSettingsInput"];
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnlinePayment"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel não tem as permissões exigidas ou o recurso não está no plano da barbearia (`plan-upgrade-required`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `payment-account-not-connected`: A barbearia ainda não conectou a conta no gateway. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -350,7 +350,14 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
        - se o `PUT` do `transaction_amount` na troca de plano vale já na cobrança seguinte.
      - Fica para depois: troca de ciclo (mensal ↔ anual) com assinatura paga.
   - A verificação de recursos precisa estar pronta **antes** de liberar qualquer recurso da fase 3 ou 4, senão o plano básico já nasceria com eles.
-- **Pagamento online** pela porta `PaymentGateway` (Mercado Pago como adapter inicial, trocável por configuração), webhook verificado e idempotente, reembolso de pacote pago antecipadamente.
+- **Pagamento online** da reserva, com o dinheiro na conta da própria barbearia (porta `MerchantGateway`, Mercado Pago como adapter inicial), webhook verificado e idempotente. Regras no `business-rules.md` §5 (decisões de 30/10/2026). Entregas, em ordem:
+  1. conexão da conta da barbearia no gateway (credenciais conferidas e cifradas) e configuração: desligado, opcional ou exigido; total ou sinal (feito em 30/10/2026, recurso `online-payment`);
+  2. pagamento na reserva da página pública: checkout do gateway, horário segurado por 15 minutos no modo exigido, webhook por conta (`/…/:webhookKey`, assinatura com o segredo da barbearia) e reembolso automático nos cancelamentos previstos;
+  3. comanda e caixa: o pré-pagamento abate na comanda e entra no caixa ao fechar; valor retido de falta no caixa do dia em que for marcada, sem comissão; reembolso manual pelo painel.
+  - Depois: pacote comprado online e reembolso de pacote pago online.
+  - **Antes de ligar o Mercado Pago**, testar no sandbox:
+    - `GET /users/me` com o access token de produção da barbearia (id e apelido);
+    - se a notificação de um pagamento criado com `notification_url` vem assinada (`x-signature`) com a assinatura secreta da aplicação da barbearia.
 - **Salários e folha**, relatórios avançados.
 
 ### Fase 4 · Assistente de IA
