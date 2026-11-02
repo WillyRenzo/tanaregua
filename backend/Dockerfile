@@ -7,7 +7,7 @@
 # O .npmrc (ignore-scripts, min-release-age) vale aqui também: argon2 e sharp usam
 # binários pré-compilados, sem install script.
 
-FROM node:24-alpine AS base
+FROM node:26-alpine AS base
 WORKDIR /app
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false
 
