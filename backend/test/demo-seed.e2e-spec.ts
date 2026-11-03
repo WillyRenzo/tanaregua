@@ -250,12 +250,24 @@ describe('Seed de demonstração (e2e)', () => {
   });
 
   it('rodar de novo não duplica nada: a demo já está completa', async () => {
-    const prisma = app.get(PrismaService);
-    const users = await prisma.user.count();
-    const products = await prisma.product.count();
+    // Dono das tabelas: sem tenant, o RLS esconderia os produtos do usuário da aplicação.
+    // As outras suítes rodam em paralelo no mesmo banco: conta só o que é da demo.
+    const prisma = ownerClient();
+    const demoUsers = {
+      OR: [
+        { email: { endsWith: '@demo.tanaregua.test' } },
+        { email: { endsWith: '@vizinha.tanaregua.test' } },
+      ],
+    };
+    const demoProducts = { barbershop: { slug: { in: [DEMO_SLUG, NEIGHBOR_SLUG] } } };
+    const users = await prisma.user.count({ where: demoUsers });
+    const products = await prisma.product.count({ where: demoProducts });
+    expect(users).toBeGreaterThan(0);
+    expect(products).toBeGreaterThan(0);
     expect(await seedDemo(app)).toMatchObject({ created: false, added: [] });
-    expect(await prisma.user.count()).toBe(users);
-    expect(await prisma.product.count()).toBe(products);
+    expect(await prisma.user.count({ where: demoUsers })).toBe(users);
+    expect(await prisma.product.count({ where: demoProducts })).toBe(products);
+    await prisma.$disconnect();
   });
 
   it('a demo está no plano mais completo (mostra tudo) e a vizinha no básico (mostra o upgrade)', async () => {
