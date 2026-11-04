@@ -10,6 +10,32 @@ export const appointmentStatusSchema = z.enum([
 ]);
 
 /**
+ * Pagamento online da reserva (business-rules §5). Pago e cancelado (ou falta) sem reembolso
+ * significa valor retido pela barbearia.
+ */
+export const appointmentPaymentSchema = z
+  .object({
+    status: z.enum([
+      'PENDING',
+      'PAID',
+      'REFUND_PENDING',
+      'REFUNDED',
+      'REFUND_FAILED',
+      'EXPIRED',
+      'CANCELLED',
+    ]),
+    amountCents: z.int(),
+    /** Modo exigido: até quando o horário fica segurado sem pagamento. */
+    holdUntil: z.date().nullable(),
+    /** Checkout aberto para pagar agora (só enquanto pendente e dentro do prazo). */
+    checkoutUrl: z.string().nullable(),
+    paidAt: z.date().nullable(),
+    refundedAt: z.date().nullable(),
+  })
+  .meta({ id: 'AppointmentPayment' });
+export type AppointmentPaymentSummary = z.infer<typeof appointmentPaymentSchema>;
+
+/**
  * Agendamento como o cliente final vê (agendamento online). Não tem nada interno da equipe:
  * justificativa de falta e contagem de faltas ficam só em `appointmentViewSchema`.
  */
@@ -33,6 +59,8 @@ export const clientAppointmentViewSchema = z
       }),
     ),
     totalCents: z.int(),
+    /** `null` = sem pagamento online (paga no balcão). */
+    payment: appointmentPaymentSchema.nullable(),
   })
   .meta({ id: 'ClientAppointment' });
 export type ClientAppointmentView = z.infer<typeof clientAppointmentViewSchema>;

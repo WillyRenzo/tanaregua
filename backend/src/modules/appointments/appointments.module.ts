@@ -43,6 +43,7 @@ import {
   type RangeQuery,
   type UpdateAppointmentInput,
 } from './appointments.schemas.js';
+import { AppointmentPayments } from './appointment-payments.js';
 import { AppointmentsService } from './appointments.service.js';
 
 @ApiTags(API_TAGS.agenda[0])
@@ -115,7 +116,11 @@ export class AppointmentsController {
   @HttpCode(HttpStatus.OK)
   @ApiResult(appointmentViewSchema)
   @ApiOperation({ summary: 'Muda o status (confirmar, iniciar, faltou, cancelar)' })
-  @ApiProblem(422, 'invalid-status-transition', 'Transição de status não permitida.')
+  @ApiProblem(
+    422,
+    'invalid-status-transition | cancellation-kind-required',
+    'Transição de status não permitida; ou, numa reserva paga online, faltou dizer se o cancelamento é imprevisto da barbearia ou a pedido do cliente.',
+  )
   @Post('appointments/:id/status')
   changeStatus(
     @Param('id', ParseUUIDPipe) id: string,
@@ -149,7 +154,7 @@ export class AppointmentsController {
 @Module({
   imports: [BarbershopsModule, StaffModule, ClientsModule, CatalogModule],
   controllers: [AppointmentsController],
-  providers: [AppointmentsService],
-  exports: [AppointmentsService],
+  providers: [AppointmentsService, AppointmentPayments],
+  exports: [AppointmentsService, AppointmentPayments],
 })
 export class AppointmentsModule {}

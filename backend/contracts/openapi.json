@@ -4992,6 +4992,13 @@
                       "NO_SHOW"
                     ]
                   },
+                  "cancellation": {
+                    "type": "string",
+                    "enum": [
+                      "BARBERSHOP",
+                      "CLIENT_REQUEST"
+                    ]
+                  },
                   "reason": {
                     "type": "string",
                     "maxLength": 200
@@ -5067,7 +5074,7 @@
             }
           },
           "422": {
-            "description": "`invalid-status-transition`: Transição de status não permitida.",
+            "description": "`invalid-status-transition | cancellation-kind-required`: Transição de status não permitida; ou, numa reserva paga online, faltou dizer se o cancelamento é imprevisto da barbearia ou a pedido do cliente.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5968,6 +5975,7 @@
     },
     "/v1/public/{slug}/bookings": {
       "post": {
+        "description": "Com pagamento online (modo exigido, ou `payOnline` no opcional), a resposta traz `payment.checkoutUrl` para o cliente pagar no gateway. Sem o link (o gateway não respondeu), o cliente paga depois por `me/appointments/:id/payment`.\n\n**Permissões (basta uma):** `bookings:self`",
         "operationId": "PublicBookingController_book",
         "parameters": [
           {
@@ -6018,6 +6026,9 @@
                     "type": "string",
                     "format": "date-time",
                     "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  "payOnline": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -6029,7 +6040,8 @@
                   "serviceIds": [
                     "0199a1b2-0000-7000-8000-000000000003"
                   ],
-                  "startsAt": "2030-03-04T10:00:00-03:00"
+                  "startsAt": "2030-03-04T10:00:00-03:00",
+                  "payOnline": true
                 }
               }
             }
@@ -6104,8 +6116,7 @@
         "x-allowed-when-read-only": true,
         "x-required-permissions": [
           "bookings:self"
-        ],
-        "description": "**Permissões (basta uma):** `bookings:self`"
+        ]
       }
     },
     "/v1/public/{slug}/me/appointments/{id}/cancel": {
@@ -6193,6 +6204,103 @@
           "bookings:self"
         ],
         "description": "**Permissões (basta uma):** `bookings:self`"
+      }
+    },
+    "/v1/public/{slug}/me/appointments/{id}/payment": {
+      "post": {
+        "description": "Reaproveita o checkout aberto enquanto vale. A resposta traz `payment.checkoutUrl`.\n\n**Permissões (basta uma):** `bookings:self`",
+        "operationId": "PublicBookingController_pay",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 50,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientAppointment"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso inexistente ou de outra barbearia.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`payment-not-open | online-payment-off`: O agendamento já foi pago, cancelado ou passou; ou a barbearia não recebe pagamento online agora.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`payment-gateway-unavailable`: O gateway não respondeu.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Pagar agora: abre o checkout do pagamento online do meu agendamento",
+        "tags": [
+          "Agendamento online"
+        ],
+        "x-allowed-when-read-only": true,
+        "x-required-permissions": [
+          "bookings:self"
+        ]
       }
     },
     "/v1/public/{slug}/me/appointments/{id}/reschedule": {
@@ -6329,6 +6437,349 @@
           "bookings:self"
         ],
         "description": "**Permissões (basta uma):** `bookings:self`"
+      }
+    },
+    "/v1/online-payments": {
+      "get": {
+        "operationId": "OnlinePaymentsController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePayment"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel não tem as permissões exigidas ou o recurso não está no plano da barbearia (`plan-upgrade-required`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Conta conectada no gateway e como a reserva online é paga",
+        "tags": [
+          "Pagamento online"
+        ],
+        "x-required-feature": "online-payment",
+        "x-required-permissions": [
+          "barbershop:manage"
+        ],
+        "description": "**Permissões (basta uma):** `barbershop:manage`\n\n**Recurso do plano:** `online-payment`"
+      }
+    },
+    "/v1/online-payments/account": {
+      "put": {
+        "description": "As credenciais são conferidas no gateway e guardadas cifradas; nunca voltam ao navegador. Reconectar troca as credenciais e mantém a configuração.\n\n**Permissões (basta uma):** `barbershop:manage`\n\n**Recurso do plano:** `online-payment`",
+        "operationId": "OnlinePaymentsController_connect",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectPaymentAccountInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePayment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel não tem as permissões exigidas ou o recurso não está no plano da barbearia (`plan-upgrade-required`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`payment-account-invalid-credentials`: O gateway recusou as credenciais.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`payment-gateway-unavailable`: O gateway não respondeu.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`online-payment-unavailable`: O pagamento online está desligado nesta instalação.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Conecta a conta da barbearia no gateway de pagamento",
+        "tags": [
+          "Pagamento online"
+        ],
+        "x-required-feature": "online-payment",
+        "x-required-permissions": [
+          "barbershop:manage"
+        ]
+      },
+      "delete": {
+        "operationId": "OnlinePaymentsController_disconnect",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel não tem as permissões exigidas ou o recurso não está no plano da barbearia (`plan-upgrade-required`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Desconecta a conta e desliga o pagamento online",
+        "tags": [
+          "Pagamento online"
+        ],
+        "x-required-feature": "online-payment",
+        "x-required-permissions": [
+          "barbershop:manage"
+        ],
+        "description": "**Permissões (basta uma):** `barbershop:manage`\n\n**Recurso do plano:** `online-payment`"
+      }
+    },
+    "/v1/online-payments/settings": {
+      "put": {
+        "description": "Desligado, à escolha do cliente ou exigido; o total dos serviços ou um sinal (basis points, de 1% a 99%).\n\n**Permissões (basta uma):** `barbershop:manage`\n\n**Recurso do plano:** `online-payment`",
+        "operationId": "OnlinePaymentsController_updateSettings",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnlinePaymentSettingsInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePayment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel não tem as permissões exigidas ou o recurso não está no plano da barbearia (`plan-upgrade-required`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`payment-account-not-connected`: A barbearia ainda não conectou a conta no gateway.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Define como a reserva online é paga",
+        "tags": [
+          "Pagamento online"
+        ],
+        "x-required-feature": "online-payment",
+        "x-required-permissions": [
+          "barbershop:manage"
+        ]
+      }
+    },
+    "/v1/online-payments/webhook/{webhookKey}": {
+      "post": {
+        "description": "Chamada pelo gateway. A chave na URL diz de qual conta é, e a assinatura HMAC é conferida com o segredo dela (401 se inválida). Só põe a consulta ao gateway na fila; notificação repetida é ignorada.",
+        "operationId": "OnlinePaymentsController_webhook",
+        "parameters": [
+          {
+            "name": "webhookKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingPaymentWebhookAck"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso inexistente ou de outra barbearia.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Muitas requisições do mesmo IP (rate limit).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Notificação do gateway sobre um pagamento de reserva, na URL da conta da barbearia",
+        "tags": [
+          "Pagamento online"
+        ],
+        "x-public": true,
+        "security": []
       }
     },
     "/v1/orders": {
@@ -9404,295 +9855,6 @@
         "x-public": true,
         "security": []
       }
-    },
-    "/v1/online-payments": {
-      "get": {
-        "operationId": "OnlinePaymentsController_get",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Sucesso",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OnlinePayment"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Sem token ou token expirado. Use **Authorize**.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "O papel não tem as permissões exigidas ou o recurso não está no plano da barbearia (`plan-upgrade-required`).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Conta conectada no gateway e como a reserva online é paga",
-        "tags": [
-          "Pagamento online"
-        ],
-        "x-required-feature": "online-payment",
-        "x-required-permissions": [
-          "barbershop:manage"
-        ],
-        "description": "**Permissões (basta uma):** `barbershop:manage`\n\n**Recurso do plano:** `online-payment`"
-      }
-    },
-    "/v1/online-payments/account": {
-      "put": {
-        "description": "As credenciais são conferidas no gateway e guardadas cifradas; nunca voltam ao navegador. Reconectar troca as credenciais e mantém a configuração.\n\n**Permissões (basta uma):** `barbershop:manage`\n\n**Recurso do plano:** `online-payment`",
-        "operationId": "OnlinePaymentsController_connect",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConnectPaymentAccountInput"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Sucesso",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OnlinePayment"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Sem token ou token expirado. Use **Authorize**.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "402": {
-            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "O papel não tem as permissões exigidas ou o recurso não está no plano da barbearia (`plan-upgrade-required`).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "`payment-account-invalid-credentials`: O gateway recusou as credenciais.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "`payment-gateway-unavailable`: O gateway não respondeu.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "`online-payment-unavailable`: O pagamento online está desligado nesta instalação.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Conecta a conta da barbearia no gateway de pagamento",
-        "tags": [
-          "Pagamento online"
-        ],
-        "x-required-feature": "online-payment",
-        "x-required-permissions": [
-          "barbershop:manage"
-        ]
-      },
-      "delete": {
-        "operationId": "OnlinePaymentsController_disconnect",
-        "parameters": [],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "401": {
-            "description": "Sem token ou token expirado. Use **Authorize**.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "402": {
-            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "O papel não tem as permissões exigidas ou o recurso não está no plano da barbearia (`plan-upgrade-required`).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Desconecta a conta e desliga o pagamento online",
-        "tags": [
-          "Pagamento online"
-        ],
-        "x-required-feature": "online-payment",
-        "x-required-permissions": [
-          "barbershop:manage"
-        ],
-        "description": "**Permissões (basta uma):** `barbershop:manage`\n\n**Recurso do plano:** `online-payment`"
-      }
-    },
-    "/v1/online-payments/settings": {
-      "put": {
-        "description": "Desligado, à escolha do cliente ou exigido; o total dos serviços ou um sinal (basis points, de 1% a 99%).\n\n**Permissões (basta uma):** `barbershop:manage`\n\n**Recurso do plano:** `online-payment`",
-        "operationId": "OnlinePaymentsController_updateSettings",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/OnlinePaymentSettingsInput"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Sucesso",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OnlinePayment"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Sem token ou token expirado. Use **Authorize**.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "402": {
-            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "O papel não tem as permissões exigidas ou o recurso não está no plano da barbearia (`plan-upgrade-required`).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "`payment-account-not-connected`: A barbearia ainda não conectou a conta no gateway.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Define como a reserva online é paga",
-        "tags": [
-          "Pagamento online"
-        ],
-        "x-required-feature": "online-payment",
-        "x-required-permissions": [
-          "barbershop:manage"
-        ]
-      }
     }
   },
   "info": {
@@ -11164,6 +11326,14 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "payment": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AppointmentPayment"
+              }
+            ]
+          },
           "noShowJustification": {
             "nullable": true,
             "type": "string"
@@ -11181,7 +11351,58 @@
           "client",
           "items",
           "totalCents",
+          "payment",
           "noShowJustification"
+        ],
+        "additionalProperties": false
+      },
+      "AppointmentPayment": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "PAID",
+              "REFUND_PENDING",
+              "REFUNDED",
+              "REFUND_FAILED",
+              "EXPIRED",
+              "CANCELLED"
+            ]
+          },
+          "amountCents": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "holdUntil": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "checkoutUrl": {
+            "nullable": true,
+            "type": "string"
+          },
+          "paidAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "refundedAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "status",
+          "amountCents",
+          "holdUntil",
+          "checkoutUrl",
+          "paidAt",
+          "refundedAt"
         ],
         "additionalProperties": false
       },
@@ -11306,6 +11527,38 @@
           },
           "brand": {
             "$ref": "#/components/schemas/Brand"
+          },
+          "onlinePayment": {
+            "nullable": true,
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "OPTIONAL",
+                  "REQUIRED"
+                ]
+              },
+              "amount": {
+                "type": "string",
+                "enum": [
+                  "FULL",
+                  "DEPOSIT"
+                ]
+              },
+              "depositBps": {
+                "nullable": true,
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "mode",
+              "amount",
+              "depositBps"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
@@ -11314,7 +11567,8 @@
           "timezone",
           "cancellationMinNoticeMinutes",
           "rescheduleMinNoticeMinutes",
-          "brand"
+          "brand",
+          "onlinePayment"
         ],
         "additionalProperties": false
       },
@@ -11508,6 +11762,14 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "payment": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AppointmentPayment"
+              }
+            ]
           }
         },
         "required": [
@@ -11521,7 +11783,8 @@
           "professional",
           "client",
           "items",
-          "totalCents"
+          "totalCents",
+          "payment"
         ],
         "additionalProperties": false
       },
@@ -11594,6 +11857,151 @@
           "expiresAt",
           "status",
           "balances"
+        ],
+        "additionalProperties": false
+      },
+      "OnlinePayment": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "account": {
+            "nullable": true,
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string"
+              },
+              "accountId": {
+                "type": "string"
+              },
+              "accountName": {
+                "type": "string"
+              },
+              "connectedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "provider",
+              "accountId",
+              "accountName",
+              "connectedAt"
+            ],
+            "additionalProperties": false
+          },
+          "settings": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "OFF",
+                  "OPTIONAL",
+                  "REQUIRED"
+                ]
+              },
+              "amount": {
+                "type": "string",
+                "enum": [
+                  "FULL",
+                  "DEPOSIT"
+                ]
+              },
+              "depositBps": {
+                "nullable": true,
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "mode",
+              "amount",
+              "depositBps"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "available",
+          "account",
+          "settings"
+        ],
+        "additionalProperties": false
+      },
+      "ConnectPaymentAccountInput": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 512
+          },
+          "webhookSecret": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "accessToken",
+          "webhookSecret"
+        ],
+        "additionalProperties": false,
+        "example": {
+          "accessToken": "APP_USR-0000000000000000-000000",
+          "webhookSecret": "segredo-de-webhooks-da-conta"
+        }
+      },
+      "OnlinePaymentSettingsInput": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "OFF",
+              "OPTIONAL",
+              "REQUIRED"
+            ]
+          },
+          "amount": {
+            "type": "string",
+            "enum": [
+              "FULL",
+              "DEPOSIT"
+            ]
+          },
+          "depositBps": {
+            "nullable": true,
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 9900
+          }
+        },
+        "required": [
+          "mode",
+          "amount",
+          "depositBps"
+        ],
+        "additionalProperties": false,
+        "example": {
+          "mode": "OPTIONAL",
+          "amount": "DEPOSIT",
+          "depositBps": 3000
+        }
+      },
+      "BookingPaymentWebhookAck": {
+        "type": "object",
+        "properties": {
+          "received": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "received"
         ],
         "additionalProperties": false
       },
@@ -13090,139 +13498,6 @@
           "received"
         ],
         "additionalProperties": false
-      },
-      "OnlinePayment": {
-        "type": "object",
-        "properties": {
-          "available": {
-            "type": "boolean"
-          },
-          "account": {
-            "nullable": true,
-            "type": "object",
-            "properties": {
-              "provider": {
-                "type": "string"
-              },
-              "accountId": {
-                "type": "string"
-              },
-              "accountName": {
-                "type": "string"
-              },
-              "connectedAt": {
-                "type": "string",
-                "format": "date-time"
-              }
-            },
-            "required": [
-              "provider",
-              "accountId",
-              "accountName",
-              "connectedAt"
-            ],
-            "additionalProperties": false
-          },
-          "settings": {
-            "type": "object",
-            "properties": {
-              "mode": {
-                "type": "string",
-                "enum": [
-                  "OFF",
-                  "OPTIONAL",
-                  "REQUIRED"
-                ]
-              },
-              "amount": {
-                "type": "string",
-                "enum": [
-                  "FULL",
-                  "DEPOSIT"
-                ]
-              },
-              "depositBps": {
-                "nullable": true,
-                "type": "integer",
-                "minimum": -9007199254740991,
-                "maximum": 9007199254740991
-              }
-            },
-            "required": [
-              "mode",
-              "amount",
-              "depositBps"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "required": [
-          "available",
-          "account",
-          "settings"
-        ],
-        "additionalProperties": false
-      },
-      "ConnectPaymentAccountInput": {
-        "type": "object",
-        "properties": {
-          "accessToken": {
-            "type": "string",
-            "minLength": 16,
-            "maxLength": 512
-          },
-          "webhookSecret": {
-            "type": "string",
-            "minLength": 16,
-            "maxLength": 512
-          }
-        },
-        "required": [
-          "accessToken",
-          "webhookSecret"
-        ],
-        "additionalProperties": false,
-        "example": {
-          "accessToken": "APP_USR-0000000000000000-000000",
-          "webhookSecret": "segredo-de-webhooks-da-conta"
-        }
-      },
-      "OnlinePaymentSettingsInput": {
-        "type": "object",
-        "properties": {
-          "mode": {
-            "type": "string",
-            "enum": [
-              "OFF",
-              "OPTIONAL",
-              "REQUIRED"
-            ]
-          },
-          "amount": {
-            "type": "string",
-            "enum": [
-              "FULL",
-              "DEPOSIT"
-            ]
-          },
-          "depositBps": {
-            "nullable": true,
-            "type": "integer",
-            "minimum": 100,
-            "maximum": 9900
-          }
-        },
-        "required": [
-          "mode",
-          "amount",
-          "depositBps"
-        ],
-        "additionalProperties": false,
-        "example": {
-          "mode": "OPTIONAL",
-          "amount": "DEPOSIT",
-          "depositBps": 3000
-        }
       },
       "ProblemDetails": {
         "type": "object",

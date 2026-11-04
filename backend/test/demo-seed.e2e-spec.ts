@@ -242,6 +242,21 @@ describe('Seed de demonstração (e2e)', () => {
     });
   });
 
+  it('a demo tem uma reserva online paga (sinal de 30%) pela cliente com conta', async () => {
+    const login = await request(app.getHttpServer())
+      .post(`/v1/public/${DEMO_SLUG}/auth/login`)
+      .send({ email: DEMO_ACCOUNTS.client.email, password: DEMO_PASSWORD })
+      .expect(200);
+    const mine = await as(app, login.body.accessToken)
+      .get(`/v1/public/${DEMO_SLUG}/me/appointments`)
+      .expect(200);
+    const paid = mine.body.filter(
+      (appointment: { payment: { status: string } | null }) => appointment.payment?.status === 'PAID',
+    );
+    expect(paid).toHaveLength(1);
+    expect(paid[0].payment.amountCents).toBe(Math.round(paid[0].totalCents * 0.3));
+  });
+
   it('a barbearia vizinha é isolada da demo', async () => {
     const neighbor = await loginPanel(DEMO_ACCOUNTS.neighborOwner.email);
     const clients = await as(app, neighbor.accessToken).get('/v1/clients').expect(200);
@@ -332,7 +347,7 @@ describe('Seed de demonstração (e2e)', () => {
     // Barbearias novas fazem o papel de uma demo antiga: sem produtos e sem marca.
     const oldDemo = await registerTenant(app);
     const oldNeighbor = await registerTenant(app);
-    await as(app, oldDemo.token)
+    const barbeira = await as(app, oldDemo.token)
       .post('/v1/staff')
       .send({
         name: 'Barbeira',
@@ -341,6 +356,17 @@ describe('Seed de demonstração (e2e)', () => {
         roleKey: 'professional',
         isProfessional: true,
       })
+      .expect(201);
+    await as(app, oldDemo.token)
+      .put(`/v1/staff/${barbeira.body.id}/schedule`)
+      .send({
+        intervals: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, start: '09:00', end: '18:00' })),
+      })
+      .expect(200);
+    // E uma cliente com conta (agendamento online), que ganha a reserva paga online.
+    const paula = await request(app.getHttpServer())
+      .post(`/v1/public/${oldDemo.slug}/auth/register`)
+      .send({ name: 'Paula Antiga', email: `paula-${Date.now()}@teste.com`, password: 'senha-forte-123' })
       .expect(201);
     // A demo antiga já tinha serviços e clientes (o que os pacotes usam).
     for (const [name, priceCents] of [
@@ -364,10 +390,17 @@ describe('Seed de demonstração (e2e)', () => {
       // Os clientes da demo antiga não têm consentimento: sem campanha, só o aniversário.
       'mensagem automática de aniversário',
       'pagamento online (conta de teste, sinal opcional de 30%)',
+      'reserva online paga (sinal) pela cliente com conta',
       'cor da Barbearia Vizinha',
       'plano Premium (cortesia) na demo',
       'plano Essencial (cortesia) na Barbearia Vizinha',
     ]);
+    const mine = await as(app, paula.body.accessToken)
+      .get(`/v1/public/${oldDemo.slug}/me/appointments`)
+      .expect(200);
+    expect(mine.body.map((appointment: { payment: unknown }) => appointment.payment)).toContainEqual(
+      expect.objectContaining({ status: 'PAID', amountCents: 1500 }),
+    );
     const sold = await as(app, oldDemo.token).get('/v1/client-packages').expect(200);
     expect(new Set(sold.body.map((row: { status: string }) => row.status))).toEqual(
       new Set(['ACTIVE', 'REFUNDED', 'EXPIRED']),

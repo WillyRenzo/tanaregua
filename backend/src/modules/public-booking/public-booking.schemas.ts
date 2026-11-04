@@ -32,11 +32,17 @@ export const publicBookingSchema = z
     professionalId: z.uuid().optional(),
     serviceIds: z.array(z.uuid()).min(1).max(10),
     startsAt: z.iso.datetime({ offset: true }).transform((value) => new Date(value)),
+    /**
+     * Pagamento online no modo opcional (§5): `true` = pagar agora. No modo exigido a reserva
+     * é sempre paga; com o pagamento online desligado, é ignorado.
+     */
+    payOnline: z.boolean().optional(),
   })
   .meta({
     example: {
       serviceIds: ['0199a1b2-0000-7000-8000-000000000003'],
       startsAt: '2030-03-04T10:00:00-03:00',
+      payOnline: true,
     },
   });
 export type PublicBookingInput = z.infer<typeof publicBookingSchema>;

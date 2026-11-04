@@ -1,28 +1,16 @@
 import { randomBytes } from 'node:crypto';
-import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { SecretBox } from '../../common/crypto/secret-box.js';
-import { DomainError, unprocessable } from '../../common/http/domain-error.js';
+import { unprocessable } from '../../common/http/domain-error.js';
 import { TenantDb } from '../../common/tenancy/tenant-db.service.js';
 import type { Tx } from '../../prisma/prisma.service.js';
 import { MerchantGateway, MerchantGatewayError, type MerchantCredentials } from './merchant-gateway.js';
+import {
+  onlinePaymentUnavailable as unavailable,
+  paymentGatewayUnavailable as gatewayUnavailable,
+} from './online-payments.errors.js';
 import type { OnlinePaymentView } from './online-payments.responses.js';
 import type { ConnectPaymentAccountInput, OnlinePaymentSettingsInput } from './online-payments.schemas.js';
-
-const unavailable = () =>
-  new DomainError(
-    'online-payment-unavailable',
-    'Service Unavailable',
-    'O pagamento online ainda não está disponível. Fale com o suporte do TaNaRegua.',
-    HttpStatus.SERVICE_UNAVAILABLE,
-  );
-
-const gatewayUnavailable = () =>
-  new DomainError(
-    'payment-gateway-unavailable',
-    'Bad Gateway',
-    'O serviço de pagamento não respondeu. Tente de novo em alguns minutos.',
-    HttpStatus.BAD_GATEWAY,
-  );
 
 const OFF_SETTINGS = { mode: 'OFF', amount: 'FULL', depositBps: null } as const;
 

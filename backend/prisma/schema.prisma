@@ -50,6 +50,7 @@ model Barbershop {
   memberships        Membership[]
   whatsappConnection WhatsAppConnection?
   paymentAccount     PaymentAccount?
+  paymentWebhooks    BookingPaymentWebhookEvent[]
   campaigns          Campaign[]
   subscription       Subscription?
   checkouts          SubscriptionCheckout[]
@@ -493,6 +494,7 @@ model Appointment {
   client       Client            @relation(fields: [barbershopId, clientId], references: [barbershopId, id], map: "appointments_tenant_client_fkey")
   items        AppointmentItem[]
   order        Order?
+  payment      BookingPayment?
 
   @@unique([barbershopId, id], map: "appointments_tenant_id_key")
   @@index([barbershopId, startsAt])
@@ -1007,4 +1009,65 @@ model PaymentAccount {
 
   @@unique([barbershopId, id], map: "payment_accounts_tenant_id_key")
   @@map("payment_accounts")
+}
+
+/// Situação do pagamento online de uma reserva (§5).
+enum BookingPaymentStatus {
+  /// Aguardando o pagamento (no modo exigido, com o horário segurado até `holdUntil`).
+  PENDING
+  PAID
+  /// Reembolso integral pedido ao gateway (pelo outbox).
+  REFUND_PENDING
+  REFUNDED
+  /// O gateway não reembolsou depois de todas as tentativas: a barbearia resolve na conta dela.
+  REFUND_FAILED
+  /// O prazo do modo exigido passou sem pagamento: a reserva caiu.
+  EXPIRED
+  /// A reserva foi cancelada antes do pagamento.
+  CANCELLED
+}
+
+/// Pagamento online de uma reserva (§5), na conta da própria barbearia. Um por agendamento.
+model BookingPayment {
+  id                String               @id @default(uuid(7)) @db.Uuid
+  barbershopId      String               @map("barbershop_id") @db.Uuid
+  appointmentId     String               @map("appointment_id") @db.Uuid
+  /// Gateway em que o pagamento foi criado (coluna genérica).
+  provider          String
+  /// Valor cobrado online (total ou sinal), congelado ao abrir o pagamento.
+  amountCents       Int                  @map("amount_cents")
+  status            BookingPaymentStatus @default(PENDING)
+  /// Modo exigido: até quando o horário fica segurado sem pagamento.
+  holdUntil         DateTime?            @map("hold_until") @db.Timestamptz
+  /// Checkout aberto no gateway (reaproveitado enquanto não vence).
+  checkoutId        String?              @map("checkout_id")
+  checkoutUrl       String?              @map("checkout_url")
+  checkoutExpiresAt DateTime?            @map("checkout_expires_at") @db.Timestamptz
+  /// Pagamento aprovado no gateway.
+  gatewayPaymentId  String?              @map("gateway_payment_id")
+  paidAt            DateTime?            @map("paid_at") @db.Timestamptz
+  refundReason      String?              @map("refund_reason")
+  refundedAt        DateTime?            @map("refunded_at") @db.Timestamptz
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+
+  appointment Appointment @relation(fields: [barbershopId, appointmentId], references: [barbershopId, id], map: "booking_payments_tenant_appointment_fkey")
+
+  @@unique([barbershopId, appointmentId], map: "booking_payments_tenant_appointment_key")
+  @@unique([barbershopId, id], map: "booking_payments_tenant_id_key")
+  @@unique([provider, gatewayPaymentId])
+  @@map("booking_payments")
+}
+
+/// Notificações de pagamento recebidas na URL de cada conta, para não processar a mesma duas vezes.
+model BookingPaymentWebhookEvent {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  barbershopId String   @map("barbershop_id") @db.Uuid
+  eventId      String   @map("event_id")
+  receivedAt   DateTime @default(now()) @map("received_at") @db.Timestamptz
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "booking_payment_webhook_events_barbershop_fkey")
+
+  @@unique([barbershopId, eventId])
+  @@map("booking_payment_webhook_events")
 }

@@ -16,7 +16,8 @@ import { CampaignsService } from '../modules/marketing/campaigns.service.js';
 import { OrdersService } from '../modules/orders/orders.service.js';
 import type { OrderItemInput } from '../modules/orders/orders.schemas.js';
 import { PackagesService } from '../modules/packages/packages.service.js';
-import { MerchantGateway } from '../modules/online-payments/merchant-gateway.js';
+import { BookingPaymentsService } from '../modules/online-payments/booking-payments.service.js';
+import { FakeMerchantGateway, MerchantGateway } from '../modules/online-payments/merchant-gateway.js';
 import { OnlinePaymentsService } from '../modules/online-payments/online-payments.service.js';
 import { ProductsService } from '../modules/products/products.service.js';
 import { PublicBookingService } from '../modules/public-booking/public-booking.service.js';
@@ -636,6 +637,7 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
 
     await addDemoMarketing(app);
     await addDemoOnlinePayment(app);
+    await addDemoPaidBooking(app, DEMO_SLUG);
 
     // LGPD: cliente que pediu exclusão. Some da lista, o histórico fica como "Cliente anonimizado".
     await clients.anonymize(client.Ricardo!);
@@ -718,6 +720,8 @@ export async function completeDemo(
     const onlinePayment = await addDemoOnlinePayment(app);
     if (onlinePayment) added.push(onlinePayment);
   });
+  const paidBooking = await addDemoPaidBooking(app, slugs.demo);
+  if (paidBooking) added.push(paidBooking);
 
   await asOwnerOf(app, slugs.neighbor, async () => {
     const barbershops = app.get(BarbershopsService);
@@ -1189,6 +1193,70 @@ function mulberry32(seed: number): () => number {
  * com sinal de 30% à escolha do cliente. Só com PAYMENT_PROVIDER=fake (o padrão do compose de
  * desenvolvimento); não mexe em quem já conectou. Devolve a descrição, ou null.
  */
+/**
+ * Reserva online da cliente com conta, paga no checkout simulado (sinal de 30%) daqui a uns
+ * dias: o painel e "Meus agendamentos" mostram o pagamento. Só com o gateway simulado, e só se
+ * a barbearia ainda não tem nenhuma reserva paga online.
+ */
+async function addDemoPaidBooking(app: INestApplicationContext, slug: string): Promise<string | null> {
+  const gateway = app.get(MerchantGateway);
+  if (!(gateway instanceof FakeMerchantGateway)) return null;
+  const prisma = app.get(PrismaService);
+  const shop = await prisma.barbershop.findUnique({ where: { slug }, select: { id: true } });
+  if (!shop) return null;
+  const found = await prisma.withContext({ barbershopId: shop.id }, async (tx) => ({
+    payments: await tx.bookingPayment.count({ where: { barbershopId: shop.id } }),
+    client: await tx.membership.findFirst({
+      where: { barbershopId: shop.id, active: true, role: { key: 'client' } },
+      select: { id: true, userId: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+    service: await tx.service.findFirst({
+      where: { barbershopId: shop.id, active: true },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+  }));
+  if (found.payments > 0 || !found.client || !found.service) return null;
+  const { client, service } = found;
+
+  const publicBooking = app.get(PublicBookingService);
+  const cls = app.get<ClsService<RequestContext>>(ClsService);
+  const booked = await cls.run(async () => {
+    cls.set('auth', {
+      userId: client.userId,
+      barbershopId: shop.id,
+      membershipId: client.id,
+      permissions: ['bookings:self'],
+    });
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE }).format(new Date());
+    for (let days = 3; days < 10; days++) {
+      const date = shiftDate(today, days);
+      const availability = await publicBooking.availability(slug, { date, serviceIds: [service.id] });
+      const free = availability.professionals.find((professional) => professional.starts.length > 0);
+      if (free) {
+        return publicBooking.book(slug, {
+          professionalId: free.id,
+          serviceIds: [service.id],
+          startsAt: free.starts.at(-1)!,
+          payOnline: true,
+        });
+      }
+    }
+    return null;
+  });
+  const checkoutId = booked?.payment?.checkoutUrl?.split('/').at(-1);
+  if (!checkoutId) return null;
+  // A cliente pagou no checkout simulado; aplica como o consumidor da notificação faria.
+  const { paymentId } = gateway.approve(checkoutId);
+  await app.get(BookingPaymentsService).applyGatewayPayment({
+    id: 'seed',
+    barbershopId: shop.id,
+    payload: { provider: gateway.provider, gatewayPaymentId: paymentId },
+  });
+  return 'reserva online paga (sinal) pela cliente com conta';
+}
+
 async function addDemoOnlinePayment(app: INestApplicationContext): Promise<string | null> {
   if (app.get(MerchantGateway).provider !== 'fake') return null;
   const payments = app.get(OnlinePaymentsService);

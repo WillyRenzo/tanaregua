@@ -23,7 +23,15 @@ export type DomainEvent =
   /** O valor por ciclo mudou (troca de plano): repassar o valor atual ao gateway. */
   | { type: 'SubscriptionAmountSync'; payload: { subscriptionId: string } }
   /** Fim do período pago com downgrade agendado: trocar o plano. */
-  | { type: 'SubscriptionPlanChangeDue'; payload: { subscriptionId: string } };
+  | { type: 'SubscriptionPlanChangeDue'; payload: { subscriptionId: string } }
+  /** O gateway avisou de um pagamento de reserva: consultar e aplicar (§5). */
+  | { type: 'BookingPaymentChanged'; payload: { provider: string; gatewayPaymentId: string } }
+  /** Reembolso integral de uma reserva paga, no gateway da barbearia. */
+  | { type: 'BookingPaymentRefund'; payload: { bookingPaymentId: string } }
+  /** Pagamento a mais numa reserva já paga (dois checkouts pagos): devolver esse. */
+  | { type: 'BookingPaymentExtraRefund'; payload: { provider: string; gatewayPaymentId: string } }
+  /** Fim do prazo para pagar no modo exigido: sem pagamento, a reserva cai. */
+  | { type: 'BookingPaymentHoldExpired'; payload: { bookingPaymentId: string } };
 
 @Injectable()
 export class OutboxService {

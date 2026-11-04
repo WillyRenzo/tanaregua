@@ -39,6 +39,7 @@ import { BarbershopsModule, BarbershopsService } from '../barbershops/barbershop
 import { CatalogModule } from '../catalog/catalog.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { PackagesModule } from '../packages/packages.module.js';
+import { OnlinePaymentsModule } from '../online-payments/online-payments.module.js';
 import { myPackageSchema } from '../packages/packages.responses.js';
 import { StaffModule } from '../staff/staff.module.js';
 import {
@@ -176,8 +177,12 @@ export class PublicBookingController {
   @Throttle(BOOKING_THROTTLE)
   @Idempotent()
   @ApiResult(clientAppointmentViewSchema, 201)
-  @ApiOperation({ summary: 'Reserva horário' })
   @ApiProblem(409, 'slot-unavailable', 'O horário não está mais disponível.')
+  @ApiOperation({
+    summary: 'Reserva horário',
+    description:
+      'Com pagamento online (modo exigido, ou `payOnline` no opcional), a resposta traz `payment.checkoutUrl` para o cliente pagar no gateway. Sem o link (o gateway não respondeu), o cliente paga depois por `me/appointments/:id/payment`.',
+  })
   @Post('bookings')
   book(
     @Param('slug', { schema: slugSchema }) slug: string,
@@ -194,6 +199,25 @@ export class PublicBookingController {
   @Post('me/appointments/:id/cancel')
   cancel(@Param('slug', { schema: slugSchema }) slug: string, @Param('id', ParseUUIDPipe) id: string) {
     return this.booking.cancel(slug, id);
+  }
+
+  @RequirePermissions('bookings:self')
+  @Throttle(BOOKING_THROTTLE)
+  @HttpCode(HttpStatus.OK)
+  @ApiResult(clientAppointmentViewSchema)
+  @ApiOperation({
+    summary: 'Pagar agora: abre o checkout do pagamento online do meu agendamento',
+    description: 'Reaproveita o checkout aberto enquanto vale. A resposta traz `payment.checkoutUrl`.',
+  })
+  @ApiProblem(
+    422,
+    'payment-not-open | online-payment-off',
+    'O agendamento já foi pago, cancelado ou passou; ou a barbearia não recebe pagamento online agora.',
+  )
+  @ApiProblem(502, 'payment-gateway-unavailable', 'O gateway não respondeu.')
+  @Post('me/appointments/:id/payment')
+  pay(@Param('slug', { schema: slugSchema }) slug: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.booking.pay(slug, id);
   }
 
   @RequirePermissions('bookings:self')
@@ -218,7 +242,15 @@ export class PublicBookingController {
 }
 
 @Module({
-  imports: [AppointmentsModule, BarbershopsModule, CatalogModule, ClientsModule, StaffModule, PackagesModule],
+  imports: [
+    AppointmentsModule,
+    BarbershopsModule,
+    CatalogModule,
+    ClientsModule,
+    StaffModule,
+    PackagesModule,
+    OnlinePaymentsModule,
+  ],
   controllers: [PublicBookingController],
   providers: [PublicBookingService],
 })
