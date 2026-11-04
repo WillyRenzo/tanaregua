@@ -233,6 +233,15 @@ describe('Seed de demonstração (e2e)', () => {
     expect(birthdays.body.some((entry: { consents: { email: boolean } }) => entry.consents.email)).toBe(true);
   });
 
+  it('a demo tem o pagamento online conectado numa conta de teste, com sinal opcional', async () => {
+    const owner = await loginPanel(DEMO_ACCOUNTS.owner.email);
+    const payments = await as(app, owner.accessToken).get('/v1/online-payments').expect(200);
+    expect(payments.body).toMatchObject({
+      account: { provider: 'fake', accountName: 'Conta de teste' },
+      settings: { mode: 'OPTIONAL', amount: 'DEPOSIT', depositBps: 3000 },
+    });
+  });
+
   it('a barbearia vizinha é isolada da demo', async () => {
     const neighbor = await loginPanel(DEMO_ACCOUNTS.neighborOwner.email);
     const clients = await as(app, neighbor.accessToken).get('/v1/clients').expect(200);
@@ -241,12 +250,24 @@ describe('Seed de demonstração (e2e)', () => {
   });
 
   it('rodar de novo não duplica nada: a demo já está completa', async () => {
-    const prisma = app.get(PrismaService);
-    const users = await prisma.user.count();
-    const products = await prisma.product.count();
+    // Dono das tabelas: sem tenant, o RLS esconderia os produtos do usuário da aplicação.
+    // As outras suítes rodam em paralelo no mesmo banco: conta só o que é da demo.
+    const prisma = ownerClient();
+    const demoUsers = {
+      OR: [
+        { email: { endsWith: '@demo.tanaregua.test' } },
+        { email: { endsWith: '@vizinha.tanaregua.test' } },
+      ],
+    };
+    const demoProducts = { barbershop: { slug: { in: [DEMO_SLUG, NEIGHBOR_SLUG] } } };
+    const users = await prisma.user.count({ where: demoUsers });
+    const products = await prisma.product.count({ where: demoProducts });
+    expect(users).toBeGreaterThan(0);
+    expect(products).toBeGreaterThan(0);
     expect(await seedDemo(app)).toMatchObject({ created: false, added: [] });
-    expect(await prisma.user.count()).toBe(users);
-    expect(await prisma.product.count()).toBe(products);
+    expect(await prisma.user.count({ where: demoUsers })).toBe(users);
+    expect(await prisma.product.count({ where: demoProducts })).toBe(products);
+    await prisma.$disconnect();
   });
 
   it('a demo está no plano mais completo (mostra tudo) e a vizinha no básico (mostra o upgrade)', async () => {
@@ -342,6 +363,7 @@ describe('Seed de demonstração (e2e)', () => {
       'pacotes (vendidos, em uso, reembolsado e vencido)',
       // Os clientes da demo antiga não têm consentimento: sem campanha, só o aniversário.
       'mensagem automática de aniversário',
+      'pagamento online (conta de teste, sinal opcional de 30%)',
       'cor da Barbearia Vizinha',
       'plano Premium (cortesia) na demo',
       'plano Essencial (cortesia) na Barbearia Vizinha',

@@ -49,6 +49,7 @@ model Barbershop {
   packages           ServicePackage[]
   memberships        Membership[]
   whatsappConnection WhatsAppConnection?
+  paymentAccount     PaymentAccount?
   campaigns          Campaign[]
   subscription       Subscription?
   checkouts          SubscriptionCheckout[]
@@ -964,4 +965,46 @@ model PlatformRefreshToken {
 
   @@index([familyId])
   @@map("platform_refresh_tokens")
+}
+
+/// Pagamento da reserva online (business-rules §5): desligado, à escolha do cliente ou exigido.
+enum OnlinePaymentMode {
+  OFF
+  OPTIONAL
+  REQUIRED
+}
+
+/// Quanto se paga online: o total dos serviços ou um sinal (percentual).
+enum OnlinePaymentAmount {
+  FULL
+  DEPOSIT
+}
+
+/// Conta da barbearia no gateway de pagamento (§5): o dinheiro dos clientes cai direto nela.
+/// Uma por barbearia; desconectar apaga a linha e desliga o pagamento online.
+model PaymentAccount {
+  id                  String              @id @default(uuid(7)) @db.Uuid
+  barbershopId        String              @unique @map("barbershop_id") @db.Uuid
+  /// Nome do gateway (coluna genérica: trocar de gateway não muda a tabela).
+  provider            String
+  /// Conferidos no gateway ao conectar; mostrados no painel.
+  externalAccountId   String              @map("external_account_id")
+  accountName         String              @map("account_name")
+  /// Credenciais cifradas (AES-256-GCM, ligadas ao tenant). Nunca saem da API.
+  accessTokenSealed   String              @map("access_token_sealed")
+  webhookSecretSealed String              @map("webhook_secret_sealed")
+  /// Identificador opaco na URL de notificação desta conta (não revela o tenant).
+  webhookKey          String              @unique @map("webhook_key")
+  mode                OnlinePaymentMode   @default(OFF)
+  amount              OnlinePaymentAmount @default(FULL)
+  /// Sinal em basis points (3000 = 30%); só com `amount = DEPOSIT`.
+  depositBps          Int?                @map("deposit_bps")
+  connectedByUserId   String              @map("connected_by_user_id") @db.Uuid
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade, map: "payment_accounts_barbershop_fkey")
+
+  @@unique([barbershopId, id], map: "payment_accounts_tenant_id_key")
+  @@map("payment_accounts")
 }

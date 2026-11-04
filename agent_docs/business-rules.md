@@ -63,6 +63,33 @@ Não invente regra para preencher uma lacuna: pergunte.
 - O processamento de webhook é **idempotente**: o mesmo evento recebido duas vezes não pode gerar dois lançamentos.
 - O sistema nunca armazena dados de cartão. Usa só os tokens/IDs do gateway.
 
+### Pagamento da reserva online (decisões de 30/10/2026)
+
+- **O dinheiro cai na conta da própria barbearia.** Cada barbearia conecta a conta dela no gateway (credenciais conferidas no gateway e guardadas cifradas, como o WhatsApp), com as taxas do gateway por conta dela. O TaNaRegua nunca segura dinheiro de clientes.
+- **Primeiro uso: a reserva na página pública**, por Pix ou cartão no checkout do gateway.
+- **A barbearia escolhe o modo:**
+  - **desligado** (como antes);
+  - **opcional** (o cliente escolhe pagar agora ou no balcão);
+  - **exigido** (a reserva só se confirma com o pagamento; o horário fica segurado por **15 minutos** e, sem pagamento, a reserva cai e o horário volta a ficar livre).
+- **A barbearia escolhe o valor:** o total dos serviços ou um **sinal** (percentual inteiro de 1% a 99%, em basis points).
+- **Cancelamento:**
+  - o cliente cancela no prazo de cancelamento online: **reembolso integral automático**;
+  - a barbearia cancela e o painel pergunta o motivo:
+    - **imprevisto da barbearia**: reembolso integral automático;
+    - **a pedido do cliente**: dentro do prazo do cliente, reembolso integral; fora dele, o valor fica com a barbearia;
+  - reagendar mantém o pagamento no novo horário.
+- **Falta (não compareceu) ou cancelamento fora do prazo com reserva paga:**
+  - o valor pago **fica com a barbearia**, que pode reembolsar pelo painel (total ou parte, com motivo);
+  - na prática, o pré-pagamento é a garantia contra falta (a regra "sem multa" de §2 continua valendo para quem não pagou antes).
+- **Caixa e comissões:**
+  - o pagamento entra no caixa e nas comissões **no dia do atendimento, ao fechar a comanda**, como parte já paga dela (forma "online"); antes disso, fica só como "pago antecipado" na reserva;
+  - o valor retido de uma falta ou de um cancelamento fora do prazo entra no caixa **no dia em que a falta (ou o cancelamento) é registrado**, **sem comissão** (não houve atendimento);
+  - um reembolso posterior gera o lançamento negativo no dia em que é feito.
+- **Quem configura:** quem configura a barbearia (`barbershop:manage`), e só nos planos com o recurso `online-payment` (§12).
+- **Entregas:**
+  - **feita:** conexão da conta e configuração;
+  - **seguintes:** pagamento na reserva, depois comanda, caixa e reembolso manual (`mvp-plan.md`).
+
 ## 6. Pacotes de serviços
 
 - O cliente compra um pacote com N sessões de um ou mais serviços. Cada uso consome uma sessão, vinculada à comanda.

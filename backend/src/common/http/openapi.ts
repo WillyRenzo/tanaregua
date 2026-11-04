@@ -102,6 +102,10 @@ export const API_TAGS = {
     'Aniversários e campanhas',
     'Mensagem automática de aniversário e campanhas por e-mail ou WhatsApp (modelos aprovados da Meta), só para quem consentiu no canal.',
   ],
+  onlinePayments: [
+    'Pagamento online',
+    'Conta da barbearia no gateway de pagamento (o dinheiro cai direto nela) e como a reserva online é paga. Recurso do plano: `online-payment`.',
+  ],
   subscription: [
     'Assinatura e planos',
     'Planos da plataforma, os recursos de cada um e a assinatura da barbearia, cobrada pelo gateway de pagamento. Recurso fora do plano responde 403 `plan-upgrade-required`.',
