@@ -7,6 +7,7 @@ import { TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { StatusBadge } from '@/components/appointment-status';
+import { hasVisiblePayment, PaymentBadge } from '@/components/payment-status';
 import { ClientPicker } from '@/components/client-picker';
 import { Field } from '@/components/form/field';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -327,6 +328,10 @@ function AppointmentDetails({
   const justifyNoShow = useJustifyNoShow();
   const [panel, setPanel] = useState<'none' | 'cancel' | 'reschedule' | 'no-show' | 'justify'>('none');
   const [reason, setReason] = useState('');
+  // Reserva paga online (§5): o motivo decide se o cliente recebe o valor de volta.
+  const [cancellation, setCancellation] = useState<'BARBERSHOP' | 'CLIENT_REQUEST' | null>(null);
+  const payment = appointment.payment;
+  const paidOnline = payment?.status === 'PAID';
 
   const canWrite =
     can(session, 'appointments:write:any') ||
@@ -339,7 +344,12 @@ function AppointmentDetails({
 
   const setStatus = async (status: 'CONFIRMED' | 'IN_SERVICE' | 'NO_SHOW' | 'CANCELLED') => {
     try {
-      await changeStatus.mutateAsync({ id: appointment.id, status, reason: reason || undefined });
+      await changeStatus.mutateAsync({
+        id: appointment.id,
+        status,
+        reason: reason || undefined,
+        ...(status === 'CANCELLED' && cancellation ? { cancellation } : {}),
+      });
       toast.success('Agendamento atualizado.');
       onDone();
     } catch (error) {
@@ -380,8 +390,27 @@ function AppointmentDetails({
           {formatDateLong(date, timezone)} · {formatTime(appointment.startsAt, timezone)}–
           {formatTime(appointment.endsAt, timezone)}
         </SheetDescription>
-        <StatusBadge status={appointment.status} className="mt-1 w-fit" />
+        <div className="mt-1 flex flex-wrap gap-2">
+          <StatusBadge status={appointment.status} className="w-fit" />
+          {hasVisiblePayment(payment) && <PaymentBadge payment={payment} />}
+        </div>
       </SheetHeader>
+
+      {payment?.status === 'PENDING' && payment.holdUntil && pending && (
+        <p className="text-sm">
+          Reserva segurada até <strong>{formatTime(payment.holdUntil, timezone)}</strong> esperando o
+          pagamento online. Sem ele, é cancelada sozinha.
+        </p>
+      )}
+      {payment?.status === 'REFUND_FAILED' && (
+        <Alert variant="destructive">
+          <TriangleAlert aria-hidden />
+          <AlertDescription>
+            O reembolso automático não foi concluído. Devolva o valor pela conta da barbearia no serviço de
+            pagamento.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {appointment.client.unjustifiedNoShows > 0 && (
         <Alert>
@@ -508,6 +537,13 @@ function AppointmentDetails({
       {panel === 'cancel' && (
         <div className="grid gap-2">
           <Separator />
+          {paidOnline && (
+            <CancellationKind
+              value={cancellation}
+              onChange={setCancellation}
+              amountCents={payment.amountCents}
+            />
+          )}
           <Label htmlFor="cancel-reason">Motivo do cancelamento (opcional)</Label>
           <Textarea
             id="cancel-reason"
@@ -518,7 +554,7 @@ function AppointmentDetails({
           <Button
             variant="destructive"
             onClick={() => setStatus('CANCELLED')}
-            disabled={changeStatus.isPending}
+            disabled={changeStatus.isPending || (paidOnline && !cancellation)}
           >
             Confirmar cancelamento
           </Button>
@@ -676,5 +712,58 @@ function Reschedule({
         Salvar novo horário
       </Button>
     </form>
+  );
+}
+
+/**
+ * Cancelamento de reserva paga online (business-rules §5): imprevisto da barbearia devolve o valor;
+ * a pedido do cliente, devolve só dentro do prazo de cancelamento dele (a API decide pelo horário).
+ */
+function CancellationKind({
+  value,
+  onChange,
+  amountCents,
+}: {
+  value: 'BARBERSHOP' | 'CLIENT_REQUEST' | null;
+  onChange: (value: 'BARBERSHOP' | 'CLIENT_REQUEST') => void;
+  amountCents: number;
+}) {
+  const options = [
+    {
+      value: 'BARBERSHOP' as const,
+      label: 'Imprevisto da barbearia',
+      hint: `O cliente recebe ${formatMoney(amountCents)} de volta.`,
+    },
+    {
+      value: 'CLIENT_REQUEST' as const,
+      label: 'A pedido do cliente',
+      hint: 'Devolve o valor se o pedido veio dentro do prazo de cancelamento online; fora dele, o valor fica com a barbearia.',
+    },
+  ];
+  return (
+    <fieldset className="grid gap-2">
+      <legend className="mb-1 text-sm font-medium">Esta reserva foi paga online. Por que cancelar?</legend>
+      {options.map((option) => (
+        <label
+          key={option.value}
+          className={cn(
+            'border-border has-focus-visible:ring-ring flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm has-focus-visible:ring-2',
+            value === option.value && 'border-primary bg-accent',
+          )}
+        >
+          <input
+            type="radio"
+            name="cancellation-kind"
+            className="accent-primary mt-0.5"
+            checked={value === option.value}
+            onChange={() => onChange(option.value)}
+          />
+          <span>
+            <span className="block font-medium">{option.label}</span>
+            <span className="text-muted-foreground">{option.hint}</span>
+          </span>
+        </label>
+      ))}
+    </fieldset>
   );
 }
