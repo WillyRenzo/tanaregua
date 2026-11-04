@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
@@ -19,11 +19,13 @@ import {
 } from '@/components/ui/dialog';
 import { ApiError, errorMessage } from '@/lib/api/errors';
 import { PackageStatusBadge } from '@/components/package-status';
+import { hasVisiblePayment, PaymentBadge } from '@/components/payment-status';
 import { formatDate, formatDateLong, formatMoney, formatTime } from '@/lib/format';
 import {
   useCancelBooking,
   useMyAppointments,
   useMyPackages,
+  usePayBooking,
   useRescheduleBooking,
 } from '@/lib/public-queries';
 import type { Schemas } from '@/lib/queries';
@@ -36,6 +38,10 @@ type ClientAppointment = Schemas['ClientAppointment'];
 
 const ACTIVE = ['SCHEDULED', 'CONFIRMED'];
 
+/** Depois de voltar do checkout, espera a confirmação do pagamento por até 1 minuto. */
+const PAYMENT_POLL_MS = 3_000;
+const PAYMENT_POLL_LIMIT_MS = 60_000;
+
 const localDate = (instant: string, timezone: string) =>
   new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date(instant));
 
@@ -43,15 +49,30 @@ export function MyAppointments({
   timezone,
   cancellationMinNoticeMinutes,
   rescheduleMinNoticeMinutes,
+  paysOnline,
 }: {
   timezone: string;
   cancellationMinNoticeMinutes: number;
   rescheduleMinNoticeMinutes: number;
+  /** A barbearia recebe pagamento online agora (§5): quem não pagou pode pagar depois. */
+  paysOnline: boolean;
 }) {
   const { slug } = useParams<{ slug: string }>();
+  // Volta do checkout do serviço de pagamento: ?pagamento=<id do agendamento>.
+  const returnedFrom = useSearchParams().get('pagamento');
+  const [returnedAt] = useState(() => Date.now());
   const { isClientHere, loading } = useClientSession(slug);
-  const appointments = useMyAppointments(slug, isClientHere);
   const now = useNow();
+  const [waiting, setWaiting] = useState(returnedFrom !== null);
+  const appointments = useMyAppointments(slug, isClientHere, waiting ? PAYMENT_POLL_MS : false);
+  const returned = appointments.data?.find((appointment) => appointment.id === returnedFrom);
+  if (
+    waiting &&
+    returned &&
+    (returned.payment?.status !== 'PENDING' || now - returnedAt > PAYMENT_POLL_LIMIT_MS)
+  ) {
+    setWaiting(false);
+  }
   const [rescheduling, setRescheduling] = useState<ClientAppointment | null>(null);
 
   /** Ainda dá tempo para a ação online? (a API revalida com o prazo da barbearia) */
@@ -67,6 +88,18 @@ export function MyAppointments({
         </Link>
       </Button>
       <h1 className="mb-6 text-4xl font-bold">Meus agendamentos</h1>
+
+      {returned && (
+        <Alert className="mb-4" aria-live="polite">
+          <AlertDescription>
+            {returned.payment?.status === 'PAID'
+              ? 'Pagamento confirmado. Até lá!'
+              : waiting
+                ? 'Recebemos o retorno do pagamento. A confirmação pode levar alguns instantes…'
+                : 'O pagamento ainda não foi confirmado. Se você pagou, ele aparece aqui em alguns minutos; se não, tente de novo.'}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {loading ? (
         <LoadingRows rows={3} />
@@ -100,6 +133,11 @@ export function MyAppointments({
               canReschedule={beforeNotice(appointment, rescheduleMinNoticeMinutes)}
               onReschedule={() => setRescheduling(appointment)}
               isFuture={new Date(appointment.startsAt).getTime() > now}
+              canPay={
+                ACTIVE.includes(appointment.status) &&
+                new Date(appointment.startsAt).getTime() > now &&
+                (appointment.payment?.status === 'PENDING' || (appointment.payment === null && paysOnline))
+              }
             />
           ))}
         </ul>
@@ -168,6 +206,7 @@ function AppointmentCard({
   canReschedule,
   onReschedule,
   isFuture,
+  canPay,
 }: {
   appointment: ClientAppointment;
   slug: string;
@@ -176,8 +215,24 @@ function AppointmentCard({
   canReschedule: boolean;
   onReschedule: () => void;
   isFuture: boolean;
+  canPay: boolean;
 }) {
   const cancel = useCancelBooking(slug);
+  const pay = usePayBooking(slug);
+  const payment = appointment.payment;
+
+  const handlePay = () => {
+    if (payment?.checkoutUrl) {
+      window.location.assign(payment.checkoutUrl);
+      return;
+    }
+    pay.mutate(appointment.id, {
+      onSuccess: (updated) => {
+        if (updated.payment?.checkoutUrl) window.location.assign(updated.payment.checkoutUrl);
+      },
+      onError: (error) => toast.error(errorMessage(error)),
+    });
+  };
 
   const handleCancel = () =>
     cancel.mutate(appointment.id, {
@@ -202,10 +257,37 @@ function AppointmentCard({
           </p>
           <p className="text-muted-foreground text-sm">{formatMoney(appointment.totalCents)}</p>
         </div>
-        <StatusBadge status={appointment.status} />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {hasVisiblePayment(payment) && <PaymentBadge payment={payment} />}
+          <StatusBadge status={appointment.status} />
+        </div>
       </div>
-      {(canReschedule || canCancel) && (
+      {payment?.status === 'PENDING' && payment.holdUntil && ACTIVE.includes(appointment.status) && (
+        <p className="mt-2 text-sm">
+          Pague até <strong>{formatTime(payment.holdUntil, timezone)}</strong> para garantir o horário. Sem o
+          pagamento, a reserva é cancelada.
+        </p>
+      )}
+      {payment?.status === 'EXPIRED' && appointment.status === 'CANCELLED' && (
+        <p className="text-muted-foreground mt-2 text-xs">
+          Cancelado porque o pagamento não foi feito no prazo.
+        </p>
+      )}
+      {payment?.status === 'REFUND_PENDING' && (
+        <p className="text-muted-foreground mt-2 text-xs">
+          O valor volta pelo mesmo meio de pagamento; pode levar alguns dias para aparecer.
+        </p>
+      )}
+      {payment?.status === 'REFUND_FAILED' && (
+        <p className="mt-2 text-xs">O reembolso não foi concluído automaticamente. Fale com a barbearia.</p>
+      )}
+      {(canReschedule || canCancel || canPay) && (
         <div className="mt-2 -ml-2 flex flex-wrap gap-1">
+          {canPay && (
+            <Button variant="ghost" size="sm" onClick={handlePay} disabled={pay.isPending}>
+              {pay.isPending ? 'Abrindo o pagamento…' : 'Pagar agora'}
+            </Button>
+          )}
           {canReschedule && (
             <Button variant="ghost" size="sm" onClick={onReschedule}>
               Reagendar

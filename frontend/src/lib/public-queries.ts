@@ -25,10 +25,12 @@ export function usePublicAvailability(
   });
 }
 
-export function useMyAppointments(slug: string, enabled: boolean) {
+/** `pollMs`: atualiza sozinho (ex.: esperando a confirmação do pagamento online). */
+export function useMyAppointments(slug: string, enabled: boolean, pollMs: number | false = false) {
   return useQuery({
     queryKey: ['my-appointments', slug],
     enabled,
+    refetchInterval: pollMs,
     queryFn: () => unwrap(api.GET('/v1/public/{slug}/me/appointments', { params: { path: { slug } } })),
   });
 }
@@ -52,6 +54,8 @@ export function useBook(slug: string) {
       professionalId?: string;
       serviceIds: string[];
       startsAt: string;
+      /** Modo opcional do pagamento online: pagar agora (§5). */
+      payOnline?: boolean;
     }) =>
       unwrap(
         api.POST('/v1/public/{slug}/bookings', {
@@ -64,6 +68,16 @@ export function useBook(slug: string) {
       void client.invalidateQueries({ queryKey: ['public-availability', slug] });
       void client.invalidateQueries({ queryKey: ['my-appointments', slug] });
     },
+  });
+}
+
+/** "Pagar agora": abre (ou reaproveita) o checkout do pagamento online da reserva. */
+export function usePayBooking(slug: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      unwrap(api.POST('/v1/public/{slug}/me/appointments/{id}/payment', { params: { path: { slug, id } } })),
+    onSettled: () => client.invalidateQueries({ queryKey: ['my-appointments', slug] }),
   });
 }
 

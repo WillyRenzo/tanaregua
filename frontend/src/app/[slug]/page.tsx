@@ -71,6 +71,7 @@ async function BarbershopContent({ params }: { params: PageProps<'/[slug]'>['par
             timezone={data.barbershop.timezone}
             services={data.services}
             professionals={data.professionals}
+            onlinePayment={data.barbershop.onlinePayment}
           />
         )}
       </main>

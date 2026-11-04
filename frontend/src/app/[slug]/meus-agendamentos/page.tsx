@@ -26,6 +26,7 @@ async function Content({ params }: { params: PageProps<'/[slug]/meus-agendamento
         timezone={data.barbershop.timezone}
         cancellationMinNoticeMinutes={data.barbershop.cancellationMinNoticeMinutes}
         rescheduleMinNoticeMinutes={data.barbershop.rescheduleMinNoticeMinutes}
+        paysOnline={data.barbershop.onlinePayment !== null}
       />
     </>
   );
