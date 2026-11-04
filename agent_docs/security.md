@@ -104,6 +104,14 @@ em um SaaS multi-tenant que lida com dados pessoais, salários e pagamentos.
   - nunca voltam ao navegador: o painel mostra só o id e o apelido da conta;
   - a URL de notificação de cada conta usa uma chave aleatória (`webhook_key`), nunca o id do tenant;
   - configurar exige `barbershop:manage` e o recurso `online-payment` do plano.
+- **Notificação de pagamento de reserva** (`POST /v1/online-payments/webhook/:webhookKey`, pública, 300/min):
+  - a função `payment_account_tenant_of` (SECURITY DEFINER) devolve só a barbearia dona da chave; chave desconhecida = 404;
+  - a assinatura `x-signature` é conferida com o segredo **daquela conta** (401 se não confere), e o evento entra em `booking_payment_webhook_events` (unique por tenant, sem UPDATE/DELETE para a aplicação);
+  - a notificação não carrega estado: o outbox consulta o pagamento no gateway com o token da própria barbearia. Um pagamento de outra conta não é encontrado com esse token, e a referência externa só é procurada dentro do tenant;
+  - o pagamento só vira "pago" se o valor conferir com o cobrado; senão, é devolvido;
+  - reembolso pelo outbox, com chave de idempotência no gateway (`refund:<id>`): repetir não devolve duas vezes;
+  - `booking_payments` não tem DELETE para a aplicação (histórico de dinheiro), e a mudança de situação é otimista (duas notificações simultâneas não gravam dois pagamentos).
+- **Checkout simulado** (`GET /v1/online-payments/fake-checkout/:id`): só com `PAYMENT_PROVIDER=fake`, que a API recusa em produção; fora dele, 404.
 
 ## Assistente de IA
 

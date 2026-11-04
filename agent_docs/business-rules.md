@@ -86,9 +86,19 @@ Não invente regra para preencher uma lacuna: pergunte.
   - o valor retido de uma falta ou de um cancelamento fora do prazo entra no caixa **no dia em que a falta (ou o cancelamento) é registrado**, **sem comissão** (não houve atendimento);
   - um reembolso posterior gera o lançamento negativo no dia em que é feito.
 - **Quem configura:** quem configura a barbearia (`barbershop:manage`), e só nos planos com o recurso `online-payment` (§12).
+- **Detalhes confirmados em 04/11/2026:**
+  - **pago depois do prazo do modo exigido** (ex.: um Pix pago no minuto 17): se o horário ainda estiver livre, a reserva volta a valer; se alguém já pegou, **reembolso integral automático**;
+  - **modo opcional:** a reserva vale na hora como "paga no balcão". Quem não pagou na reserva (ou desistiu no checkout) pode **pagar depois em "Meus agendamentos"**, enquanto o atendimento não acontece;
+  - **arredondamento do sinal:** meio centavo para cima, como a comissão (30% de R$ 45,55 = R$ 13,67), num único ponto do código;
+  - **sem o recurso** (plano menor, conta desconectada ou modo desligado): novas reservas não cobram. As já pagas continuam pagas, e o reembolso automático continua enquanto a conta estiver conectada.
+- **Também valem:**
+  - no modo exigido, o e-mail de confirmação da reserva só sai quando o pagamento entra;
+  - um segundo pagamento da mesma reserva (dois checkouts pagos), ou um pagamento com valor diferente do cobrado, é devolvido automaticamente;
+  - um pagamento que chega depois de a reserva ser cancelada é devolvido automaticamente;
+  - um reembolso que o gateway recusa depois de todas as tentativas aparece no painel como "reembolso não concluído", para a barbearia devolver pela conta dela.
 - **Entregas:**
-  - **feita:** conexão da conta e configuração;
-  - **seguintes:** pagamento na reserva, depois comanda, caixa e reembolso manual (`mvp-plan.md`).
+  - **feitas:** conexão da conta e configuração (30/10/2026); pagamento na reserva com reembolso automático (04/11/2026);
+  - **seguinte:** comanda, caixa, valor retido de falta e reembolso manual (`mvp-plan.md`).
 
 ## 6. Pacotes de serviços
 
