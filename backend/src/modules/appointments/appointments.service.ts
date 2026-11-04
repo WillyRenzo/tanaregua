@@ -1,5 +1,5 @@
 import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
-import { conflict, notFound, unprocessable } from '../../common/http/domain-error.js';
+import { conflict, DomainError, notFound, unprocessable } from '../../common/http/domain-error.js';
 import type { AuthContext } from '../../common/tenancy/request-context.js';
 import { TenantDb } from '../../common/tenancy/tenant-db.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
@@ -16,7 +16,13 @@ import {
   isReschedulable,
   type AppointmentStatus,
 } from './appointment-status.js';
-import type { AppointmentView, ClientAppointmentView, UnjustifiedNoShow } from './appointments.responses.js';
+import { AppointmentPayments, type CancellationContext } from './appointment-payments.js';
+import type {
+  AppointmentPaymentSummary,
+  AppointmentView,
+  ClientAppointmentView,
+  UnjustifiedNoShow,
+} from './appointments.responses.js';
 import type {
   AvailabilityQuery,
   ChangeStatusInput,
@@ -38,6 +44,9 @@ import {
 
 const SLOT_STEP_MINUTES = 15;
 
+/** Motivo gravado quando a reserva cai por falta de pagamento no modo exigido (§5). */
+const UNPAID_HOLD_REASON = 'Pagamento online não concluído no prazo';
+
 const appointmentInclude = {
   professional: { select: { id: true, user: { select: { name: true } } } },
   client: { select: { id: true, name: true, phone: true } },
@@ -52,7 +61,10 @@ type AppointmentRow = Prisma.AppointmentGetPayload<{ include: typeof appointment
 export type { AppointmentView, ClientAppointmentView };
 
 /** Visão do cliente final: nada interno da equipe (justificativa e contagem de faltas). */
-export const toClientAppointmentView = (row: AppointmentRow): ClientAppointmentView => ({
+const toClientAppointmentView = (
+  row: AppointmentRow,
+  payment: AppointmentPaymentSummary | null,
+): ClientAppointmentView => ({
   id: row.id,
   status: row.status,
   source: row.source,
@@ -64,6 +76,7 @@ export const toClientAppointmentView = (row: AppointmentRow): ClientAppointmentV
   client: row.client,
   items: row.items,
   totalCents: row.items.reduce((total, item) => total + item.priceCents, 0),
+  payment,
 });
 
 export interface BookingRequest {
@@ -74,6 +87,8 @@ export interface BookingRequest {
   notes?: string;
   source: 'PANEL' | 'ONLINE';
   createdByUserId: string;
+  /** Modo exigido do pagamento online: o e-mail de confirmação só sai quando o pagamento entra. */
+  deferConfirmation?: boolean;
 }
 
 const hasPermission = (auth: AuthContext, permission: Permission) => auth.permissions.includes(permission);
@@ -87,6 +102,7 @@ export class AppointmentsService {
     @Inject(ClientsService) private readonly clients: ClientsService,
     @Inject(CatalogService) private readonly catalog: CatalogService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(AppointmentPayments) private readonly payments: AppointmentPayments,
   ) {}
 
   // ───────────── Leitura ─────────────
@@ -272,11 +288,13 @@ export class AppointmentsService {
       },
     });
     await this.replaceItems(tx, barbershopId, appointment.id, services);
-    await this.outbox.publish(tx, barbershopId, {
-      type: 'AppointmentBooked',
-      payload: { appointmentId: appointment.id },
-    });
-    return toClientAppointmentView(await this.find(tx, barbershopId, appointment.id));
+    if (!request.deferConfirmation) {
+      await this.outbox.publish(tx, barbershopId, {
+        type: 'AppointmentBooked',
+        payload: { appointmentId: appointment.id },
+      });
+    }
+    return this.clientView(tx, barbershopId, appointment.id);
   }
 
   update(appointmentId: string, input: UpdateAppointmentInput): Promise<AppointmentView> {
@@ -367,7 +385,7 @@ export class AppointmentsService {
       type: 'AppointmentRescheduled',
       payload: { appointmentId },
     });
-    return toClientAppointmentView(await this.find(tx, barbershopId, appointmentId));
+    return this.clientView(tx, barbershopId, appointmentId);
   }
 
   /** Em NO_SHOW, o `reason` vira a justificativa da falta (opcional, só a equipe vê). */
@@ -376,6 +394,12 @@ export class AppointmentsService {
       const current = await this.find(tx, auth.barbershopId, appointmentId);
       this.assertCanWrite(auth, current.professionalId);
       assertTransition(current.status, input.status);
+      if (input.status === 'CANCELLED') {
+        await this.payments.onCancel(tx, auth.barbershopId, current, {
+          by: 'staff',
+          kind: input.cancellation,
+        });
+      }
       await this.setStatus(tx, auth.barbershopId, appointmentId, input.status, input.reason);
       return this.staffView(tx, auth.barbershopId, appointmentId);
     });
@@ -401,8 +425,48 @@ export class AppointmentsService {
   async cancelByClient(tx: Tx, barbershopId: string, appointmentId: string): Promise<ClientAppointmentView> {
     const current = await this.find(tx, barbershopId, appointmentId);
     assertTransition(current.status, 'CANCELLED');
+    await this.payments.onCancel(tx, barbershopId, current, { by: 'client' } satisfies CancellationContext);
     await this.setStatus(tx, barbershopId, appointmentId, 'CANCELLED', 'Cancelado pelo cliente');
-    return toClientAppointmentView(await this.find(tx, barbershopId, appointmentId));
+    return this.clientView(tx, barbershopId, appointmentId);
+  }
+
+  /** E-mail de confirmação adiado pelo modo exigido do pagamento online (§5): sai agora. */
+  async confirmBooking(tx: Tx, barbershopId: string, appointmentId: string): Promise<void> {
+    await this.outbox.publish(tx, barbershopId, { type: 'AppointmentBooked', payload: { appointmentId } });
+  }
+
+  /**
+   * Modo exigido do pagamento online (§5): o prazo para pagar passou e a reserva cai. Chamado
+   * pelo módulo de pagamento, que já cuida do pagamento.
+   */
+  async cancelUnpaidHold(tx: Tx, barbershopId: string, appointmentId: string): Promise<void> {
+    const current = await this.find(tx, barbershopId, appointmentId);
+    if (current.status !== 'SCHEDULED' && current.status !== 'CONFIRMED') return;
+    await this.setStatus(tx, barbershopId, appointmentId, 'CANCELLED', UNPAID_HOLD_REASON);
+  }
+
+  /**
+   * Pagamento aprovado depois que a reserva caiu por falta de pagamento (§5): volta a valer se
+   * o horário ainda estiver livre. Devolve `false` se não der (o pagamento é reembolsado).
+   */
+  async restoreUnpaidHold(tx: Tx, barbershopId: string, appointmentId: string): Promise<boolean> {
+    const current = await this.find(tx, barbershopId, appointmentId);
+    if (current.status !== 'CANCELLED' || current.cancellationReason !== UNPAID_HOLD_REASON) return false;
+    if (current.startsAt.getTime() <= Date.now()) return false;
+    const settings = await this.barbershops.settings(tx, barbershopId);
+    const window = { startsAt: current.startsAt, endsAt: current.endsAt, blockedUntil: current.blockedUntil };
+    try {
+      await this.assertNoTimeOff(tx, barbershopId, current.professionalId, window);
+      await this.assertNoConflict(tx, barbershopId, current.professionalId, window, settings, appointmentId);
+    } catch (error) {
+      if (error instanceof DomainError) return false;
+      throw error;
+    }
+    await tx.appointment.update({
+      where: { id: appointmentId },
+      data: { status: 'SCHEDULED', cancellationReason: null },
+    });
+    return true;
   }
 
   /**
@@ -471,12 +535,12 @@ export class AppointmentsService {
       orderBy: { startsAt: 'desc' },
       take: 50,
     });
-    return rows.map(toClientAppointmentView);
+    return this.clientViews(tx, barbershopId, rows);
   }
 
   /** Para outros módulos (comanda, notificações, agendamento online), dentro da transação deles. */
   async getInTx(tx: Tx, barbershopId: string, appointmentId: string): Promise<ClientAppointmentView> {
-    return toClientAppointmentView(await this.find(tx, barbershopId, appointmentId));
+    return this.clientView(tx, barbershopId, appointmentId);
   }
 
   // ───────────── Regras internas ─────────────
@@ -520,11 +584,40 @@ export class AppointmentsService {
       });
       for (const group of groups) counts.set(group.clientId, group._count._all);
     }
+    const payments = await this.payments.summaries(
+      tx,
+      barbershopId,
+      rows.map((row) => row.id),
+    );
     return rows.map((row) => ({
-      ...toClientAppointmentView(row),
+      ...toClientAppointmentView(row, payments.get(row.id) ?? null),
       noShowJustification: row.noShowJustification,
       client: { ...row.client, unjustifiedNoShows: counts.get(row.clientId) ?? 0 },
     }));
+  }
+
+  private async clientViews(
+    tx: Tx,
+    barbershopId: string,
+    rows: AppointmentRow[],
+  ): Promise<ClientAppointmentView[]> {
+    const payments = await this.payments.summaries(
+      tx,
+      barbershopId,
+      rows.map((row) => row.id),
+    );
+    return rows.map((row) => toClientAppointmentView(row, payments.get(row.id) ?? null));
+  }
+
+  private async clientView(
+    tx: Tx,
+    barbershopId: string,
+    appointmentId: string,
+  ): Promise<ClientAppointmentView> {
+    const [view] = await this.clientViews(tx, barbershopId, [
+      await this.find(tx, barbershopId, appointmentId),
+    ]);
+    return view!;
   }
 
   private async staffView(tx: Tx, barbershopId: string, appointmentId: string): Promise<AppointmentView> {

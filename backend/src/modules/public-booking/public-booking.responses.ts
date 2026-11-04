@@ -9,6 +9,15 @@ export const publicBarbershopSchema = z
     cancellationMinNoticeMinutes: z.int(),
     rescheduleMinNoticeMinutes: z.int(),
     brand: brandSchema,
+    /** Como a reserva é paga online (§5); `null` = só no balcão. */
+    onlinePayment: z
+      .object({
+        mode: z.enum(['OPTIONAL', 'REQUIRED']),
+        amount: z.enum(['FULL', 'DEPOSIT']),
+        /** Sinal em basis points (3000 = 30%). */
+        depositBps: z.int().nullable(),
+      })
+      .nullable(),
   })
   .meta({ id: 'PublicBarbershop' });
 

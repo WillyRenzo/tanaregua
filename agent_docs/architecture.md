@@ -68,7 +68,7 @@ escrever um adapter novo e mudar a configuração, sem migration e sem mexer em 
 | `MailSender` | e-mails do outbox | `LogMailSender` (dev), `ResendMailSender` | implementada |
 | `WhatsAppSender` | aniversários e campanhas (com consentimento), só por modelo aprovado | `LogWhatsAppSender` (dev e testes), `MetaWhatsAppSender` (Cloud API via HTTP, sem SDK); `WHATSAPP_PROVIDER` e `META_GRAPH_API_VERSION` | implementada (`marketing/whatsapp`) |
 | `PaymentGateway` | **assinatura recorrente do TaNaRegua**, com a conta da plataforma, e webhooks | `MercadoPagoGateway` (inicial), `FakePaymentGateway` (dev e testes), `DisabledPaymentGateway`; `PAYMENT_PROVIDER` | implementada (`subscriptions`) |
-| `MerchantGateway` | **pagamento online dos clientes**, com a conta da própria barbearia (o dinheiro cai direto nela) | `MercadoPagoMerchantGateway`, `FakeMerchantGateway`, `DisabledMerchantGateway`; o mesmo `PAYMENT_PROVIDER` (um gateway por instalação) | conexão da conta implementada (`online-payments`); pagamento da reserva em seguida |
+| `MerchantGateway` | **pagamento online dos clientes**, com a conta da própria barbearia (o dinheiro cai direto nela) | `MercadoPagoMerchantGateway`, `FakeMerchantGateway`, `DisabledMerchantGateway`; o mesmo `PAYMENT_PROVIDER` (um gateway por instalação) | conexão da conta e pagamento da reserva (Checkout Pro, consulta, reembolso) implementados (`online-payments`) |
 | `ObjectStorage` | logos da identidade visual (e futuros anexos) | `LocalDiskStorage` (dev e VPS com volume; `STORAGE_LOCAL_DIR`); S3-compatível depois | implementada (`common/storage`) |
 | `LlmProvider` | assistente de IA | `ClaudeProvider` (inicial, API da Anthropic) + fake para testes; outro provedor = adapter novo + `LLM_PROVIDER` | fase 4 |
 

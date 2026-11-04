@@ -352,12 +352,20 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
   - A verificação de recursos precisa estar pronta **antes** de liberar qualquer recurso da fase 3 ou 4, senão o plano básico já nasceria com eles.
 - **Pagamento online** da reserva, com o dinheiro na conta da própria barbearia (porta `MerchantGateway`, Mercado Pago como adapter inicial), webhook verificado e idempotente. Regras no `business-rules.md` §5 (decisões de 30/10/2026). Entregas, em ordem:
   1. conexão da conta da barbearia no gateway (credenciais conferidas e cifradas) e configuração: desligado, opcional ou exigido; total ou sinal (feito em 30/10/2026, recurso `online-payment`);
-  2. pagamento na reserva da página pública: checkout do gateway, horário segurado por 15 minutos no modo exigido, webhook por conta (`/…/:webhookKey`, assinatura com o segredo da barbearia) e reembolso automático nos cancelamentos previstos;
+  2. pagamento na reserva da página pública (feito em 04/11/2026, decisões no `business-rules.md` §5): Checkout Pro com Pix e cartão, horário segurado por 15 minutos no modo exigido (queda pelo outbox), "pagar agora" depois no modo opcional, webhook por conta (`/v1/online-payments/webhook/:webhookKey`, assinatura com o segredo da barbearia), reembolso automático nos cancelamentos previstos e motivo do cancelamento pedido no painel;
   3. comanda e caixa: o pré-pagamento abate na comanda e entra no caixa ao fechar; valor retido de falta no caixa do dia em que for marcada, sem comissão; reembolso manual pelo painel.
   - Depois: pacote comprado online e reembolso de pacote pago online.
   - **Antes de ligar o Mercado Pago**, testar no sandbox:
     - `GET /users/me` com o access token de produção da barbearia (id e apelido);
     - se a notificação de um pagamento criado com `notification_url` vem assinada (`x-signature`) com a assinatura secreta da aplicação da barbearia.
+    - os campos da preferência do Checkout Pro (`POST /checkout/preferences`), escritos a partir da documentação pública, sem o SDK:
+      - `expires` com `expiration_date_to` fecha o checkout no fim do prazo;
+      - `date_of_expiration` limita o Pix ao mesmo prazo;
+      - `excluded_payment_types: ticket` tira o boleto;
+      - `auto_return` volta para a `back_url` (e se ela precisa ser HTTPS com domínio público).
+    - a consulta `GET /v1/payments/:id`: `external_reference`, `transaction_amount` e as situações (`approved`, `in_process`, `refunded`, `charged_back`).
+    - o reembolso integral `POST /v1/payments/:id/refunds` com `X-Idempotency-Key`: repetir não pode devolver duas vezes.
+    - se o Pix pago depois do `date_of_expiration` é recusado pelo gateway ou aprovado mesmo assim (o TaNaRegua trata os dois casos).
 - **Salários e folha**, relatórios avançados.
 
 ### Fase 4 · Assistente de IA

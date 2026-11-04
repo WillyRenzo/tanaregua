@@ -1,5 +1,5 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import { conflict, notFound, unprocessable } from '../../common/http/domain-error.js';
+import { conflict, DomainError, notFound, unprocessable } from '../../common/http/domain-error.js';
 import { TenantDb } from '../../common/tenancy/tenant-db.service.js';
 import { PrismaService, setDbContext, type Tx } from '../../prisma/prisma.service.js';
 import type { AvailabilityQuery } from '../appointments/appointments.schemas.js';
@@ -11,6 +11,7 @@ import { DEFAULT_ROLES } from '../auth/permissions.js';
 import { BarbershopsService, type BarbershopSettings } from '../barbershops/barbershops.module.js';
 import { CatalogService } from '../catalog/catalog.service.js';
 import { ClientsService } from '../clients/clients.service.js';
+import { BookingPaymentsService } from '../online-payments/booking-payments.service.js';
 import { PackagesService } from '../packages/packages.service.js';
 import type { MyPackageView } from '../packages/packages.responses.js';
 import { StaffService } from '../staff/staff.service.js';
@@ -33,10 +34,12 @@ export class PublicBookingService {
     @Inject(AppointmentsService) private readonly appointments: AppointmentsService,
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(PackagesService) private readonly packages: PackagesService,
+    @Inject(BookingPaymentsService) private readonly payments: BookingPaymentsService,
   ) {}
 
   async info(slug: string) {
     const shop = await this.barbershops.findBySlug(slug);
+    const onlinePayment = await this.db.runAs(shop.id, (tx) => this.payments.offer(tx, shop.id));
     return {
       name: shop.name,
       slug: shop.slug,
@@ -44,6 +47,7 @@ export class PublicBookingService {
       cancellationMinNoticeMinutes: shop.cancellationMinNoticeMinutes,
       rescheduleMinNoticeMinutes: shop.rescheduleMinNoticeMinutes,
       brand: shop.brand,
+      onlinePayment,
     };
   }
 
@@ -143,20 +147,56 @@ export class PublicBookingService {
     });
   }
 
+  /**
+   * Reserva. Com pagamento online (§5): no modo exigido o horário fica segurado até o pagamento
+   * e a confirmação por e-mail espera por ele; no opcional, só cobra se o cliente escolheu pagar
+   * agora. O checkout do gateway abre depois da transação; se falhar, a reserva continua e o
+   * cliente tenta pagar de novo em "Meus agendamentos".
+   */
   async book(slug: string, input: PublicBookingInput): Promise<ClientAppointmentView> {
     const shop = await this.assertTokenMatches(slug);
-    return this.db.run(async (tx, auth) => {
+    const { appointment, charged } = await this.db.run(async (tx, auth) => {
       const clientId = await this.clients.findIdForUser(tx, shop.id, auth.userId);
       const professionalId = input.professionalId ?? (await this.pickFreeProfessional(tx, shop, input));
-      return this.appointments.book(tx, shop.id, {
+      const offer = await this.payments.offer(tx, shop.id);
+      const required = offer?.mode === 'REQUIRED';
+      const booked = await this.appointments.book(tx, shop.id, {
         professionalId,
         clientId,
         serviceIds: input.serviceIds,
         startsAt: input.startsAt,
         source: 'ONLINE',
         createdByUserId: auth.userId,
+        deferConfirmation: required,
       });
+      const charged =
+        offer && (required || input.payOnline)
+          ? (await this.payments.open(tx, shop.id, booked, offer, { hold: required })) !== null
+          : false;
+      // Sinal de serviço sem preço: nada a cobrar, a reserva vale e o e-mail sai normalmente.
+      if (required && !charged) await this.appointments.confirmBooking(tx, shop.id, booked.id);
+      return { appointment: booked, charged };
     });
+    if (!charged) return appointment;
+    try {
+      await this.payments.checkout(shop.id, appointment.id);
+    } catch (error) {
+      if (!(error instanceof DomainError)) throw error;
+    }
+    return this.db.run((tx) => this.appointments.getInTx(tx, shop.id, appointment.id));
+  }
+
+  /** "Pagar agora": abre (ou reaproveita) o checkout de uma reserva do cliente (§5). */
+  async pay(slug: string, appointmentId: string): Promise<ClientAppointmentView> {
+    const shop = await this.assertTokenMatches(slug);
+    await this.db.run(async (tx, auth) => {
+      const clientId = await this.clients.findIdForUser(tx, shop.id, auth.userId);
+      const appointment = await this.appointments.getInTx(tx, shop.id, appointmentId);
+      if (appointment.client.id !== clientId) throw notFound('Agendamento');
+      await this.payments.prepareToPay(tx, shop.id, appointment);
+    });
+    await this.payments.checkout(shop.id, appointmentId);
+    return this.db.run((tx) => this.appointments.getInTx(tx, shop.id, appointmentId));
   }
 
   /** Política de cancelamento (business-rules §2): até N minutos antes, configurável. */

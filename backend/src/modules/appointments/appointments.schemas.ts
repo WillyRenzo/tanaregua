@@ -41,6 +41,11 @@ export type UpdateAppointmentInput = z.infer<typeof updateAppointmentSchema>;
 /** COMPLETED não entra aqui: só o fechamento da comanda conclui um atendimento. */
 export const changeStatusSchema = z.strictObject({
   status: z.enum(['CONFIRMED', 'IN_SERVICE', 'CANCELLED', 'NO_SHOW']),
+  /**
+   * Cancelamento de reserva paga online (§5): imprevisto da barbearia (reembolsa) ou a pedido do
+   * cliente (reembolsa só dentro do prazo de cancelamento dele). Obrigatório só nesse caso.
+   */
+  cancellation: z.enum(['BARBERSHOP', 'CLIENT_REQUEST']).optional(),
   /** Motivo do cancelamento ou, em NO_SHOW, justificativa da falta (opcional, só a equipe vê). */
   reason: z.string().trim().max(200).optional(),
 });

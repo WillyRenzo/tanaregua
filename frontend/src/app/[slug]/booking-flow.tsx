@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { ArrowLeft, Check, CheckCircle2 } from 'lucide-react';
+import { depositLabel, onlineChargeCents } from '@/components/payment-status';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { ApiError, errorMessage } from '@/lib/api/errors';
@@ -17,6 +18,7 @@ import { useClientSession } from './use-client-session';
 
 type Service = Schemas['Service'];
 type Professional = Schemas['PublicProfessional'];
+type OnlinePayment = Schemas['PublicBarbershop']['onlinePayment'];
 type Step = 'services' | 'professional' | 'time' | 'identify' | 'confirm' | 'done';
 
 const ANY = 'any';
@@ -32,11 +34,14 @@ export function BookingFlow({
   timezone,
   services,
   professionals,
+  onlinePayment,
 }: {
   slug: string;
   timezone: string;
   services: Service[];
   professionals: Professional[];
+  /** Como a reserva é paga online (§5); `null` = só no balcão. */
+  onlinePayment: OnlinePayment;
 }) {
   const { isClientHere } = useClientSession(slug);
   const [step, setStep] = useState<Step>('services');
@@ -47,11 +52,20 @@ export function BookingFlow({
   const [bookingKey, setBookingKey] = useState(() => idempotencyKey());
   const [notice, setNotice] = useState<string | null>(null);
   const [booked, setBooked] = useState<Schemas['ClientAppointment'] | null>(null);
+  // Modo opcional: o cliente escolhe; o padrão é pagar na barbearia, como sempre foi.
+  const [payNow, setPayNow] = useState(false);
   const book = useBook(slug);
 
   const chosen = services.filter((service) => serviceIds.includes(service.id));
   const totalCents = chosen.reduce((sum, service) => sum + service.priceCents, 0);
   const totalMinutes = chosen.reduce((sum, service) => sum + service.durationMinutes, 0);
+  const chargeCents = onlinePayment ? onlineChargeCents(totalCents, onlinePayment) : 0;
+  const paysOnline =
+    onlinePayment !== null && chargeCents > 0 && (onlinePayment.mode === 'REQUIRED' || payNow);
+  const chargeLabel =
+    onlinePayment?.amount === 'DEPOSIT' && onlinePayment.depositBps !== null
+      ? `${formatMoney(chargeCents)} (${depositLabel(onlinePayment.depositBps)})`
+      : formatMoney(chargeCents);
   const professionalName =
     professionalId === ANY
       ? 'Qualquer profissional'
@@ -71,7 +85,14 @@ export function BookingFlow({
         serviceIds,
         startsAt: startsAt!,
         professionalId: professionalId === ANY ? undefined : professionalId,
+        ...(onlinePayment ? { payOnline: paysOnline } : {}),
       });
+      // Pagamento online: segue para o checkout do serviço de pagamento, que devolve o cliente
+      // para "Meus agendamentos". Sem o link (o serviço não respondeu), mostra como pagar depois.
+      if (appointment.payment?.checkoutUrl) {
+        window.location.assign(appointment.payment.checkoutUrl);
+        return;
+      }
       setBooked(appointment);
       setStep('done');
     } catch (error) {
@@ -100,7 +121,18 @@ export function BookingFlow({
           )}{' '}
           às <strong>{formatTime(booked.startsAt, timezone)}</strong> com {booked.professional.name}.
         </p>
-        <p className="text-muted-foreground">Enviamos a confirmação para o seu e-mail.</p>
+        {booked.payment?.status === 'PENDING' ? (
+          <Alert>
+            <AlertDescription>
+              Não conseguimos abrir o pagamento agora.{' '}
+              {booked.payment.holdUntil
+                ? `Pague em "Meus agendamentos" até ${formatTime(booked.payment.holdUntil, timezone)} para garantir o horário.`
+                : 'Você pode pagar depois em "Meus agendamentos" ou na barbearia.'}
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <p className="text-muted-foreground">Enviamos a confirmação para o seu e-mail.</p>
+        )}
         <Button asChild>
           <Link href={`/${slug}/meus-agendamentos`}>Ver meus agendamentos</Link>
         </Button>
@@ -203,8 +235,16 @@ export function BookingFlow({
             <p className="text-lg">
               {formatDateLong(date, timezone)} às <strong>{formatTime(startsAt!, timezone)}</strong>
             </p>
+            {onlinePayment && chargeCents > 0 && (
+              <PaymentChoice
+                mode={onlinePayment.mode}
+                chargeLabel={chargeLabel}
+                payNow={payNow}
+                onChange={setPayNow}
+              />
+            )}
             <Button size="lg" onClick={confirm} disabled={book.isPending} className="w-full sm:w-fit">
-              {book.isPending ? 'Reservando…' : 'Confirmar agendamento'}
+              {book.isPending ? 'Reservando…' : paysOnline ? 'Reservar e pagar' : 'Confirmar agendamento'}
             </Button>
           </section>
         )}
@@ -241,9 +281,73 @@ export function BookingFlow({
             </div>
           </dl>
         )}
-        <p className="text-muted-foreground mt-3 text-xs">Pagamento na barbearia.</p>
+        <p className="text-muted-foreground mt-3 text-xs">
+          {!onlinePayment
+            ? 'Pagamento na barbearia.'
+            : onlinePayment.mode === 'REQUIRED'
+              ? onlinePayment.amount === 'DEPOSIT'
+                ? 'Para reservar, o sinal é pago online (Pix ou cartão); o restante, na barbearia.'
+                : 'Para reservar, o pagamento é online (Pix ou cartão).'
+              : 'Pague online agora (Pix ou cartão) ou na barbearia.'}
+        </p>
       </aside>
     </div>
+  );
+}
+
+/** Opcional: o cliente escolhe pagar agora ou no balcão. Exigido: avisa o valor e o prazo (§5). */
+function PaymentChoice({
+  mode,
+  chargeLabel,
+  payNow,
+  onChange,
+}: {
+  mode: 'OPTIONAL' | 'REQUIRED';
+  chargeLabel: string;
+  payNow: boolean;
+  onChange: (payNow: boolean) => void;
+}) {
+  if (mode === 'REQUIRED') {
+    return (
+      <p className="bg-accent rounded-lg p-3 text-sm">
+        Para garantir o horário, pague <strong>{chargeLabel}</strong> online (Pix ou cartão) em até 15
+        minutos. Sem o pagamento, a reserva é cancelada.
+      </p>
+    );
+  }
+  const options = [
+    { value: false, label: 'Pagar na barbearia', hint: 'No dia do atendimento.' },
+    {
+      value: true,
+      label: `Pagar agora: ${chargeLabel}`,
+      hint: 'Pix ou cartão, no site do serviço de pagamento.',
+    },
+  ];
+  return (
+    <fieldset className="grid gap-2">
+      <legend className="mb-2 font-medium">Como você quer pagar?</legend>
+      {options.map((option) => (
+        <label
+          key={String(option.value)}
+          className={cn(
+            'border-border has-focus-visible:ring-ring flex cursor-pointer items-start gap-3 rounded-lg border p-3 has-focus-visible:ring-2',
+            payNow === option.value && 'border-primary bg-accent',
+          )}
+        >
+          <input
+            type="radio"
+            name="payment"
+            className="accent-primary mt-1"
+            checked={payNow === option.value}
+            onChange={() => onChange(option.value)}
+          />
+          <span>
+            <span className="block font-medium">{option.label}</span>
+            <span className="text-muted-foreground text-sm">{option.hint}</span>
+          </span>
+        </label>
+      ))}
+    </fieldset>
   );
 }
 

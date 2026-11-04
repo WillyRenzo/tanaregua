@@ -1,11 +1,35 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Inject, Module, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Module,
+  type OnModuleInit,
+  Param,
+  Post,
+  Put,
+  Redirect,
+  Req,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { RequirePermissions } from '../../common/auth/decorators.js';
+import { ApiExcludeEndpoint, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import type { Request } from 'express';
+import { z } from 'zod';
+import { Public, RequirePermissions } from '../../common/auth/decorators.js';
 import { RequiresFeature } from '../../common/auth/requires-feature.js';
 import { AppSecretBox, SecretBox } from '../../common/crypto/secret-box.js';
 import { API_TAGS, ApiProblem, ApiResult } from '../../common/http/openapi.js';
 import type { Env } from '../../config/env.js';
+import { AppointmentPayments } from '../appointments/appointment-payments.js';
+import { AppointmentsModule } from '../appointments/appointments.module.js';
+import { BarbershopsModule } from '../barbershops/barbershops.module.js';
+import { OutboxHandlers } from '../notifications/outbox.service.js';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module.js';
+import { BookingPaymentsService } from './booking-payments.service.js';
 import {
   DisabledMerchantGateway,
   FakeMerchantGateway,
@@ -21,11 +45,20 @@ import {
 } from './online-payments.schemas.js';
 import { OnlinePaymentsService } from './online-payments.service.js';
 
+/** O gateway reenvia notificações e pode mandar várias juntas; a assinatura HMAC barra o resto. */
+const WEBHOOK_THROTTLE = { default: { limit: 300, ttl: 60_000 } };
+const FAKE_CHECKOUT_THROTTLE = { default: { limit: 20, ttl: 60_000 } };
+
+const webhookAckSchema = z.object({ received: z.boolean() }).meta({ id: 'BookingPaymentWebhookAck' });
+
 /** Configuração da barbearia: quem configura a barbearia (`barbershop:manage`), e só nos planos com o recurso. */
 @ApiTags(API_TAGS.onlinePayments[0])
 @Controller('online-payments')
 export class OnlinePaymentsController {
-  constructor(@Inject(OnlinePaymentsService) private readonly payments: OnlinePaymentsService) {}
+  constructor(
+    @Inject(OnlinePaymentsService) private readonly payments: OnlinePaymentsService,
+    @Inject(BookingPaymentsService) private readonly bookingPayments: BookingPaymentsService,
+  ) {}
 
   @RequirePermissions('barbershop:manage')
   @RequiresFeature('online-payment')
@@ -78,12 +111,46 @@ export class OnlinePaymentsController {
   ): Promise<OnlinePaymentView> {
     return this.payments.updateSettings(input);
   }
+
+  @Public()
+  @Throttle(WEBHOOK_THROTTLE)
+  @HttpCode(HttpStatus.OK)
+  @ApiResult(webhookAckSchema)
+  @ApiOperation({
+    summary: 'Notificação do gateway sobre um pagamento de reserva, na URL da conta da barbearia',
+    description:
+      'Chamada pelo gateway. A chave na URL diz de qual conta é, e a assinatura HMAC é conferida com o segredo dela (401 se inválida). Só põe a consulta ao gateway na fila; notificação repetida é ignorada.',
+  })
+  @Post('webhook/:webhookKey')
+  async webhook(
+    @Param('webhookKey') webhookKey: string,
+    @Req() request: Request,
+  ): Promise<{ received: boolean }> {
+    await this.bookingPayments.receiveNotification(webhookKey, {
+      headers: request.headers,
+      query: request.query as Record<string, unknown>,
+      body: request.body as unknown,
+    });
+    return { received: true };
+  }
+
+  /** Só com PAYMENT_PROVIDER=fake (desenvolvimento e testes); fora dele, 404. */
+  @Public()
+  @Throttle(FAKE_CHECKOUT_THROTTLE)
+  @ApiExcludeEndpoint()
+  @Redirect()
+  @Get('fake-checkout/:id')
+  async fakeCheckout(@Param('id') id: string): Promise<{ url: string; statusCode: number }> {
+    return { url: await this.bookingPayments.approveFakeCheckout(id), statusCode: HttpStatus.SEE_OTHER };
+  }
 }
 
 @Module({
+  imports: [AppointmentsModule, BarbershopsModule, SubscriptionsModule],
   controllers: [OnlinePaymentsController],
   providers: [
     OnlinePaymentsService,
+    BookingPaymentsService,
     { provide: SecretBox, useClass: AppSecretBox },
     DisabledMerchantGateway,
     FakeMerchantGateway,
@@ -100,6 +167,30 @@ export class OnlinePaymentsController {
       ) => ({ none: disabled, fake, mercadopago })[config.get('PAYMENT_PROVIDER') as Env['PAYMENT_PROVIDER']],
     },
   ],
-  exports: [OnlinePaymentsService],
+  exports: [OnlinePaymentsService, BookingPaymentsService],
 })
-export class OnlinePaymentsModule {}
+export class OnlinePaymentsModule implements OnModuleInit {
+  constructor(
+    @Inject(BookingPaymentsService) private readonly bookingPayments: BookingPaymentsService,
+    @Inject(AppointmentPayments) private readonly appointmentPayments: AppointmentPayments,
+    @Inject(OutboxHandlers) private readonly handlers: OutboxHandlers,
+  ) {}
+
+  onModuleInit(): void {
+    const payments = this.bookingPayments;
+    this.appointmentPayments.register({
+      summaries: (tx, barbershopId, ids) => payments.summaries(tx, barbershopId, ids),
+      onCancel: (tx, barbershopId, appointment, context) =>
+        payments.onCancel(tx, barbershopId, appointment, context),
+    });
+    this.handlers.register('BookingPaymentChanged', {
+      handle: (event) => payments.applyGatewayPayment(event),
+    });
+    this.handlers.register('BookingPaymentRefund', {
+      handle: (event) => payments.refund(event),
+      onDeadLetter: (event) => payments.refundFailed(event),
+    });
+    this.handlers.register('BookingPaymentExtraRefund', { handle: (event) => payments.refundExtra(event) });
+    this.handlers.register('BookingPaymentHoldExpired', { handle: (event) => payments.expireHold(event) });
+  }
+}
