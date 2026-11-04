@@ -1,8 +1,37 @@
 # Plano de Ação — MVP TaNaRegua
 
+## Situação em 04/11/2026
+
+Legenda: ✅ feito · 🟡 em andamento ou parcial · ⬜ falta
+
+| Bloco | Situação | O que falta |
+|---|---|---|
+| MVP: backend (B0–B6) e frontend (F0–F7) | ✅ | — |
+| B7 · Endurecimento e deploy | 🟡 | subir na VPS real; domínio próprio da barbearia; `MAIL_PROVIDER=resend` com domínio verificado; ensaio de restauração na VPS |
+| Fase 2 · Operação e personalização | ✅ | só o domínio próprio, que entra com o deploy |
+| Fase 3 · Assinatura e planos (entregas 1 a 4) | ✅ | teste no sandbox do Mercado Pago; troca de ciclo (mensal ↔ anual) |
+| Fase 3 · Pagamento online da reserva | 🟡 | entregas 1 e 2 feitas (a 2 aguarda o merge); entrega 3 (comanda e caixa); teste no sandbox |
+| Fase 3 · Salários e folha | ⬜ | tudo (ainda sem regras definidas) |
+| Fase 3 · Relatórios avançados | ⬜ | tudo (ainda sem regras definidas) |
+| Fase 4 · Assistente de IA | ⬜ | tudo |
+
+**Decisões ainda em aberto** (`business-rules.md`):
+
+- **[PENDENTE]**
+  - se o mesmo cliente pode ter dois atendimentos simultâneos com profissionais diferentes (§2);
+  - valores e nomes definitivos dos planos, limites por plano, troca de ciclo e nota fiscal da assinatura (§12);
+  - limite de uso do assistente de IA (§11).
+- **[PROPOSTA] a confirmar**
+  - aniversário às 9h;
+  - máximo de 2.000 destinatários por campanha;
+  - quem faz campanhas (§9);
+  - os três planos (§12);
+  - senha de 12 caracteres e sessão de 12 h na administração.
+- **Antes de ligar o Mercado Pago:** os checklists de sandbox da assinatura e do pagamento online (Fase 3, abaixo).
+
 ## Contexto
 
-- O repositório tem só a configuração de IA (CLAUDE.md, `agent_docs/`, `.claude/`, `skills/`). Ainda não há nenhuma linha de código nem commit.
+- No início do plano (27/10/2026), o repositório tinha só a configuração de IA (CLAUDE.md, `agent_docs/`, `.claude/`, `skills/`). O MVP descrito abaixo já está implementado; a situação atual está no quadro acima.
 - Objetivo: um MVP que já resolva o dia a dia de uma barbearia (agenda, atendimento, comissão, caixa) e que possa ser vendido barato. Os módulos restantes entram em fases seguintes.
 - Decisões confirmadas:
   - **Escopo enxuto.** MVP = auth/permissões, funcionários, clientes, serviços, agenda integrada, agendamento online, comanda + comissões, caixa simples e relatórios básicos.
@@ -33,7 +62,7 @@
 
 ## Plano 1 — Backend (NestJS 12 + Prisma 7 + PostgreSQL)
 
-### B0 · Fundação
+### B0 · Fundação ✅
 
 - Scaffold NestJS 12 em `backend/`:
   - ESM, `strict: true`, Vitest, oxlint.
@@ -55,7 +84,7 @@
   - Header `Idempotency-Key` nas rotas `POST` sensíveis (criar agendamento, fechar comanda).
 - CI no GitHub Actions: `npm ci` → lint → typecheck → test (coverage gate) → e2e com Testcontainers → build. Actions fixadas por SHA.
 
-### B1 · Identidade, tenancy e permissões
+### B1 · Identidade, tenancy e permissões ✅
 
 - Models Prisma:
   - `Barbershop` (slug, timezone, políticas).
@@ -77,7 +106,7 @@
 - Seed de papéis padrão: owner, professional, receptionist, client. Cada papel é só um conjunto de permissões.
 - Helper de teste e2e `expectTenantIsolation(resource)`, reutilizado por todos os módulos seguintes.
 
-### B2 · Cadastros base
+### B2 · Cadastros base ✅
 
 - `staff`:
   - Profissionais e recepcionistas.
@@ -92,7 +121,7 @@
   - `Service` (preço em centavos, duração em minutos, ativo).
   - `CommissionRule` (escopo funcionário+serviço / serviço / funcionário; tipo `PERCENT` em basis points ou `FIXED` em centavos).
 
-### B3 · Agenda (regra mais crítica)
+### B3 · Agenda (regra mais crítica) ✅
 
 - Agregado `Appointment`:
   - `professionalId`, `clientId`, itens de serviço, `startsAt`/`endsAt` (timestamptz).
@@ -109,7 +138,7 @@
   - Criar, reagendar, mudar status.
 - Teste e2e de concorrência: duas requisições simultâneas no mesmo horário resultam em exatamente um `201` e um `409`.
 
-### B4 · Agendamento público
+### B4 · Agendamento público ✅
 
 - Rotas `@Public()` em `/v1/public/:slug/...`, com throttling agressivo:
   - Dados da barbearia.
@@ -128,7 +157,7 @@
   - Um worker (`@nestjs/schedule`) despacha os eventos pelo `NotificationSender` (adapter de e-mail, ex.: Resend/SES).
   - Timeout + retry com backoff; consumidor idempotente.
 
-### B5 · Comanda e financeiro
+### B5 · Comanda e financeiro ✅
 
 - Agregado `Order` (comanda):
   - Abre a partir de um agendamento ou de um atendimento avulso.
@@ -141,14 +170,14 @@
 - Comanda fechada é imutável. Correção só por `voidOrder`, que gera lançamentos de estorno.
 - Caixa do dia: listagem de lançamentos e totais por forma de pagamento.
 
-### B6 · Relatórios básicos
+### B6 · Relatórios básicos ✅
 
 - Faturamento por período e por profissional.
 - Comissões a pagar por profissional (o profissional vê só as próprias: permissão `commissions:read:own`).
 - Serviços mais vendidos e taxa de no-show.
 - Agregações SQL sobre comandas fechadas, sempre sob RLS e com índices `(barbershop_id, closed_at)`.
 
-### B7 · Endurecimento antes do lançamento
+### B7 · Endurecimento antes do lançamento 🟡 (em andamento: ver "B7 · Endurecimento e deploy" no roadmap)
 
 - Rodar as skills `security-audit` e `code-review` do projeto.
 - Revisar o checklist IDOR de cada endpoint.
@@ -159,7 +188,7 @@
 
 ## Plano 2 — Frontend (Next.js 16 + Tailwind + shadcn/ui)
 
-### F0 · Fundação
+### F0 · Fundação ✅
 
 - Scaffold Next.js 16 em `frontend/`:
   - App Router, `strict`, ESLint (`eslint .`), Vitest + Testing Library, Playwright.
@@ -173,21 +202,21 @@
 - TanStack Query no painel; formulários com React Hook Form + Zod.
 - `error.tsx`, `loading.tsx` e `not-found.tsx` por segmento.
 
-### F1 · Auth e casca do painel
+### F1 · Auth e casca do painel ✅
 
 - Route groups: `(auth)/login`, `(auth)/cadastro` (onboarding: dono + barbearia), `(painel)/...`.
 - Access token só em memória. O interceptor faz refresh silencioso quando recebe 401.
 - `proxy.ts` só redireciona quem não está logado (não é autorização).
 - Layout do painel com navegação filtrada por permissões. O helper `can()` serve só à UX; a API revalida tudo.
 
-### F2 · Cadastros
+### F2 · Cadastros ✅
 
 - Funcionários, com editor visual de expediente semanal e folgas.
 - Clientes: busca, ficha, consentimento, pedido de anonimização.
 - Serviços e regras de comissão: preço exibido em reais e enviado em centavos; percentual exibido em % e enviado em basis points.
 - Tabelas com busca, paginação por cursor e estados de vazio, loading e erro.
 
-### F3 · Agenda integrada (tela principal)
+### F3 · Agenda integrada (tela principal) ✅
 
 - Visão do dia em **grade própria** (CSS grid): colunas = profissionais, linhas = horários de 15 min.
   - Cada bloco mostra cliente, serviço e status por cor + ícone (nunca só cor).
@@ -200,7 +229,7 @@
 - Atualização por refetch periódico + `invalidateQueries` após cada mutação.
 - Grade navegável por teclado e responsiva (no celular vira lista por profissional).
 
-### F4 · Página pública de agendamento
+### F4 · Página pública de agendamento ✅
 
 - Rota `(publico)/[slug]`: barbearia, serviços e profissionais renderizados em Server Component (SSR/SEO).
 - Fluxo mobile-first em etapas:
@@ -212,20 +241,20 @@
 - Área "Meus agendamentos" com cancelamento dentro da política.
 - O botão de reserva envia uma `Idempotency-Key` gerada no cliente, para evitar reserva dupla com duplo clique.
 
-### F5 · Comanda e caixa
+### F5 · Comanda e caixa ✅
 
 - Comanda aberta a partir da agenda: adicionar e remover itens, ver o total e a comissão prevista.
 - Fechar com a forma de pagamento → tela de resumo.
 - Estorno (só para quem tem permissão).
 - Caixa do dia: lançamentos e totais por forma de pagamento.
 
-### F6 · Relatórios e início por papel
+### F6 · Relatórios e início por papel ✅
 
 - **Dono:** faturamento, ranking de profissionais, serviços, no-show, com filtro de período. Os gráficos seguem a skill `dataviz`.
 - **Profissional:** a própria agenda de hoje e as próprias comissões.
 - **Recepcionista:** a agenda do dia como tela inicial.
 
-### F7 · Qualidade
+### F7 · Qualidade ✅
 
 - Playwright nos fluxos críticos:
   - Onboarding.
@@ -256,15 +285,15 @@
 - Login social, OTP por WhatsApp, app mobile nativo.
 - Drag-and-drop na agenda (o MVP reagenda pelo drawer).
 
-## Decisões a confirmar durante a execução
+## Decisões a confirmar durante a execução ✅
 
-- **Política de cancelamento (necessária no B4).** Proposta: antecedência mínima configurável por barbearia, padrão de 2h, sem multa no MVP.
-- **Intervalo entre atendimentos (B3).** Proposta: `bufferMinutes` configurável por barbearia, padrão 0.
-- **Precedência das comissões.** Confirmar a PROPOSTA de business-rules §4.
-- **Direção estética (F0).** Validar com um protótipo da agenda antes das outras telas.
-- **Plataforma de deploy (B7).**
+- ✅ **Política de cancelamento (B4):** antecedência mínima configurável por barbearia, padrão de 2 h, sem multa (business-rules §2).
+- ✅ **Intervalo entre atendimentos (B3):** `bufferMinutes` configurável por barbearia, padrão 0, garantido no banco (§2).
+- ✅ **Precedência das comissões:** confirmada (§4).
+- ✅ **Direção estética (F0):** "barbearia clássica/industrial", em uso nos tokens de `globals.css`.
+- ✅ **Plataforma de deploy (B7):** VPS da Hostinger com Docker Compose, sem acoplamento ao provedor (`architecture.md`).
 
-## Atualizações de documentação propostas (pedem sua confirmação)
+## Atualizações de documentação propostas ✅ (feitas)
 
 - `architecture.md`: monólito modular e o mapa de AFAs aplicadas e adiadas.
 - `business-rules.md`:
@@ -295,7 +324,7 @@
 O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
 `business-rules.md`; desenho técnico em `architecture.md`.
 
-### B7 · Endurecimento e deploy (em andamento)
+### B7 · Endurecimento e deploy 🟡 (em andamento)
 
 - **Auditoria e IDOR** (feito em 28/10/2026). Escopo `:own` conferido na agenda e nas comissões; nenhum vazamento entre tenants. Três correções:
   - o login do painel caía no vínculo de cliente;
@@ -309,22 +338,26 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
   - imagens no GHCR publicadas pelo CI;
   - workflow manual de deploy por SSH;
   - backup diário cifrado (age) fora da VPS.
-- **Falta:** subir na VPS real (runbook em `deploy/README.md`) e o domínio próprio da barbearia.
+- ⬜ **Falta:**
+  - subir na VPS real (runbook em `deploy/README.md`);
+  - o domínio próprio da barbearia;
+  - `MAIL_PROVIDER=resend` com domínio verificado;
+  - o ensaio de restauração na VPS real (`security.md`).
 - Nada específico do provedor no código: trocar de hospedagem = rodar as mesmas imagens em outro lugar.
 - **Domínio próprio da barbearia (opcional):** a barbearia compra e aponta o DNS; a plataforma verifica e emite HTTPS automaticamente (Caddy on-demand TLS). Fica com o deploy porque só dá para testar de ponta a ponta com o servidor no ar.
 
-### Fase 2 · Operação e personalização
+### Fase 2 · Operação e personalização ✅
 
-- **Reagendamento pelo cliente** até N horas antes (configurável, padrão 24 h), pela página pública.
-- **Faltas sem justificativa:** justificativa opcional ao marcar "não compareceu"; contagem visível para a equipe no cliente e no agendamento.
-- **Identidade visual por barbearia:** logo (porta `ObjectStorage`) e cores principal e secundária com contraste AA garantido, aplicados na página pública e no painel.
-- **Estoque e produtos:** venda na comanda, movimentações com autor e motivo, quantidade nunca negativa (garantida no banco), valor total do estoque pode ficar negativo.
-- **Pacotes de serviços** (feito): sessões por serviço vendidas na comanda, validade em dias a partir da compra, intransferível, comissão por sessão usada (desligável por pacote), saldo garantido no banco, reembolso dentro da validade com valor definido pela barbearia, saldo visível ao cliente na página pública.
-- **Aniversários e campanhas** (feito): consentimento por canal (e-mail e WhatsApp), WhatsApp pela Cloud API da Meta com conexão manual da conta da barbearia (token cifrado) e só modelos aprovados, mensagem automática de aniversário uma vez por ano, campanhas com filtro simples, prévia e confirmação do número de destinatários, tudo pelo outbox.
+- ✅ **Reagendamento pelo cliente** até N horas antes (configurável, padrão 24 h), pela página pública.
+- ✅ **Faltas sem justificativa:** justificativa opcional ao marcar "não compareceu"; contagem visível para a equipe no cliente e no agendamento.
+- ✅ **Identidade visual por barbearia:** logo (porta `ObjectStorage`) e cores principal e secundária com contraste AA garantido, aplicados na página pública e no painel. O domínio próprio fica com o deploy (B7).
+- ✅ **Estoque e produtos:** venda na comanda, movimentações com autor e motivo, quantidade nunca negativa (garantida no banco), valor total do estoque pode ficar negativo.
+- ✅ **Pacotes de serviços** (feito): sessões por serviço vendidas na comanda, validade em dias a partir da compra, intransferível, comissão por sessão usada (desligável por pacote), saldo garantido no banco, reembolso dentro da validade com valor definido pela barbearia, saldo visível ao cliente na página pública.
+- ✅ **Aniversários e campanhas** (feito): consentimento por canal (e-mail e WhatsApp), WhatsApp pela Cloud API da Meta com conexão manual da conta da barbearia (token cifrado) e só modelos aprovados, mensagem automática de aniversário uma vez por ano, campanhas com filtro simples, prévia e confirmação do número de destinatários, tudo pelo outbox.
 
-### Fase 3 · Dinheiro
+### Fase 3 · Dinheiro 🟡
 
-- **Assinatura e planos (vem primeiro na fase 3):** o uso do TaNaRegua passa a exigir assinatura por barbearia, com vários planos. O básico cobre as fases 1 e 2; o mais caro inclui o assistente de IA (fase 4); proposta de um intermediário com a fase 3. Entregas, em ordem:
+- ✅ **Assinatura e planos (vem primeiro na fase 3):** o uso do TaNaRegua passa a exigir assinatura por barbearia, com vários planos. O básico cobre as fases 1 e 2; o mais caro inclui o assistente de IA (fase 4); proposta de um intermediário com a fase 3. Entregas, em ordem:
   1. catálogo de recursos, planos e assinatura por barbearia, com verificação na API (`@RequiresFeature`) e no painel (recurso fora do plano aparece como upgrade) (feito em 28/10/2026: o painel mostra o plano em Configurações, e o `<FeatureGate>` está pronto para os recursos da fase 3);
   2. administração da plataforma (`/admin`, login e token próprios) com os preços mensal e anual de cada plano (feito em 28/10/2026; a conta é criada por comando no servidor);
   3. cobrança recorrente pela porta `PaymentGateway` (Mercado Pago), com webhook verificado e idempotente (feito em 29/10/2026, com o gateway simulado; desenho em `architecture.md`):
@@ -350,12 +383,12 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
        - se o `PUT` do `transaction_amount` na troca de plano vale já na cobrança seguinte.
      - Fica para depois: troca de ciclo (mensal ↔ anual) com assinatura paga.
   - A verificação de recursos precisa estar pronta **antes** de liberar qualquer recurso da fase 3 ou 4, senão o plano básico já nasceria com eles.
-- **Pagamento online** da reserva, com o dinheiro na conta da própria barbearia (porta `MerchantGateway`, Mercado Pago como adapter inicial), webhook verificado e idempotente. Regras no `business-rules.md` §5 (decisões de 30/10/2026). Entregas, em ordem:
-  1. conexão da conta da barbearia no gateway (credenciais conferidas e cifradas) e configuração: desligado, opcional ou exigido; total ou sinal (feito em 30/10/2026, recurso `online-payment`);
-  2. pagamento na reserva da página pública (feito em 04/11/2026, decisões no `business-rules.md` §5): Checkout Pro com Pix e cartão, horário segurado por 15 minutos no modo exigido (queda pelo outbox), "pagar agora" depois no modo opcional, webhook por conta (`/v1/online-payments/webhook/:webhookKey`, assinatura com o segredo da barbearia), reembolso automático nos cancelamentos previstos e motivo do cancelamento pedido no painel;
-  3. comanda e caixa: o pré-pagamento abate na comanda e entra no caixa ao fechar; valor retido de falta no caixa do dia em que for marcada, sem comissão; reembolso manual pelo painel.
-  - Depois: pacote comprado online e reembolso de pacote pago online.
-  - **Antes de ligar o Mercado Pago**, testar no sandbox:
+- 🟡 **Pagamento online** da reserva, com o dinheiro na conta da própria barbearia (porta `MerchantGateway`, Mercado Pago como adapter inicial), webhook verificado e idempotente. Regras no `business-rules.md` §5 (decisões de 30/10/2026). Entregas, em ordem:
+  1. ✅ conexão da conta da barbearia no gateway (credenciais conferidas e cifradas) e configuração: desligado, opcional ou exigido; total ou sinal (feito em 30/10/2026, recurso `online-payment`);
+  2. ✅ pagamento na reserva da página pública (feito em 04/11/2026, aguardando o merge; decisões no `business-rules.md` §5): Checkout Pro com Pix e cartão, horário segurado por 15 minutos no modo exigido (queda pelo outbox), "pagar agora" depois no modo opcional, webhook por conta (`/v1/online-payments/webhook/:webhookKey`, assinatura com o segredo da barbearia), reembolso automático nos cancelamentos previstos e motivo do cancelamento pedido no painel;
+  3. ⬜ comanda e caixa: o pré-pagamento abate na comanda e entra no caixa ao fechar; valor retido de falta no caixa do dia em que for marcada, sem comissão; reembolso manual pelo painel.
+  - ⬜ Depois: pacote comprado online e reembolso de pacote pago online.
+  - ⬜ **Antes de ligar o Mercado Pago**, testar no sandbox:
     - `GET /users/me` com o access token de produção da barbearia (id e apelido);
     - se a notificação de um pagamento criado com `notification_url` vem assinada (`x-signature`) com a assinatura secreta da aplicação da barbearia.
     - os campos da preferência do Checkout Pro (`POST /checkout/preferences`), escritos a partir da documentação pública, sem o SDK:
@@ -366,9 +399,10 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
     - a consulta `GET /v1/payments/:id`: `external_reference`, `transaction_amount` e as situações (`approved`, `in_process`, `refunded`, `charged_back`).
     - o reembolso integral `POST /v1/payments/:id/refunds` com `X-Idempotency-Key`: repetir não pode devolver duas vezes.
     - se o Pix pago depois do `date_of_expiration` é recusado pelo gateway ou aprovado mesmo assim (o TaNaRegua trata os dois casos).
-- **Salários e folha**, relatórios avançados.
+- ⬜ **Salários e folha**: ainda sem regras definidas (business-rules §4 só diz que salários são confidenciais).
+- ⬜ **Relatórios avançados**: ainda sem escopo definido.
 
-### Fase 4 · Assistente de IA
+### Fase 4 · Assistente de IA ⬜
 
 - Chat no painel para o dono pedir tarefas em linguagem natural (ex.: importar produtos de uma planilha Excel).
 - Ferramentas = casos de uso existentes, com as permissões do usuário; toda escrita mostra prévia e só executa após confirmação; auditoria de cada ação.
