@@ -580,27 +580,31 @@ enum PaymentMethod {
   CARD_CREDIT
   CARD_DEBIT
   OTHER
+  /// Pago online na reserva (§5): só o sistema lança, nunca é escolhido no balcão.
+  ONLINE
 }
 
 /// Comanda: fonte da verdade do financeiro. Fechada é imutável (trigger na migration);
 /// correção só por estorno (VOIDED + lançamentos inversos).
 model Order {
-  id             String         @id @default(uuid(7)) @db.Uuid
-  barbershopId   String         @map("barbershop_id") @db.Uuid
-  clientId       String?        @map("client_id") @db.Uuid
+  id              String         @id @default(uuid(7)) @db.Uuid
+  barbershopId    String         @map("barbershop_id") @db.Uuid
+  clientId        String?        @map("client_id") @db.Uuid
   /// Uma comanda por agendamento.
-  appointmentId  String?        @map("appointment_id") @db.Uuid
-  status         OrderStatus    @default(OPEN)
-  paymentMethod  PaymentMethod? @map("payment_method")
+  appointmentId   String?        @map("appointment_id") @db.Uuid
+  status          OrderStatus    @default(OPEN)
+  paymentMethod   PaymentMethod? @map("payment_method")
   /// Gravado no fechamento.
-  totalCents     Int?           @map("total_cents")
-  openedByUserId String         @map("opened_by_user_id") @db.Uuid
-  closedByUserId String?        @map("closed_by_user_id") @db.Uuid
-  closedAt       DateTime?      @map("closed_at") @db.Timestamptz
-  voidedAt       DateTime?      @map("voided_at") @db.Timestamptz
-  voidReason     String?        @map("void_reason")
-  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+  totalCents      Int?           @map("total_cents")
+  /// Parte do total paga online na reserva (§5); o restante foi pago no balcão.
+  onlinePaidCents Int            @default(0) @map("online_paid_cents")
+  openedByUserId  String         @map("opened_by_user_id") @db.Uuid
+  closedByUserId  String?        @map("closed_by_user_id") @db.Uuid
+  closedAt        DateTime?      @map("closed_at") @db.Timestamptz
+  voidedAt        DateTime?      @map("voided_at") @db.Timestamptz
+  voidReason      String?        @map("void_reason")
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz
 
   client            Client?           @relation(fields: [barbershopId, clientId], references: [barbershopId, id], map: "orders_tenant_client_fkey")
   appointment       Appointment?      @relation(fields: [barbershopId, appointmentId], references: [barbershopId, id], map: "orders_tenant_appointment_fkey")
@@ -610,6 +614,7 @@ model Order {
   stockMovements    StockMovement[]
   packageMovements  PackageMovement[]
   packagesSold      ClientPackage[]
+  bookingPayments   BookingPayment[]
 
   @@unique([barbershopId, id], map: "orders_tenant_id_key")
   @@unique([barbershopId, appointmentId], map: "orders_appointment_key")
@@ -689,19 +694,24 @@ model CommissionEntry {
   @@map("commission_entries")
 }
 
-/// Lançamento de caixa. Append-only: estorno gera lançamento negativo.
+/// Lançamento de caixa. Append-only: estorno gera lançamento negativo. Vem de uma comanda,
+/// de um pagamento online de reserva (valor retido de falta, reembolso manual) ou dos dois
+/// (a parte online de uma comanda).
 model CashEntry {
-  id           String        @id @default(uuid(7)) @db.Uuid
-  barbershopId String        @map("barbershop_id") @db.Uuid
-  orderId      String        @map("order_id") @db.Uuid
-  method       PaymentMethod
-  kind         EntryKind
-  amountCents  Int           @map("amount_cents")
-  occurredAt   DateTime      @default(now()) @map("occurred_at") @db.Timestamptz
+  id               String        @id @default(uuid(7)) @db.Uuid
+  barbershopId     String        @map("barbershop_id") @db.Uuid
+  orderId          String?       @map("order_id") @db.Uuid
+  bookingPaymentId String?       @map("booking_payment_id") @db.Uuid
+  method           PaymentMethod
+  kind             EntryKind
+  amountCents      Int           @map("amount_cents")
+  occurredAt       DateTime      @default(now()) @map("occurred_at") @db.Timestamptz
 
-  order Order @relation(fields: [barbershopId, orderId], references: [barbershopId, id], map: "cash_entries_tenant_order_fkey")
+  order          Order?          @relation(fields: [barbershopId, orderId], references: [barbershopId, id], map: "cash_entries_tenant_order_fkey")
+  bookingPayment BookingPayment? @relation(fields: [barbershopId, bookingPaymentId], references: [barbershopId, id], map: "cash_entries_tenant_booking_payment_fkey")
 
   @@index([barbershopId, occurredAt])
+  @@index([barbershopId, bookingPaymentId])
   @@map("cash_entries")
 }
 
@@ -1029,29 +1039,40 @@ enum BookingPaymentStatus {
 
 /// Pagamento online de uma reserva (§5), na conta da própria barbearia. Um por agendamento.
 model BookingPayment {
-  id                String               @id @default(uuid(7)) @db.Uuid
-  barbershopId      String               @map("barbershop_id") @db.Uuid
-  appointmentId     String               @map("appointment_id") @db.Uuid
+  id                String                    @id @default(uuid(7)) @db.Uuid
+  barbershopId      String                    @map("barbershop_id") @db.Uuid
+  appointmentId     String                    @map("appointment_id") @db.Uuid
   /// Gateway em que o pagamento foi criado (coluna genérica).
   provider          String
   /// Valor cobrado online (total ou sinal), congelado ao abrir o pagamento.
-  amountCents       Int                  @map("amount_cents")
-  status            BookingPaymentStatus @default(PENDING)
+  amountCents       Int                       @map("amount_cents")
+  status            BookingPaymentStatus      @default(PENDING)
   /// Modo exigido: até quando o horário fica segurado sem pagamento.
-  holdUntil         DateTime?            @map("hold_until") @db.Timestamptz
+  holdUntil         DateTime?                 @map("hold_until") @db.Timestamptz
   /// Checkout aberto no gateway (reaproveitado enquanto não vence).
-  checkoutId        String?              @map("checkout_id")
-  checkoutUrl       String?              @map("checkout_url")
-  checkoutExpiresAt DateTime?            @map("checkout_expires_at") @db.Timestamptz
+  checkoutId        String?                   @map("checkout_id")
+  checkoutUrl       String?                   @map("checkout_url")
+  checkoutExpiresAt DateTime?                 @map("checkout_expires_at") @db.Timestamptz
   /// Pagamento aprovado no gateway.
-  gatewayPaymentId  String?              @map("gateway_payment_id")
-  paidAt            DateTime?            @map("paid_at") @db.Timestamptz
-  refundReason      String?              @map("refund_reason")
-  refundedAt        DateTime?            @map("refunded_at") @db.Timestamptz
-  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+  gatewayPaymentId  String?                   @map("gateway_payment_id")
+  paidAt            DateTime?                 @map("paid_at") @db.Timestamptz
+  refundReason      String?                   @map("refund_reason")
+  refundedAt        DateTime?                 @map("refunded_at") @db.Timestamptz
+  /// Onde o dinheiro pago entrou no caixa (§5): na comanda do atendimento ou retido (falta,
+  /// cancelamento fora do prazo, comanda estornada). Null = ainda "pago antecipado".
+  settlement        BookingPaymentSettlement?
+  settledAt         DateTime?                 @map("settled_at") @db.Timestamptz
+  /// Quanto entrou no caixa (na comanda, até o total dela; o que passou foi reembolsado).
+  settledCents      Int?                      @map("settled_cents")
+  /// Comanda em que o pagamento foi usado.
+  orderId           String?                   @map("order_id") @db.Uuid
+  createdAt         DateTime                  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime                  @updatedAt @map("updated_at") @db.Timestamptz
 
-  appointment Appointment @relation(fields: [barbershopId, appointmentId], references: [barbershopId, id], map: "booking_payments_tenant_appointment_fkey")
+  appointment Appointment            @relation(fields: [barbershopId, appointmentId], references: [barbershopId, id], map: "booking_payments_tenant_appointment_fkey")
+  order       Order?                 @relation(fields: [barbershopId, orderId], references: [barbershopId, id], map: "booking_payments_tenant_order_fkey")
+  refunds     BookingPaymentRefund[]
+  cashEntries CashEntry[]
 
   @@unique([barbershopId, appointmentId], map: "booking_payments_tenant_appointment_key")
   @@unique([barbershopId, id], map: "booking_payments_tenant_id_key")
@@ -1070,4 +1091,49 @@ model BookingPaymentWebhookEvent {
 
   @@unique([barbershopId, eventId])
   @@map("booking_payment_webhook_events")
+}
+
+/// Onde o pagamento online da reserva entrou no caixa (§5).
+enum BookingPaymentSettlement {
+  /// Na comanda do atendimento, como a parte já paga dela.
+  ORDER
+  /// Retido pela barbearia (falta, cancelamento fora do prazo ou comanda estornada), sem comissão.
+  RETAINED
+}
+
+enum BookingRefundKind {
+  /// O pago online passou do total da comanda: a diferença volta sozinha ao cliente.
+  DIFFERENCE
+  /// Reembolso do valor retido, pedido pelo painel (total ou parte, com motivo).
+  MANUAL
+}
+
+enum BookingRefundStatus {
+  PENDING
+  DONE
+  /// O gateway recusou depois de todas as tentativas: a barbearia devolve pela conta dela.
+  FAILED
+}
+
+/// Reembolso parcial de um pagamento de reserva que já entrou no caixa. No máximo um de cada
+/// tipo por pagamento (§5: o reembolso manual é um só).
+model BookingPaymentRefund {
+  id                String              @id @default(uuid(7)) @db.Uuid
+  barbershopId      String              @map("barbershop_id") @db.Uuid
+  bookingPaymentId  String              @map("booking_payment_id") @db.Uuid
+  kind              BookingRefundKind
+  amountCents       Int                 @map("amount_cents")
+  status            BookingRefundStatus @default(PENDING)
+  /// Motivo informado no painel (só a equipe vê).
+  reason            String?
+  requestedByUserId String?             @map("requested_by_user_id") @db.Uuid
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  refundedAt        DateTime?           @map("refunded_at") @db.Timestamptz
+
+  bookingPayment BookingPayment @relation(fields: [barbershopId, bookingPaymentId], references: [barbershopId, id], map: "booking_payment_refunds_tenant_payment_fkey")
+
+  @@unique([barbershopId, id], map: "booking_payment_refunds_tenant_id_key")
+  @@unique([bookingPaymentId, kind])
+  @@index([barbershopId, bookingPaymentId])
+  @@map("booking_payment_refunds")
 }

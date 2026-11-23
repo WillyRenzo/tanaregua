@@ -15,6 +15,9 @@ const payment = (status: AppointmentPayment['status']): AppointmentPayment => ({
   checkoutUrl: null,
   paidAt: null,
   refundedAt: null,
+  settlement: null,
+  settledCents: null,
+  refunds: [],
 });
 
 describe('pagamento online da reserva', () => {

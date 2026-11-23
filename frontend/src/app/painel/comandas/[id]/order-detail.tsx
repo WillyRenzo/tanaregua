@@ -25,7 +25,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { errorMessage } from '@/lib/api/errors';
 import { formatDateTime, formatMoney } from '@/lib/format';
-import { PAYMENT_METHODS, paymentLabel } from '@/lib/payment-methods';
+import { PAYMENT_METHODS, paymentLabel, type CounterPaymentMethod } from '@/lib/payment-methods';
 import { can } from '@/lib/permissions';
 import {
   useAddOrderItem,
@@ -43,7 +43,6 @@ import {
   useVoidOrder,
   type ClientPackage,
   type Order,
-  type PaymentMethod,
 } from '@/lib/queries';
 import { useAuthenticatedSession } from '@/lib/session/use-session';
 import { cn } from '@/lib/utils';
@@ -490,7 +489,7 @@ function AddItem({ orderId, hasClient }: { orderId: string; hasClient: boolean }
 
 function CloseOrder({ order }: { order: Order }) {
   const close = useCloseOrder(order.id);
-  const [method, setMethod] = useState<PaymentMethod | null>(null);
+  const [method, setMethod] = useState<CounterPaymentMethod | null>(null);
 
   const submit = async () => {
     if (!method) return;

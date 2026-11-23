@@ -9,9 +9,19 @@ export const appointmentStatusSchema = z.enum([
   'NO_SHOW',
 ]);
 
+/** Reembolso parcial de um pagamento que já entrou no caixa (§5). O motivo fica só no painel. */
+export const appointmentPaymentRefundSchema = z.object({
+  /** `DIFFERENCE`: o pago passou do total da comanda; `MANUAL`: pedido pelo painel. */
+  kind: z.enum(['DIFFERENCE', 'MANUAL']),
+  amountCents: z.int(),
+  status: z.enum(['PENDING', 'DONE', 'FAILED']),
+  createdAt: z.date(),
+  refundedAt: z.date().nullable(),
+});
+
 /**
- * Pagamento online da reserva (business-rules §5). Pago e cancelado (ou falta) sem reembolso
- * significa valor retido pela barbearia.
+ * Pagamento online da reserva (business-rules §5). Pago e ainda sem `settlement` = "pago
+ * antecipado"; `ORDER` = usado na comanda; `RETAINED` = valor retido pela barbearia.
  */
 export const appointmentPaymentSchema = z
   .object({
@@ -31,6 +41,11 @@ export const appointmentPaymentSchema = z
     checkoutUrl: z.string().nullable(),
     paidAt: z.date().nullable(),
     refundedAt: z.date().nullable(),
+    /** Onde o valor pago entrou no caixa; null = ainda pago antecipado. */
+    settlement: z.enum(['ORDER', 'RETAINED']).nullable(),
+    /** Quanto entrou no caixa (na comanda, até o total dela). */
+    settledCents: z.int().nullable(),
+    refunds: z.array(appointmentPaymentRefundSchema),
   })
   .meta({ id: 'AppointmentPayment' });
 export type AppointmentPaymentSummary = z.infer<typeof appointmentPaymentSchema>;

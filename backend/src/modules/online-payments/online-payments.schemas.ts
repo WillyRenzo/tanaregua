@@ -34,3 +34,12 @@ export const onlinePaymentSettingsSchema = z
     example: { mode: 'OPTIONAL', amount: 'DEPOSIT', depositBps: 3000 },
   });
 export type OnlinePaymentSettingsInput = z.infer<typeof onlinePaymentSettingsSchema>;
+
+/** Reembolso pelo painel do valor retido (§5): total ou parte, com motivo. */
+export const refundBookingPaymentSchema = z
+  .strictObject({
+    amountCents: z.int().min(1),
+    reason: z.string().trim().min(3, 'Informe o motivo do reembolso.').max(200),
+  })
+  .meta({ example: { amountCents: 1500, reason: 'Cliente avisou da falta com antecedência' } });
+export type RefundBookingPaymentInput = z.infer<typeof refundBookingPaymentSchema>;
