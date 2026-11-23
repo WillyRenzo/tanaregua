@@ -6,7 +6,7 @@ import { api, expect, open, test } from './fixtures';
  * Pagamento online da reserva (business-rules §5), com o gateway simulado
  * (`PAYMENT_PROVIDER=fake`): o checkout simulado aprova na hora e devolve o cliente.
  */
-test('no modo exigido, o cliente paga o sinal no checkout e vê a reserva paga', async ({
+test('no modo exigido, o cliente paga o sinal no checkout e o sinal abate na comanda', async ({
   browser,
   page,
   shop,
@@ -54,5 +54,16 @@ test('no modo exigido, o cliente paga o sinal no checkout e vê a reserva paga',
   await expect(client.getByText(/Pago online · R\$/)).toBeVisible();
   await expectNoSeriousViolations(client);
 
+  const appointmentId = new URL(client.url()).searchParams.get('pagamento')!;
   await context.close();
+
+  // No atendimento, o sinal abate na comanda e o restante é pago no balcão.
+  const order = await api<{ id: string }>(page.request, shop, 'post', '/v1/orders', { appointmentId });
+  await open(page, `/painel/comandas/${order.id}`);
+  await expect(page.getByText('Pago online na reserva')).toBeVisible();
+  await expectNoSeriousViolations(page);
+  await page.getByRole('radio', { name: /Pix/ }).click();
+  await page.getByRole('button', { name: 'Fechar e lançar no caixa' }).click();
+  await expect(page.getByText('Comanda fechada. Comissões lançadas.')).toBeVisible();
+  await expect(page.getByText(/na reserva$/)).toBeVisible();
 });

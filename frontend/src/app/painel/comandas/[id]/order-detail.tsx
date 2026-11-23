@@ -490,11 +490,16 @@ function AddItem({ orderId, hasClient }: { orderId: string; hasClient: boolean }
 function CloseOrder({ order }: { order: Order }) {
   const close = useCloseOrder(order.id);
   const [method, setMethod] = useState<CounterPaymentMethod | null>(null);
+  // Reserva paga online (§5): o pago abate o total; o que passar volta ao cliente sozinho.
+  const onlineCents = Math.min(order.prepaidCents, order.totalCents);
+  const remainderCents = order.totalCents - onlineCents;
+  const backToClientCents = order.prepaidCents - onlineCents;
+  const needsMethod = remainderCents > 0 || order.prepaidCents === 0;
 
   const submit = async () => {
-    if (!method) return;
+    if (needsMethod && !method) return;
     try {
-      await close.mutateAsync({ paymentMethod: method });
+      await close.mutateAsync(method ? { paymentMethod: method } : {});
       toast.success('Comanda fechada. Comissões lançadas.');
     } catch (error) {
       toast.error(errorMessage(error));
@@ -504,32 +509,51 @@ function CloseOrder({ order }: { order: Order }) {
   return (
     <div className="bg-card border-border grid gap-4 rounded-lg border p-4 lg:sticky lg:top-6">
       <p className="font-heading text-xl font-semibold uppercase">Fechar comanda</p>
-      <fieldset className="grid gap-2">
-        <legend className="mb-1 text-sm font-medium">Forma de pagamento</legend>
-        <div className="grid grid-cols-2 gap-2" role="radiogroup">
-          {PAYMENT_METHODS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={method === option.value}
-              onClick={() => setMethod(option.value)}
-              className={cn(
-                'border-border hover:bg-accent flex items-center gap-2 rounded-md border px-3 py-2 text-sm',
-                'focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none',
-                method === option.value && 'border-primary bg-accent font-medium',
-              )}
-            >
-              <option.icon aria-hidden className="size-4" /> {option.label}
-            </button>
-          ))}
-        </div>
-      </fieldset>
+      {order.prepaidCents > 0 && (
+        <dl className="bg-accent grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 rounded-md p-3 text-sm">
+          <dt>Total</dt>
+          <dd className="text-right">{formatMoney(order.totalCents)}</dd>
+          <dt>Pago online na reserva</dt>
+          <dd className="text-right">− {formatMoney(onlineCents)}</dd>
+          {backToClientCents > 0 && (
+            <dd className="text-muted-foreground col-span-2 text-xs">
+              {formatMoney(backToClientCents)} pagos a mais voltam ao cliente pelo serviço de pagamento.
+            </dd>
+          )}
+        </dl>
+      )}
+      {needsMethod && (
+        <fieldset className="grid gap-2">
+          <legend className="mb-1 text-sm font-medium">Forma de pagamento</legend>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup">
+            {PAYMENT_METHODS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={method === option.value}
+                onClick={() => setMethod(option.value)}
+                className={cn(
+                  'border-border hover:bg-accent flex items-center gap-2 rounded-md border px-3 py-2 text-sm',
+                  'focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none',
+                  method === option.value && 'border-primary bg-accent font-medium',
+                )}
+              >
+                <option.icon aria-hidden className="size-4" /> {option.label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
       <div className="flex items-baseline justify-between">
         <span className="text-muted-foreground text-sm">A receber</span>
-        <span className="text-2xl font-bold">{formatMoney(order.totalCents)}</span>
+        <span className="text-2xl font-bold">{formatMoney(remainderCents)}</span>
       </div>
-      <Button size="lg" onClick={submit} disabled={!method || order.items.length === 0 || close.isPending}>
+      <Button
+        size="lg"
+        onClick={submit}
+        disabled={(needsMethod && !method) || order.items.length === 0 || close.isPending}
+      >
         {close.isPending ? 'Fechando…' : 'Fechar e lançar no caixa'}
       </Button>
       <p className="text-muted-foreground text-xs">Depois de fechada, a comanda só pode ser estornada.</p>
@@ -558,6 +582,12 @@ function ClosedSummary({ order, timezone }: { order: Order; timezone: string }) 
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
         <dt className="text-muted-foreground">Forma</dt>
         <dd>{paymentLabel(order.paymentMethod)}</dd>
+        {order.prepaidCents > 0 && order.paymentMethod !== 'ONLINE' && (
+          <>
+            <dt className="text-muted-foreground">Pago online</dt>
+            <dd>{formatMoney(order.prepaidCents)} na reserva</dd>
+          </>
+        )}
         <dt className="text-muted-foreground">Fechada em</dt>
         <dd>{order.closedAt && formatDateTime(order.closedAt, timezone)}</dd>
         <dt className="text-muted-foreground">Total</dt>
@@ -566,6 +596,12 @@ function ClosedSummary({ order, timezone }: { order: Order; timezone: string }) 
       {can(session, 'orders:void') &&
         (confirming ? (
           <div className="grid gap-2">
+            {order.prepaidCents > 0 && (
+              <p className="text-muted-foreground text-xs">
+                Os {formatMoney(order.prepaidCents)} pagos online na reserva continuam no caixa, como valor
+                retido. Para devolver ao cliente, use o reembolso no agendamento.
+              </p>
+            )}
             <Label htmlFor="void-reason">Motivo do estorno</Label>
             <Textarea
               id="void-reason"
