@@ -112,6 +112,12 @@ em um SaaS multi-tenant que lida com dados pessoais, salários e pagamentos.
   - reembolso pelo outbox, com chave de idempotência no gateway (`refund:<id>`): repetir não devolve duas vezes;
   - `booking_payments` não tem DELETE para a aplicação (histórico de dinheiro), e a mudança de situação é otimista (duas notificações simultâneas não gravam dois pagamentos).
 - **Checkout simulado** (`GET /v1/online-payments/fake-checkout/:id`): só com `PAYMENT_PROVIDER=fake`, que a API recusa em produção; fora dele, 404.
+- **Reembolso pelo painel** (`POST /v1/online-payments/bookings/:appointmentId/refund`):
+  - exige `orders:void`, como o reembolso de pacote: tira dinheiro do caixa;
+  - trava a linha do pagamento (`FOR UPDATE`): dois cliques não viram dois reembolsos;
+  - `booking_payment_refunds` tem no máximo um reembolso de cada tipo por pagamento (unique) e não tem DELETE para a aplicação;
+  - a saída de caixa é gravada na mesma transação do pedido, e o gateway recebe a chave de idempotência `refund:<id do reembolso>`.
+- **Caixa:** todo lançamento vem de uma comanda ou de um pagamento de reserva (CHECK no banco), e continua append-only.
 
 ## Assistente de IA
 

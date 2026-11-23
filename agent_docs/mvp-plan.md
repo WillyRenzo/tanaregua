@@ -10,7 +10,7 @@ Legenda: ✅ feito · 🟡 em andamento ou parcial · ⬜ falta
 | B7 · Endurecimento e deploy | 🟡 | subir na VPS real; domínio próprio da barbearia; `MAIL_PROVIDER=resend` com domínio verificado; ensaio de restauração na VPS |
 | Fase 2 · Operação e personalização | ✅ | só o domínio próprio, que entra com o deploy |
 | Fase 3 · Assinatura e planos (entregas 1 a 4) | ✅ | teste no sandbox do Mercado Pago; troca de ciclo (mensal ↔ anual) |
-| Fase 3 · Pagamento online da reserva | 🟡 | entregas 1 e 2 feitas (a 2 aguarda o merge); entrega 3 (comanda e caixa); teste no sandbox |
+| Fase 3 · Pagamento online da reserva | 🟡 | entregas 1, 2 e 3 feitas (a 3 aguarda o merge); depois: pacote comprado online; teste no sandbox |
 | Fase 3 · Salários e folha | ⬜ | tudo (ainda sem regras definidas) |
 | Fase 3 · Relatórios avançados | ⬜ | tudo (ainda sem regras definidas) |
 | Fase 4 · Assistente de IA | ⬜ | tudo |
@@ -385,8 +385,8 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
   - A verificação de recursos precisa estar pronta **antes** de liberar qualquer recurso da fase 3 ou 4, senão o plano básico já nasceria com eles.
 - 🟡 **Pagamento online** da reserva, com o dinheiro na conta da própria barbearia (porta `MerchantGateway`, Mercado Pago como adapter inicial), webhook verificado e idempotente. Regras no `business-rules.md` §5 (decisões de 30/10/2026). Entregas, em ordem:
   1. ✅ conexão da conta da barbearia no gateway (credenciais conferidas e cifradas) e configuração: desligado, opcional ou exigido; total ou sinal (feito em 30/10/2026, recurso `online-payment`);
-  2. ✅ pagamento na reserva da página pública (feito em 04/11/2026, aguardando o merge; decisões no `business-rules.md` §5): Checkout Pro com Pix e cartão, horário segurado por 15 minutos no modo exigido (queda pelo outbox), "pagar agora" depois no modo opcional, webhook por conta (`/v1/online-payments/webhook/:webhookKey`, assinatura com o segredo da barbearia), reembolso automático nos cancelamentos previstos e motivo do cancelamento pedido no painel;
-  3. ⬜ comanda e caixa: o pré-pagamento abate na comanda e entra no caixa ao fechar; valor retido de falta no caixa do dia em que for marcada, sem comissão; reembolso manual pelo painel.
+  2. ✅ pagamento na reserva da página pública (feito em 04/11/2026; decisões no `business-rules.md` §5): Checkout Pro com Pix e cartão, horário segurado por 15 minutos no modo exigido (queda pelo outbox), "pagar agora" depois no modo opcional, webhook por conta (`/v1/online-payments/webhook/:webhookKey`, assinatura com o segredo da barbearia), reembolso automático nos cancelamentos previstos e motivo do cancelamento pedido no painel;
+  3. ✅ comanda e caixa (feito em 23/11/2026, aguardando o merge; decisões no `business-rules.md` §5): o pré-pagamento abate na comanda e entra no caixa ao fechar (o que passar do total volta ao cliente sozinho); valor retido de falta ou de cancelamento fora do prazo no caixa do dia, sem comissão; estorno da comanda mantém a parte online como retida; reembolso manual pelo painel (uma vez, total ou parte, com motivo).
   - ⬜ Depois: pacote comprado online e reembolso de pacote pago online.
   - ⬜ **Antes de ligar o Mercado Pago**, testar no sandbox:
     - `GET /users/me` com o access token de produção da barbearia (id e apelido);
@@ -398,6 +398,7 @@ O MVP (Plano 1 e Plano 2) está implementado. Regras de negócio de cada item em
       - `auto_return` volta para a `back_url` (e se ela precisa ser HTTPS com domínio público).
     - a consulta `GET /v1/payments/:id`: `external_reference`, `transaction_amount` e as situações (`approved`, `in_process`, `refunded`, `charged_back`).
     - o reembolso integral `POST /v1/payments/:id/refunds` com `X-Idempotency-Key`: repetir não pode devolver duas vezes.
+    - o reembolso parcial (`amount` no corpo, em reais) da diferença da comanda e do reembolso pelo painel, e se o pagamento continua `approved` depois dele.
     - se o Pix pago depois do `date_of_expiration` é recusado pelo gateway ou aprovado mesmo assim (o TaNaRegua trata os dois casos).
 - ⬜ **Salários e folha**: ainda sem regras definidas (business-rules §4 só diz que salários são confidenciais).
 - ⬜ **Relatórios avançados**: ainda sem escopo definido.

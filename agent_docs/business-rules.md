@@ -96,9 +96,21 @@ Não invente regra para preencher uma lacuna: pergunte.
   - um segundo pagamento da mesma reserva (dois checkouts pagos), ou um pagamento com valor diferente do cobrado, é devolvido automaticamente;
   - um pagamento que chega depois de a reserva ser cancelada é devolvido automaticamente;
   - um reembolso que o gateway recusa depois de todas as tentativas aparece no painel como "reembolso não concluído", para a barbearia devolver pela conta dela.
+- **Comanda e caixa (confirmado em 23/11/2026):**
+  - **pago a mais que o total da comanda** (ex.: desconto ou serviço trocado): a comanda usa o pago até o total, e a **diferença volta ao cliente sozinha**, pelo gateway;
+  - **estorno de comanda** que usou o pagamento online: desfaz o que foi pago no balcão e as comissões; a parte online **fica no caixa como valor retido**, sem comissão (o dinheiro está na conta da barbearia), e pode ser reembolsada pelo painel;
+  - **reembolso pelo painel:** só do **valor retido** (falta, cancelamento fora do prazo ou comanda estornada); depois do atendimento, a correção é pelo estorno da comanda;
+  - o reembolso pelo painel é **um só por pagamento**, total ou parte, com motivo (como o de pacote, §6). Exige a permissão de estorno (`orders:void`), porque tira dinheiro do caixa, e não depende do plano;
+  - **também valem:**
+    - a comanda fecha sem forma do balcão quando o pago online cobre tudo; senão, pede a forma do restante;
+    - um pagamento ainda pendente quando a comanda fecha (ou a falta é marcada) é encerrado: se chegar depois, volta ao cliente;
+    - um reembolso feito direto na conta do gateway, de um valor que já está no caixa, não entra no caixa sozinho: use o reembolso pelo painel.
 - **Entregas:**
-  - **feitas:** conexão da conta e configuração (30/10/2026); pagamento na reserva com reembolso automático (04/11/2026);
-  - **seguinte:** comanda, caixa, valor retido de falta e reembolso manual (`mvp-plan.md`).
+  - **feitas:**
+    - conexão da conta e configuração (30/10/2026);
+    - pagamento na reserva com reembolso automático (04/11/2026);
+    - comanda, caixa, valor retido e reembolso manual (23/11/2026).
+  - **depois:** pacote comprado online e reembolso de pacote pago online (`mvp-plan.md`).
 
 ## 6. Pacotes de serviços
 
