@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { ApiError, errorMessage } from '@/lib/api/errors';
 import { PackageStatusBadge } from '@/components/package-status';
-import { hasVisiblePayment, PaymentBadge } from '@/components/payment-status';
+import { hasVisiblePayment, PaymentBadge, PaymentRefunds } from '@/components/payment-status';
 import { formatDate, formatDateLong, formatMoney, formatTime } from '@/lib/format';
 import {
   useCancelBooking,
@@ -272,6 +272,11 @@ function AppointmentCard({
         <p className="text-muted-foreground mt-2 text-xs">
           Cancelado porque o pagamento não foi feito no prazo.
         </p>
+      )}
+      {payment && (
+        <div className="mt-2">
+          <PaymentRefunds payment={payment} />
+        </div>
       )}
       {payment?.status === 'REFUND_PENDING' && (
         <p className="text-muted-foreground mt-2 text-xs">

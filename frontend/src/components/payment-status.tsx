@@ -24,12 +24,48 @@ export function hasVisiblePayment(payment: AppointmentPayment | null): payment i
   return payment !== null && payment.status !== 'CANCELLED' && payment.status !== 'EXPIRED';
 }
 
+/** Pago e já no caixa (§5): usado na comanda ou retido pela barbearia (falta, cancelamento fora do prazo). */
+const SETTLED_LABEL: Record<NonNullable<AppointmentPayment['settlement']>, string> = {
+  ORDER: 'Pago online · usado na comanda',
+  RETAINED: 'Pago online · retido',
+};
+
 export function PaymentBadge({ payment }: { payment: AppointmentPayment }) {
   const { label, icon: Icon, variant } = PAYMENT_STATUS[payment.status];
+  const text = payment.status === 'PAID' && payment.settlement ? SETTLED_LABEL[payment.settlement] : label;
   return (
     <Badge variant={variant}>
-      <Icon aria-hidden /> {label} · {formatMoney(payment.amountCents)}
+      <Icon aria-hidden /> {text} · {formatMoney(payment.amountCents)}
     </Badge>
+  );
+}
+
+const REFUND_TEXT: Record<AppointmentPayment['refunds'][number]['kind'], string> = {
+  DIFFERENCE: 'pago a mais que o total da comanda',
+  MANUAL: 'reembolso pela barbearia',
+};
+
+const REFUND_STATUS: Record<AppointmentPayment['refunds'][number]['status'], string> = {
+  PENDING: 'em andamento',
+  DONE: 'devolvido',
+  FAILED: 'não concluído',
+};
+
+/** Reembolsos parciais de um pagamento que já entrou no caixa, um por linha. */
+export function PaymentRefunds({ payment }: { payment: AppointmentPayment }) {
+  if (payment.refunds.length === 0) return null;
+  return (
+    <ul className="grid gap-1 text-xs">
+      {payment.refunds.map((refund) => (
+        <li
+          key={refund.kind}
+          className={refund.status === 'FAILED' ? 'text-destructive' : 'text-muted-foreground'}
+        >
+          <Undo2 aria-hidden className="mr-1 inline size-3.5" />
+          {formatMoney(refund.amountCents)} ({REFUND_TEXT[refund.kind]}): {REFUND_STATUS[refund.status]}
+        </li>
+      ))}
+    </ul>
   );
 }
 

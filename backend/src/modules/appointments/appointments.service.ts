@@ -400,6 +400,7 @@ export class AppointmentsService {
           kind: input.cancellation,
         });
       }
+      if (input.status === 'NO_SHOW') await this.payments.onNoShow(tx, auth.barbershopId, appointmentId);
       await this.setStatus(tx, auth.barbershopId, appointmentId, input.status, input.reason);
       return this.staffView(tx, auth.barbershopId, appointmentId);
     });

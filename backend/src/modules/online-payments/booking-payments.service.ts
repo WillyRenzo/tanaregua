@@ -2,6 +2,8 @@ import { Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { SecretBox } from '../../common/crypto/secret-box.js';
 import { notFound, unprocessable } from '../../common/http/domain-error.js';
+import { TenantDb } from '../../common/tenancy/tenant-db.service.js';
+import { Clock } from '../../common/time/clock.js';
 import type { Env } from '../../config/env.js';
 import type { BookingPayment, PaymentAccount } from '../../generated/prisma/client.js';
 import { PrismaService, type Tx } from '../../prisma/prisma.service.js';
@@ -9,6 +11,7 @@ import type { CancellationContext } from '../appointments/appointment-payments.j
 import type { AppointmentPaymentSummary } from '../appointments/appointments.responses.js';
 import { AppointmentsService, type ClientAppointmentView } from '../appointments/appointments.service.js';
 import { BarbershopsService } from '../barbershops/barbershops.module.js';
+import { FinanceService } from '../finance/finance.service.js';
 import { OutboxService, type OutboxEventRef } from '../notifications/outbox.service.js';
 import { InvalidNotificationError, type IncomingNotification } from '../subscriptions/payment-gateway.js';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
@@ -26,6 +29,14 @@ import {
   type MerchantPayment,
 } from './merchant-gateway.js';
 import { onlinePaymentUnavailable, paymentGatewayUnavailable } from './online-payments.errors.js';
+import type { RefundBookingPaymentInput } from './online-payments.schemas.js';
+
+/** O pagamento de uma reserva usado no fechamento da comanda (§5). */
+export interface OrderSettlement {
+  bookingPaymentId: string;
+  /** O que entrou na comanda: o pago, até o total dela (o que passou volta ao cliente). */
+  appliedCents: number;
+}
 
 /** Como a reserva online é paga agora nesta barbearia; `null` = não é paga online. */
 export interface PaymentOffer {
@@ -69,6 +80,9 @@ export class BookingPaymentsService {
     @Inject(BarbershopsService) private readonly barbershops: BarbershopsService,
     @Inject(SubscriptionsService) private readonly subscriptions: SubscriptionsService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(FinanceService) private readonly finance: FinanceService,
+    @Inject(TenantDb) private readonly db: TenantDb,
+    @Inject(Clock) private readonly clock: Clock,
     @Inject(ConfigService) config: ConfigService<Env, true>,
   ) {
     this.publicUrl = config.get('APP_PUBLIC_URL');
@@ -216,6 +230,7 @@ export class BookingPaymentsService {
   ): Promise<Map<string, AppointmentPaymentSummary>> {
     const rows = await tx.bookingPayment.findMany({
       where: { barbershopId, appointmentId: { in: appointmentIds } },
+      include: { refunds: { orderBy: { createdAt: 'asc' } } },
     });
     const now = Date.now();
     return new Map(
@@ -231,8 +246,172 @@ export class BookingPaymentsService {
               : null,
           paidAt: row.paidAt,
           refundedAt: row.refundedAt,
+          settlement: row.settlement,
+          settledCents: row.settledCents,
+          refunds: row.refunds.map((refund) => ({
+            kind: refund.kind,
+            amountCents: refund.amountCents,
+            status: refund.status,
+            createdAt: refund.createdAt,
+            refundedAt: refund.refundedAt,
+          })),
         },
       ]),
+    );
+  }
+
+  /** Falta marcada (§5): o valor pago fica com a barbearia e entra no caixa do dia, sem comissão. */
+  async onNoShow(tx: Tx, barbershopId: string, appointmentId: string): Promise<void> {
+    const payment = await this.find(tx, barbershopId, appointmentId);
+    if (payment?.status === 'PENDING') {
+      // Não pagou até a falta: um pagamento que ainda chegue volta sozinho ao cliente.
+      await this.setStatus(tx, payment, { status: 'CANCELLED' });
+      return;
+    }
+    if (payment?.status === 'PAID' && payment.settlement === null) await this.retain(tx, payment);
+  }
+
+  // ───────────── Comanda (§5, entrega 3) ─────────────
+
+  /** Valor pago online disponível para abater na comanda do agendamento (pago antecipado). */
+  async prepaidFor(tx: Tx, barbershopId: string, appointmentId: string): Promise<number> {
+    const payment = await this.find(tx, barbershopId, appointmentId);
+    return payment?.status === 'PAID' && payment.settlement === null ? payment.amountCents : 0;
+  }
+
+  /**
+   * Fechamento da comanda do agendamento: o pago online entra nela até o total; o que passar
+   * volta ao cliente sozinho (decisão de 23/11/2026). Um pagamento ainda pendente é encerrado:
+   * se chegar depois, é devolvido. Na transação do fechamento.
+   */
+  async settleWithOrder(
+    tx: Tx,
+    barbershopId: string,
+    order: { appointmentId: string; orderId: string; totalCents: number },
+  ): Promise<OrderSettlement | null> {
+    const payment = await this.find(tx, barbershopId, order.appointmentId);
+    if (payment?.status === 'PENDING') {
+      await this.setStatus(tx, payment, { status: 'CANCELLED' });
+      return null;
+    }
+    if (payment?.status !== 'PAID' || payment.settlement !== null) return null;
+
+    const appliedCents = Math.min(payment.amountCents, order.totalCents);
+    await this.settle(tx, payment, {
+      settlement: 'ORDER',
+      settledCents: appliedCents,
+      orderId: order.orderId,
+    });
+    const differenceCents = payment.amountCents - appliedCents;
+    if (differenceCents > 0) {
+      await this.requestPartialRefund(tx, payment, { kind: 'DIFFERENCE', amountCents: differenceCents });
+    }
+    return { bookingPaymentId: payment.id, appliedCents };
+  }
+
+  /**
+   * Comanda estornada (decisão de 23/11/2026): a parte paga online continua no caixa e passa a
+   * valer como valor retido, sem comissão; a barbearia pode reembolsar pelo painel.
+   */
+  async onOrderVoided(tx: Tx, barbershopId: string, orderId: string): Promise<void> {
+    await tx.bookingPayment.updateMany({
+      where: { barbershopId, orderId, settlement: 'ORDER' },
+      data: { settlement: 'RETAINED' },
+    });
+  }
+
+  /**
+   * Reembolso pelo painel do valor retido (§5: falta, cancelamento fora do prazo ou comanda
+   * estornada): um só por pagamento, total ou parte, com motivo. Sai do caixa na hora e vai
+   * ao gateway pelo outbox.
+   */
+  refundRetained(
+    appointmentId: string,
+    input: RefundBookingPaymentInput,
+  ): Promise<AppointmentPaymentSummary> {
+    return this.db.run(async (tx, auth) => {
+      // Trava a linha: dois cliques não viram dois reembolsos.
+      await tx.$queryRaw`SELECT id FROM booking_payments
+        WHERE barbershop_id = ${auth.barbershopId}::uuid AND appointment_id = ${appointmentId}::uuid FOR UPDATE`;
+      const payment = await this.find(tx, auth.barbershopId, appointmentId);
+      if (!payment) throw notFound('Pagamento');
+      if (payment.status !== 'PAID' || payment.settlement !== 'RETAINED') {
+        throw unprocessable(
+          'payment-not-retained',
+          'Só dá para reembolsar pelo painel o valor que ficou com a barbearia (falta, cancelamento fora do prazo ou comanda estornada).',
+        );
+      }
+      const already = await tx.bookingPaymentRefund.count({
+        where: { barbershopId: auth.barbershopId, bookingPaymentId: payment.id, kind: 'MANUAL' },
+      });
+      if (already > 0) {
+        throw unprocessable('payment-already-refunded', 'Este pagamento já teve um reembolso pelo painel.');
+      }
+      if (input.amountCents > (payment.settledCents ?? 0)) {
+        throw unprocessable(
+          'refund-too-high',
+          'O reembolso não pode passar do valor que ficou com a barbearia.',
+        );
+      }
+      const refund = await this.requestPartialRefund(tx, payment, {
+        kind: 'MANUAL',
+        amountCents: input.amountCents,
+        reason: input.reason,
+        requestedByUserId: auth.userId,
+      });
+      await this.finance.recordOnlineRefund(tx, auth.barbershopId, {
+        bookingPaymentId: payment.id,
+        orderId: payment.orderId,
+        amountCents: input.amountCents,
+        occurredAt: refund.createdAt,
+      });
+      const summary = (await this.summaries(tx, auth.barbershopId, [appointmentId])).get(appointmentId);
+      return summary!;
+    });
+  }
+
+  /** Consumidor do outbox: reembolso parcial no gateway (diferença da comanda ou manual). */
+  async partialRefund(event: OutboxEventRef): Promise<void> {
+    const { refundId } = event.payload as { refundId: string };
+    const target = await this.prisma.withContext({ barbershopId: event.barbershopId }, async (tx) => {
+      const refund = await tx.bookingPaymentRefund.findFirst({
+        where: { id: refundId, barbershopId: event.barbershopId },
+        include: { bookingPayment: true },
+      });
+      if (refund?.status !== 'PENDING') return null;
+      const account = await this.account(tx, event.barbershopId);
+      // Conta desconectada: tenta de novo e, esgotado, fica para a barbearia resolver.
+      if (!account) throw new Error('Conta de pagamento desconectada');
+      return { refund, credentials: this.credentials(account, event.barbershopId) };
+    });
+    if (!target) return;
+    await this.gateway.refund(
+      target.credentials,
+      target.refund.bookingPayment.gatewayPaymentId!,
+      `refund:${target.refund.id}`,
+      target.refund.amountCents,
+    );
+    await this.prisma.withContext({ barbershopId: event.barbershopId }, (tx) =>
+      tx.bookingPaymentRefund.updateMany({
+        where: { id: refundId, barbershopId: event.barbershopId, status: 'PENDING' },
+        data: { status: 'DONE', refundedAt: new Date() },
+      }),
+    );
+    this.logger.log({
+      event: 'booking-payment.partial-refunded',
+      barbershopId: event.barbershopId,
+      refundId,
+    });
+  }
+
+  /** Reembolso parcial esgotou as tentativas: o painel mostra, e a barbearia devolve pela conta. */
+  async partialRefundFailed(event: OutboxEventRef): Promise<void> {
+    const { refundId } = event.payload as { refundId: string };
+    await this.prisma.withContext({ barbershopId: event.barbershopId }, (tx) =>
+      tx.bookingPaymentRefund.updateMany({
+        where: { id: refundId, barbershopId: event.barbershopId, status: 'PENDING' },
+        data: { status: 'FAILED' },
+      }),
     );
   }
 
@@ -267,8 +446,10 @@ export class BookingPaymentsService {
             ? 'Cancelada pela barbearia (imprevisto)'
             : 'Cancelada a pedido do cliente, no prazo';
       await this.requestRefund(tx, payment, reason);
+      return;
     }
-    // 'retain': o valor fica com a barbearia (entra no caixa na entrega 3).
+    // 'retain': o valor fica com a barbearia e entra no caixa do dia, sem comissão.
+    if (payment.settlement === null) await this.retain(tx, payment);
   }
 
   // ───────────── Notificações do gateway ─────────────
@@ -492,6 +673,12 @@ export class BookingPaymentsService {
     gatewayPayment: MerchantPayment,
   ): Promise<void> {
     if (payment.gatewayPaymentId !== gatewayPayment.id) return;
+    // Já no caixa (comanda ou retido): o reembolso feito direto na conta não tem como entrar
+    // no caixa daqui. A barbearia usa o reembolso pelo painel.
+    if (payment.settlement !== null) {
+      this.logger.warn({ event: 'booking-payment.refunded-outside', barbershopId: payment.barbershopId });
+      return;
+    }
     if (
       payment.status !== 'PAID' &&
       payment.status !== 'REFUND_FAILED' &&
@@ -531,6 +718,55 @@ export class BookingPaymentsService {
       data,
     });
     if (updated.count === 0) throw new Error('Pagamento da reserva mudou durante a atualização');
+  }
+
+  /** Valor retido pela barbearia: entra no caixa agora, sem comissão. */
+  private async retain(tx: Tx, payment: BookingPayment): Promise<void> {
+    const occurredAt = this.clock.now();
+    await this.settle(tx, payment, { settlement: 'RETAINED', settledCents: payment.amountCents });
+    await this.finance.recordRetained(tx, payment.barbershopId, {
+      bookingPaymentId: payment.id,
+      amountCents: payment.amountCents,
+      occurredAt,
+    });
+  }
+
+  /** Registra onde o pago entrou no caixa. Otimista, como `setStatus`. */
+  private async settle(
+    tx: Tx,
+    payment: BookingPayment,
+    data: { settlement: 'ORDER' | 'RETAINED'; settledCents: number; orderId?: string },
+  ): Promise<void> {
+    const updated = await tx.bookingPayment.updateMany({
+      where: { id: payment.id, barbershopId: payment.barbershopId, status: 'PAID', settlement: null },
+      data: { ...data, settledAt: this.clock.now() },
+    });
+    if (updated.count === 0) throw new Error('Pagamento da reserva mudou durante a atualização');
+  }
+
+  private async requestPartialRefund(
+    tx: Tx,
+    payment: BookingPayment,
+    data: {
+      kind: 'DIFFERENCE' | 'MANUAL';
+      amountCents: number;
+      reason?: string;
+      requestedByUserId?: string;
+    },
+  ) {
+    const refund = await tx.bookingPaymentRefund.create({
+      data: {
+        barbershopId: payment.barbershopId,
+        bookingPaymentId: payment.id,
+        createdAt: this.clock.now(),
+        ...data,
+      },
+    });
+    await this.outbox.publish(tx, payment.barbershopId, {
+      type: 'BookingPaymentPartialRefund',
+      payload: { refundId: refund.id },
+    });
+    return refund;
   }
 
   private find(tx: Tx, barbershopId: string, appointmentId: string): Promise<BookingPayment | null> {

@@ -84,8 +84,16 @@ export abstract class MerchantGateway {
     request: MerchantCheckoutRequest,
   ): Promise<MerchantCheckout>;
   abstract getPayment(credentials: MerchantCredentials, paymentId: string): Promise<MerchantPayment>;
-  /** Reembolso integral. Idempotente pela chave: repetir não devolve duas vezes. */
-  abstract refund(credentials: MerchantCredentials, paymentId: string, idempotencyKey: string): Promise<void>;
+  /**
+   * Reembolso integral, ou parcial com `amountCents`. Idempotente pela chave: repetir não
+   * devolve duas vezes.
+   */
+  abstract refund(
+    credentials: MerchantCredentials,
+    paymentId: string,
+    idempotencyKey: string,
+    amountCents?: number,
+  ): Promise<void>;
   /**
    * Confere a assinatura com o segredo da conta e extrai o pagamento que mudou. Lança
    * `InvalidNotificationError` se a assinatura não confere; `null` = notificação válida que
@@ -151,6 +159,8 @@ export class FakeMerchantGateway extends MerchantGateway {
   private readonly payments = new Map<string, FakePayment>();
   /** Reembolsos feitos, por chave de idempotência (os testes conferem que não repetem). */
   readonly refunds = new Map<string, string>();
+  /** Valor dos reembolsos parciais, pela mesma chave (sem entrada = integral). */
+  readonly refundAmounts = new Map<string, number>();
 
   async verifyAccount(credentials: MerchantCredentials): Promise<MerchantAccount> {
     if (credentials.accessToken === FAKE_MERCHANT_INVALID_TOKEN) throw new MerchantGatewayError(401);
@@ -176,14 +186,20 @@ export class FakeMerchantGateway extends MerchantGateway {
     return view;
   }
 
-  async refund(credentials: MerchantCredentials, paymentId: string, idempotencyKey: string): Promise<void> {
+  async refund(
+    credentials: MerchantCredentials,
+    paymentId: string,
+    idempotencyKey: string,
+    amountCents?: number,
+  ): Promise<void> {
     const payment = this.payments.get(paymentId);
     if (payment && payment.accessToken !== credentials.accessToken) throw new MerchantGatewayError(404);
     if (this.refunds.has(idempotencyKey)) return;
     // Pagamento que este processo não conhece (criado pelo seed, ou antes de a API reiniciar):
     // a memória do simulado não sobrevive, e o reembolso na demo precisa funcionar.
-    if (payment) payment.status = 'refunded';
+    if (payment && amountCents === undefined) payment.status = 'refunded';
     this.refunds.set(idempotencyKey, paymentId);
+    if (amountCents !== undefined) this.refundAmounts.set(idempotencyKey, amountCents);
   }
 
   parseNotification(notification: IncomingNotification, webhookSecret: string): MerchantNotice | null {
@@ -318,12 +334,18 @@ export class MercadoPagoMerchantGateway extends MerchantGateway {
     };
   }
 
-  async refund(credentials: MerchantCredentials, paymentId: string, idempotencyKey: string): Promise<void> {
+  async refund(
+    credentials: MerchantCredentials,
+    paymentId: string,
+    idempotencyKey: string,
+    amountCents?: number,
+  ): Promise<void> {
     await this.call(
       credentials,
       'POST',
       `/v1/payments/${encodeURIComponent(paymentId)}/refunds`,
-      {},
+      // Sem `amount`, o Mercado Pago devolve tudo; com ele, só a parte.
+      amountCents === undefined ? {} : { amount: centsToDecimal(amountCents) },
       idempotencyKey,
     );
   }

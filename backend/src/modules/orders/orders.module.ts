@@ -23,6 +23,7 @@ import { CatalogModule } from '../catalog/catalog.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { FinanceModule } from '../finance/finance.module.js';
 import { ProductsModule } from '../products/products.module.js';
+import { OnlinePaymentsModule } from '../online-payments/online-payments.module.js';
 import { PackagesModule } from '../packages/packages.module.js';
 import { StaffModule } from '../staff/staff.module.js';
 import {
@@ -156,6 +157,7 @@ export class OrdersController {
     FinanceModule,
     ProductsModule,
     PackagesModule,
+    OnlinePaymentsModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

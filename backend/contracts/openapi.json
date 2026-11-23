@@ -6728,6 +6728,132 @@
         ]
       }
     },
+    "/v1/online-payments/bookings/{appointmentId}/refund": {
+      "post": {
+        "description": "Só o valor retido (falta, cancelamento fora do prazo ou comanda estornada), uma vez por pagamento, total ou parte, com motivo. Sai do caixa na hora; o gateway devolve ao cliente em seguida.\n\n**Permissões (basta uma):** `orders:void`",
+        "operationId": "OnlinePaymentsController_refund",
+        "parameters": [
+          {
+            "name": "appointmentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amountCents": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "amountCents",
+                  "reason"
+                ],
+                "additionalProperties": false,
+                "example": {
+                  "amountCents": 1500,
+                  "reason": "Cliente avisou da falta com antecedência"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentPayment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos: campo ausente, formato errado ou campo não permitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sem token ou token expirado. Use **Authorize**.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "O papel do usuário não tem nenhuma das permissões exigidas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso inexistente ou de outra barbearia.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`payment-not-retained | payment-already-refunded | refund-too-high`: O valor não ficou com a barbearia, já teve um reembolso pelo painel, ou o pedido passa do que ficou.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Reembolsa pelo painel o valor pago online que ficou com a barbearia",
+        "tags": [
+          "Pagamento online"
+        ],
+        "x-required-permissions": [
+          "orders:void"
+        ]
+      }
+    },
     "/v1/online-payments/webhook/{webhookKey}": {
       "post": {
         "description": "Chamada pelo gateway. A chave na URL diz de qual conta é, e a assinatura HMAC é conferida com o segredo dela (401 se inválida). Só põe a consulta ao gateway na fila; notificação repetida é ignorada.",
@@ -7753,9 +7879,6 @@
                     ]
                   }
                 },
-                "required": [
-                  "paymentMethod"
-                ],
                 "additionalProperties": false,
                 "example": {
                   "paymentMethod": "PIX"
@@ -10964,7 +11087,8 @@
               "PIX",
               "CARD_CREDIT",
               "CARD_DEBIT",
-              "OTHER"
+              "OTHER",
+              "ONLINE"
             ]
           },
           "netCents": {
@@ -10983,6 +11107,13 @@
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                 },
                 "orderId": {
+                  "nullable": true,
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "appointmentId": {
+                  "nullable": true,
                   "type": "string",
                   "format": "uuid",
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -10994,7 +11125,8 @@
                     "PIX",
                     "CARD_CREDIT",
                     "CARD_DEBIT",
-                    "OTHER"
+                    "OTHER",
+                    "ONLINE"
                   ]
                 },
                 "kind": {
@@ -11022,6 +11154,7 @@
               "required": [
                 "id",
                 "orderId",
+                "appointmentId",
                 "method",
                 "kind",
                 "amountCents",
@@ -11394,6 +11527,65 @@
             "nullable": true,
             "type": "string",
             "format": "date-time"
+          },
+          "settlement": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "ORDER",
+              "RETAINED"
+            ]
+          },
+          "settledCents": {
+            "nullable": true,
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "refunds": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "DIFFERENCE",
+                    "MANUAL"
+                  ]
+                },
+                "amountCents": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "PENDING",
+                    "DONE",
+                    "FAILED"
+                  ]
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "refundedAt": {
+                  "nullable": true,
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "kind",
+                "amountCents",
+                "status",
+                "createdAt",
+                "refundedAt"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
@@ -11402,7 +11594,10 @@
           "holdUntil",
           "checkoutUrl",
           "paidAt",
-          "refundedAt"
+          "refundedAt",
+          "settlement",
+          "settledCents",
+          "refunds"
         ],
         "additionalProperties": false
       },
@@ -12179,6 +12374,11 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "prepaidCents": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "paymentMethod": {
             "nullable": true,
             "type": "string",
@@ -12187,7 +12387,8 @@
               "PIX",
               "CARD_CREDIT",
               "CARD_DEBIT",
-              "OTHER"
+              "OTHER",
+              "ONLINE"
             ]
           },
           "closedAt": {
@@ -12216,6 +12417,7 @@
           "client",
           "items",
           "totalCents",
+          "prepaidCents",
           "paymentMethod",
           "closedAt",
           "voidedAt",

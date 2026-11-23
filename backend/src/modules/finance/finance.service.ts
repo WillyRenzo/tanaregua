@@ -7,8 +7,12 @@ import { localDateSchema } from '../appointments/appointments.schemas.js';
 import { dayBounds, nextDate } from '../appointments/availability.js';
 import { BarbershopsService } from '../barbershops/barbershops.module.js';
 
-export type PaymentMethod = 'CASH' | 'PIX' | 'CARD_CREDIT' | 'CARD_DEBIT' | 'OTHER';
+/** Formas de pagamento do balcão: as que a equipe escolhe ao fechar comanda ou reembolsar pacote. */
+export type CounterPaymentMethod = 'CASH' | 'PIX' | 'CARD_CREDIT' | 'CARD_DEBIT' | 'OTHER';
 export const PAYMENT_METHODS = ['CASH', 'PIX', 'CARD_CREDIT', 'CARD_DEBIT', 'OTHER'] as const;
+/** Mais o pagamento online da reserva (§5), que só o sistema lança. */
+export type PaymentMethod = CounterPaymentMethod | 'ONLINE';
+export const ALL_PAYMENT_METHODS = [...PAYMENT_METHODS, 'ONLINE'] as const;
 
 export const cashDayQuerySchema = z.strictObject({ date: localDateSchema });
 export type CashDayQuery = z.infer<typeof cashDayQuerySchema>;
@@ -29,10 +33,17 @@ export const periodQuerySchema = z
   );
 export type PeriodQuery = z.infer<typeof periodQuerySchema>;
 
+/** Parte do total de uma comanda paga numa forma (o balcão, ou o pagamento online da reserva). */
+export interface Tender {
+  method: PaymentMethod;
+  amountCents: number;
+  /** Só na parte online: o pagamento da reserva de onde ela veio. */
+  bookingPaymentId?: string;
+}
+
 export interface SaleRecord {
   orderId: string;
-  method: PaymentMethod;
-  totalCents: number;
+  tenders: Tender[];
   commissions: { orderItemId: string; professionalId: string; amountCents: number }[];
   occurredAt: Date;
 }
@@ -61,14 +72,57 @@ export class FinanceService {
         })),
       });
     }
+    if (sale.tenders.length > 0) {
+      await tx.cashEntry.createMany({
+        data: sale.tenders.map((tender) => ({
+          barbershopId,
+          orderId: sale.orderId,
+          bookingPaymentId: tender.bookingPaymentId ?? null,
+          method: tender.method,
+          kind: 'ENTRY' as const,
+          amountCents: tender.amountCents,
+          occurredAt: sale.occurredAt,
+        })),
+      });
+    }
+  }
+
+  /**
+   * Valor pago online retido pela barbearia (§5: falta ou cancelamento fora do prazo): entra
+   * no caixa no dia em que é registrado, sem comissão (não houve atendimento).
+   */
+  async recordRetained(
+    tx: Tx,
+    barbershopId: string,
+    retained: { bookingPaymentId: string; amountCents: number; occurredAt: Date },
+  ): Promise<void> {
     await tx.cashEntry.create({
       data: {
         barbershopId,
-        orderId: sale.orderId,
-        method: sale.method,
+        bookingPaymentId: retained.bookingPaymentId,
+        method: 'ONLINE',
         kind: 'ENTRY',
-        amountCents: sale.totalCents,
-        occurredAt: sale.occurredAt,
+        amountCents: retained.amountCents,
+        occurredAt: retained.occurredAt,
+      },
+    });
+  }
+
+  /** Reembolso de um valor pago online que já estava no caixa: saída no dia em que é feito. */
+  async recordOnlineRefund(
+    tx: Tx,
+    barbershopId: string,
+    refund: { bookingPaymentId: string; orderId: string | null; amountCents: number; occurredAt: Date },
+  ): Promise<void> {
+    await tx.cashEntry.create({
+      data: {
+        barbershopId,
+        bookingPaymentId: refund.bookingPaymentId,
+        orderId: refund.orderId,
+        method: 'ONLINE',
+        kind: 'REFUND',
+        amountCents: -refund.amountCents,
+        occurredAt: refund.occurredAt,
       },
     });
   }
@@ -80,7 +134,7 @@ export class FinanceService {
   async recordRefund(
     tx: Tx,
     barbershopId: string,
-    refund: { orderId: string; method: PaymentMethod; amountCents: number; occurredAt: Date },
+    refund: { orderId: string; method: CounterPaymentMethod; amountCents: number; occurredAt: Date },
   ): Promise<void> {
     if (refund.amountCents === 0) return;
     await tx.cashEntry.create({
@@ -95,12 +149,18 @@ export class FinanceService {
     });
   }
 
-  /** Estorno: espelha cada lançamento original com o valor negativo. */
+  /**
+   * Estorno: espelha cada lançamento original com o valor negativo. A parte paga online na
+   * reserva fica no caixa (decisão de 23/11/2026): o dinheiro está de fato na conta da
+   * barbearia e passa a valer como valor retido, sem comissão.
+   */
   async recordReversal(tx: Tx, barbershopId: string, orderId: string, occurredAt: Date): Promise<void> {
     const commissions = await tx.commissionEntry.findMany({
       where: { barbershopId, orderId, kind: 'ENTRY' },
     });
-    const cash = await tx.cashEntry.findMany({ where: { barbershopId, orderId, kind: 'ENTRY' } });
+    const cash = await tx.cashEntry.findMany({
+      where: { barbershopId, orderId, kind: 'ENTRY', bookingPaymentId: null },
+    });
     if (commissions.length > 0) {
       await tx.commissionEntry.createMany({
         data: commissions.map((entry) => ({
@@ -142,12 +202,16 @@ export class FinanceService {
           kind: true,
           amountCents: true,
           occurredAt: true,
-          order: { select: { client: { select: { name: true } } } },
+          order: { select: { appointmentId: true, client: { select: { name: true } } } },
+          // Valor retido de falta e reembolso online não têm comanda: o cliente vem da reserva.
+          bookingPayment: {
+            select: { appointmentId: true, appointment: { select: { client: { select: { name: true } } } } },
+          },
         },
         orderBy: { occurredAt: 'asc' },
       });
 
-      const totals = Object.fromEntries(PAYMENT_METHODS.map((method) => [method, 0])) as Record<
+      const totals = Object.fromEntries(ALL_PAYMENT_METHODS.map((method) => [method, 0])) as Record<
         PaymentMethod,
         number
       >;
@@ -158,7 +222,11 @@ export class FinanceService {
         timezone: settings.timezone,
         totals,
         netCents: entries.reduce((sum, entry) => sum + entry.amountCents, 0),
-        entries: entries.map(({ order, ...entry }) => ({ ...entry, clientName: order.client?.name ?? null })),
+        entries: entries.map(({ order, bookingPayment, ...entry }) => ({
+          ...entry,
+          appointmentId: order?.appointmentId ?? bookingPayment?.appointmentId ?? null,
+          clientName: order?.client?.name ?? bookingPayment?.appointment.client.name ?? null,
+        })),
       };
     });
   }

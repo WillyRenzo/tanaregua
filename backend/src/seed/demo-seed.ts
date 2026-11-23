@@ -10,7 +10,7 @@ import { isPermission } from '../modules/auth/permissions.js';
 import { BarbershopsService } from '../modules/barbershops/barbershops.module.js';
 import { CatalogService } from '../modules/catalog/catalog.service.js';
 import { ClientsService } from '../modules/clients/clients.service.js';
-import type { PaymentMethod } from '../modules/finance/finance.service.js';
+import type { CounterPaymentMethod as PaymentMethod } from '../modules/finance/finance.service.js';
 import { BirthdaysService } from '../modules/marketing/birthdays.service.js';
 import { CampaignsService } from '../modules/marketing/campaigns.service.js';
 import { OrdersService } from '../modules/orders/orders.service.js';
@@ -638,6 +638,7 @@ export async function seedDemo(app: INestApplicationContext): Promise<SeedResult
     await addDemoMarketing(app);
     await addDemoOnlinePayment(app);
     await addDemoPaidBooking(app, DEMO_SLUG);
+    await addDemoSettledPayments(app, DEMO_SLUG);
 
     // LGPD: cliente que pediu exclusão. Some da lista, o histórico fica como "Cliente anonimizado".
     await clients.anonymize(client.Ricardo!);
@@ -722,6 +723,8 @@ export async function completeDemo(
   });
   const paidBooking = await addDemoPaidBooking(app, slugs.demo);
   if (paidBooking) added.push(paidBooking);
+  const settled = await addDemoSettledPayments(app, slugs.demo);
+  if (settled) added.push(settled);
 
   await asOwnerOf(app, slugs.neighbor, async () => {
     const barbershops = app.get(BarbershopsService);
@@ -1198,6 +1201,82 @@ function mulberry32(seed: number): () => number {
  * dias: o painel e "Meus agendamentos" mostram o pagamento. Só com o gateway simulado, e só se
  * a barbearia ainda não tem nenhuma reserva paga online.
  */
+/**
+ * Pagamento online na comanda e no caixa (§5, entrega 3), com a cliente com conta: anteontem,
+ * sinal pago online e comanda fechada (o restante em Pix); ontem, sinal pago e falta, com o
+ * valor retido no caixa do dia. Encaixes às 7h, antes do expediente, para não conflitar. Só
+ * com o gateway simulado, e só se nenhum pagamento online ainda entrou no caixa.
+ */
+async function addDemoSettledPayments(app: INestApplicationContext, slug: string): Promise<string | null> {
+  const gateway = app.get(MerchantGateway);
+  if (!(gateway instanceof FakeMerchantGateway)) return null;
+  const prisma = app.get(PrismaService);
+  const shop = await prisma.barbershop.findUnique({ where: { slug }, select: { id: true } });
+  if (!shop) return null;
+  const payments = app.get(BookingPaymentsService);
+  const found = await prisma.withContext({ barbershopId: shop.id }, async (tx) => {
+    const client = await tx.membership.findFirst({
+      where: { barbershopId: shop.id, active: true, role: { key: 'client' } },
+      select: { userId: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return {
+      settled: await tx.bookingPayment.count({ where: { barbershopId: shop.id, settlement: { not: null } } }),
+      clientId: client ? await app.get(ClientsService).findIdForUser(tx, shop.id, client.userId) : null,
+      offer: await payments.offer(tx, shop.id),
+      service: await tx.service.findFirst({
+        where: { barbershopId: shop.id, active: true },
+        select: { id: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+    };
+  });
+  const { clientId, offer, service } = found;
+  if (found.settled > 0 || !clientId || !offer || !service) return null;
+
+  const appointments = app.get(AppointmentsService);
+  const orders = app.get(OrdersService);
+  const clock = app.get(Clock);
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE }).format(new Date());
+
+  /** Encaixe pago online, como se a cliente tivesse pago o sinal no checkout. */
+  const paidVisit = async (professionalId: string, date: string) => {
+    const visit = await appointments.create({
+      professionalId,
+      clientId,
+      serviceIds: [service.id],
+      startsAt: localTimeToInstant(date, 7 * 60, TIMEZONE),
+    });
+    await prisma.withContext({ barbershopId: shop.id }, async (tx) =>
+      payments.open(tx, shop.id, await appointments.getInTx(tx, shop.id, visit.id), offer, { hold: false }),
+    );
+    const checkoutId = (await payments.checkout(shop.id, visit.id)).split('/').at(-1)!;
+    const { paymentId } = gateway.approve(checkoutId);
+    await payments.applyGatewayPayment({
+      id: 'seed',
+      barbershopId: shop.id,
+      payload: { provider: gateway.provider, gatewayPaymentId: paymentId },
+    });
+    return visit;
+  };
+
+  let added = false;
+  await asOwnerOf(app, slug, async ([professionalId]) => {
+    if (!professionalId) return;
+    const attended = await paidVisit(professionalId, shiftDate(today, -2));
+    await clock.at(new Date(attended.endsAt.getTime() + 5 * 60_000), async () => {
+      const order = await orders.open({ appointmentId: attended.id });
+      await orders.close(order.id, { paymentMethod: 'PIX' });
+    });
+    const missed = await paidVisit(professionalId, shiftDate(today, -1));
+    await clock.at(new Date(missed.startsAt.getTime() + 30 * 60_000), () =>
+      appointments.changeStatus(missed.id, { status: 'NO_SHOW' }),
+    );
+    added = true;
+  });
+  return added ? 'pagamento online na comanda e sinal retido de uma falta' : null;
+}
+
 async function addDemoPaidBooking(app: INestApplicationContext, slug: string): Promise<string | null> {
   const gateway = app.get(MerchantGateway);
   if (!(gateway instanceof FakeMerchantGateway)) return null;

@@ -18,6 +18,8 @@ export interface AppointmentPaymentHook {
     barbershopId: string,
     appointmentIds: string[],
   ): Promise<Map<string, AppointmentPaymentSummary>>;
+  /** Falta marcada (§5): o valor pago fica com a barbearia e entra no caixa do dia. */
+  onNoShow(tx: Tx, barbershopId: string, appointmentId: string): Promise<void>;
   /** Chamado na mesma transação do cancelamento; pode recusar (ex.: falta o motivo). */
   onCancel(
     tx: Tx,
@@ -47,6 +49,10 @@ export class AppointmentPayments {
   ): Promise<Map<string, AppointmentPaymentSummary>> {
     if (!this.hook || appointmentIds.length === 0) return new Map();
     return this.hook.summaries(tx, barbershopId, appointmentIds);
+  }
+
+  async onNoShow(tx: Tx, barbershopId: string, appointmentId: string): Promise<void> {
+    await this.hook?.onNoShow(tx, barbershopId, appointmentId);
   }
 
   async onCancel(

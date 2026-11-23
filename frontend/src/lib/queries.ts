@@ -566,6 +566,30 @@ export function useJustifyNoShow() {
   });
 }
 
+/**
+ * Reembolso pelo painel do valor pago online que ficou com a barbearia (§5): uma vez, total ou
+ * parte, com motivo. Sai do caixa de hoje.
+ */
+export function useRefundBookingPayment() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      appointmentId,
+      ...body
+    }: Body<'/v1/online-payments/bookings/{appointmentId}/refund', 'post'> & { appointmentId: string }) =>
+      unwrap(
+        api.POST('/v1/online-payments/bookings/{appointmentId}/refund', {
+          params: { path: { appointmentId } },
+          body,
+        }),
+      ),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: ['agenda'] });
+      void client.invalidateQueries({ queryKey: ['cash'] });
+    },
+  });
+}
+
 /** Faltas sem justificativa do cliente (informação para a equipe; não bloqueia nada). */
 export function useClientNoShows(id: string | undefined) {
   return useQuery({

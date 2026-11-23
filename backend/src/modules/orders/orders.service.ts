@@ -14,7 +14,8 @@ import {
   type CommissionRuleTerms,
 } from '../catalog/commission-policy.js';
 import { ClientsService } from '../clients/clients.service.js';
-import { FinanceService } from '../finance/finance.service.js';
+import { FinanceService, type Tender } from '../finance/finance.service.js';
+import { BookingPaymentsService } from '../online-payments/booking-payments.service.js';
 import { ProductsService } from '../products/products.service.js';
 import { PackagesService, packageTermsKey, type PackageUseTerms } from '../packages/packages.service.js';
 import { StaffService } from '../staff/staff.service.js';
@@ -53,6 +54,7 @@ export class OrdersService {
     @Inject(FinanceService) private readonly finance: FinanceService,
     @Inject(ProductsService) private readonly products: ProductsService,
     @Inject(PackagesService) private readonly packages: PackagesService,
+    @Inject(BookingPaymentsService) private readonly bookingPayments: BookingPaymentsService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -70,7 +72,12 @@ export class OrdersService {
       });
       const page = toPage(rows, query.limit);
       const rules = await this.catalog.commissionRules(tx, auth.barbershopId);
-      return { items: page.items.map((row) => toView(row, rules, new Map())), nextCursor: page.nextCursor };
+      const items: OrderView[] = [];
+      // Sequencial de propósito: numa transação todas as queries usam a mesma conexão.
+      for (const row of page.items) {
+        items.push(toView(row, rules, new Map(), await this.prepaid(tx, auth.barbershopId, row)));
+      }
+      return { items, nextCursor: page.nextCursor };
     });
   }
 
@@ -325,20 +332,46 @@ export class OrdersService {
       }
 
       const totalCents = items.reduce((sum, item) => sum + item.totalCents, 0);
+      // Reserva paga online (§5): o pago abate o total; o que passar volta ao cliente sozinho.
+      const online = order.appointmentId
+        ? await this.bookingPayments.settleWithOrder(tx, auth.barbershopId, {
+            appointmentId: order.appointmentId,
+            orderId,
+            totalCents,
+          })
+        : null;
+      const onlinePaidCents = online?.appliedCents ?? 0;
+      const remainderCents = totalCents - onlinePaidCents;
+      if (remainderCents > 0 && !input.paymentMethod) {
+        throw unprocessable('payment-method-required', 'Escolha a forma de pagamento do que falta pagar.');
+      }
+      const tenders: Tender[] = [];
+      if (online && onlinePaidCents > 0) {
+        tenders.push({
+          method: 'ONLINE',
+          amountCents: onlinePaidCents,
+          bookingPaymentId: online.bookingPaymentId,
+        });
+      }
+      // Sem parte online, a forma do balcão é lançada mesmo com total zero (como antes).
+      if (input.paymentMethod && (remainderCents > 0 || onlinePaidCents === 0)) {
+        tenders.push({ method: input.paymentMethod, amountCents: remainderCents });
+      }
       await tx.order.update({
         where: { id: orderId },
         data: {
           status: 'CLOSED',
-          paymentMethod: input.paymentMethod,
+          paymentMethod:
+            remainderCents > 0 || onlinePaidCents === 0 ? (input.paymentMethod ?? null) : 'ONLINE',
           totalCents,
+          onlinePaidCents,
           closedAt,
           closedByUserId: auth.userId,
         },
       });
       await this.finance.recordSale(tx, auth.barbershopId, {
         orderId,
-        method: input.paymentMethod,
-        totalCents,
+        tenders,
         commissions,
         occurredAt: closedAt,
       });
@@ -365,6 +398,8 @@ export class OrdersService {
           occurredAt: voidedAt,
         });
         await this.finance.recordReversal(tx, auth.barbershopId, orderId, voidedAt);
+        // A parte paga online fica no caixa como valor retido (decisão de 23/11/2026).
+        await this.bookingPayments.onOrderVoided(tx, auth.barbershopId, orderId);
         // Produto vendido volta para o estoque (business-rules §7).
         await this.products.recordSaleReversal(tx, auth.barbershopId, {
           orderId,
@@ -536,7 +571,7 @@ export class OrdersService {
   private async view(tx: Tx, barbershopId: string, orderId: string): Promise<OrderView> {
     const row = await tx.order.findFirst({ where: { id: orderId, barbershopId }, include: orderInclude });
     if (!row) throw notFound('Comanda');
-    if (row.status !== 'OPEN') return toView(row, [], new Map());
+    if (row.status !== 'OPEN') return toView(row, [], new Map(), row.onlinePaidCents);
     const rules = await this.catalog.commissionRules(tx, barbershopId);
     // Comissão prevista de serviço pago com pacote usa o valor da sessão.
     const terms = await this.packages.sessionTerms(
@@ -548,7 +583,13 @@ export class OrdersService {
           : [],
       ),
     );
-    return toView(row, rules, terms);
+    return toView(row, rules, terms, await this.prepaid(tx, barbershopId, row));
+  }
+
+  /** Aberta: o pago online disponível para abater; fechada ou estornada: o que entrou nela. */
+  private async prepaid(tx: Tx, barbershopId: string, row: OrderRow): Promise<number> {
+    if (row.status !== 'OPEN') return row.onlinePaidCents;
+    return row.appointmentId ? this.bookingPayments.prepaidFor(tx, barbershopId, row.appointmentId) : 0;
   }
 }
 
@@ -577,7 +618,12 @@ function commissionTarget(item: { serviceId: string | null; productId: string | 
   return item.productId ? { productId: item.productId } : { serviceId: item.serviceId! };
 }
 
-function toView(row: OrderRow, rules: CommissionRuleTerms[], terms: Map<string, PackageUseTerms>): OrderView {
+function toView(
+  row: OrderRow,
+  rules: CommissionRuleTerms[],
+  terms: Map<string, PackageUseTerms>,
+  prepaidCents: number,
+): OrderView {
   const items = row.items.map((item) => ({
     id: item.id,
     kind: item.kind,
@@ -612,6 +658,7 @@ function toView(row: OrderRow, rules: CommissionRuleTerms[], terms: Map<string, 
     client: row.client,
     items,
     totalCents: row.totalCents ?? items.reduce((sum, item) => sum + item.totalCents, 0),
+    prepaidCents,
     paymentMethod: row.paymentMethod,
     closedAt: row.closedAt,
     voidedAt: row.voidedAt,

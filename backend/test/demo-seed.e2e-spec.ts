@@ -130,7 +130,8 @@ describe('Seed de demonstração (e2e)', () => {
       .get(`/v1/public/${DEMO_SLUG}/me/appointments`)
       .expect(200);
     const statuses = new Set(mine.body.map((appointment: { status: string }) => appointment.status));
-    expect(statuses).toEqual(new Set(['COMPLETED', 'CANCELLED', 'SCHEDULED']));
+    // A falta vem do sinal retido (pagamento online, §5).
+    expect(statuses).toEqual(new Set(['COMPLETED', 'CANCELLED', 'SCHEDULED', 'NO_SHOW']));
     const now = Date.now();
     expect(mine.body.some((a: { startsAt: string }) => Date.parse(a.startsAt) > now)).toBe(true);
     expect(mine.body.some((a: { startsAt: string }) => Date.parse(a.startsAt) < now)).toBe(true);
@@ -242,7 +243,7 @@ describe('Seed de demonstração (e2e)', () => {
     });
   });
 
-  it('a demo tem uma reserva online paga (sinal de 30%) pela cliente com conta', async () => {
+  it('a demo tem reservas pagas online (sinal de 30%): uma futura, uma na comanda e uma falta retida', async () => {
     const login = await request(app.getHttpServer())
       .post(`/v1/public/${DEMO_SLUG}/auth/login`)
       .send({ email: DEMO_ACCOUNTS.client.email, password: DEMO_PASSWORD })
@@ -250,11 +251,18 @@ describe('Seed de demonstração (e2e)', () => {
     const mine = await as(app, login.body.accessToken)
       .get(`/v1/public/${DEMO_SLUG}/me/appointments`)
       .expect(200);
-    const paid = mine.body.filter(
-      (appointment: { payment: { status: string } | null }) => appointment.payment?.status === 'PAID',
-    );
-    expect(paid).toHaveLength(1);
-    expect(paid[0].payment.amountCents).toBe(Math.round(paid[0].totalCents * 0.3));
+    type Paid = {
+      status: string;
+      totalCents: number;
+      payment: { status: string; settlement: string | null; amountCents: number } | null;
+    };
+    const paid = (mine.body as Paid[]).filter((appointment) => appointment.payment?.status === 'PAID');
+    const settlement = (value: string | null) =>
+      paid.filter((appointment) => appointment.payment!.settlement === value);
+    expect(settlement(null)).toHaveLength(1);
+    expect(settlement(null)[0]!.payment!.amountCents).toBe(Math.round(settlement(null)[0]!.totalCents * 0.3));
+    expect(settlement('ORDER')).toEqual([expect.objectContaining({ status: 'COMPLETED' })]);
+    expect(settlement('RETAINED')).toEqual([expect.objectContaining({ status: 'NO_SHOW' })]);
   });
 
   it('a barbearia vizinha é isolada da demo', async () => {
@@ -391,6 +399,7 @@ describe('Seed de demonstração (e2e)', () => {
       'mensagem automática de aniversário',
       'pagamento online (conta de teste, sinal opcional de 30%)',
       'reserva online paga (sinal) pela cliente com conta',
+      'pagamento online na comanda e sinal retido de uma falta',
       'cor da Barbearia Vizinha',
       'plano Premium (cortesia) na demo',
       'plano Essencial (cortesia) na Barbearia Vizinha',

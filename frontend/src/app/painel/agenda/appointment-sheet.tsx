@@ -7,7 +7,8 @@ import { TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { StatusBadge } from '@/components/appointment-status';
-import { hasVisiblePayment, PaymentBadge } from '@/components/payment-status';
+import { hasVisiblePayment, PaymentBadge, PaymentRefunds } from '@/components/payment-status';
+import { MoneyInput } from '@/components/money-input';
 import { ClientPicker } from '@/components/client-picker';
 import { Field } from '@/components/form/field';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -38,6 +39,7 @@ import {
   useCreateAppointment,
   useJustifyNoShow,
   useOpenOrder,
+  useRefundBookingPayment,
   useServices,
   useUpdateAppointment,
   type Appointment,
@@ -395,6 +397,18 @@ function AppointmentDetails({
           {hasVisiblePayment(payment) && <PaymentBadge payment={payment} />}
         </div>
       </SheetHeader>
+
+      {payment && <PaymentRefunds payment={payment} />}
+      {payment?.status === 'PAID' && payment.settlement === null && (
+        <p className="text-muted-foreground text-sm">
+          {formatMoney(payment.amountCents)} pagos online: abatem na comanda ao fechar. Em caso de falta, o
+          valor fica com a barbearia.
+        </p>
+      )}
+      {payment?.status === 'PAID' &&
+        payment.settlement === 'RETAINED' &&
+        !payment.refunds.some((refund) => refund.kind === 'MANUAL') &&
+        can(session, 'orders:void') && <RefundRetained appointmentId={appointment.id} payment={payment} />}
 
       {payment?.status === 'PENDING' && payment.holdUntil && pending && (
         <p className="text-sm">
@@ -765,5 +779,86 @@ function CancellationKind({
         </label>
       ))}
     </fieldset>
+  );
+}
+
+/**
+ * Reembolso pelo painel do valor pago online que ficou com a barbearia (business-rules §5: falta,
+ * cancelamento fora do prazo ou comanda estornada). Um só por pagamento, total ou parte, com motivo.
+ */
+function RefundRetained({
+  appointmentId,
+  payment,
+}: {
+  appointmentId: string;
+  payment: NonNullable<Appointment['payment']>;
+}) {
+  const refund = useRefundBookingPayment();
+  const retainedCents = payment.settledCents ?? payment.amountCents;
+  const [open, setOpen] = useState(false);
+  const [amountCents, setAmountCents] = useState<number | null>(retainedCents);
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!amountCents || amountCents < 1 || amountCents > retainedCents) {
+      setError(`Informe um valor de R$ 0,01 até ${formatMoney(retainedCents)}.`);
+      return;
+    }
+    if (reason.trim().length < 3) {
+      setError('Informe o motivo do reembolso.');
+      return;
+    }
+    try {
+      await refund.mutateAsync({ appointmentId, amountCents, reason: reason.trim() });
+      toast.success('Reembolso pedido. O valor saiu do caixa de hoje.');
+      setOpen(false);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  };
+
+  if (!open) {
+    return (
+      <div className="grid gap-1">
+        <p className="text-sm">
+          {formatMoney(retainedCents)} pagos online ficaram com a barbearia e entraram no caixa.
+        </p>
+        <Button variant="outline" className="w-fit" onClick={() => setOpen(true)}>
+          Reembolsar ao cliente
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="grid gap-2">
+      <Separator />
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      <Field
+        label="Valor do reembolso"
+        hint={`Até ${formatMoney(retainedCents)}. Só dá para reembolsar uma vez.`}
+      >
+        <MoneyInput value={amountCents} onChange={setAmountCents} />
+      </Field>
+      <Field label="Motivo">
+        <Input
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder="Ex.: cliente avisou com antecedência"
+        />
+      </Field>
+      <div className="flex gap-2">
+        <Button variant="destructive" onClick={submit} disabled={refund.isPending}>
+          Reembolsar
+        </Button>
+        <Button variant="ghost" onClick={() => setOpen(false)}>
+          Voltar
+        </Button>
+      </div>
+    </div>
   );
 }

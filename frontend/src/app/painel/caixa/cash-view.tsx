@@ -7,7 +7,7 @@ import { EmptyState, ErrorState, LoadingRows, PageHeader } from '@/components/st
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { addDays, formatDateLong, formatMoney, formatTime, todayIn } from '@/lib/format';
-import { PAYMENT_METHODS, paymentLabel } from '@/lib/payment-methods';
+import { CASH_METHODS, paymentLabel } from '@/lib/payment-methods';
 import { useBarbershop, useCashDay } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
@@ -60,14 +60,14 @@ function CashDay({ timezone }: { timezone: string }) {
         <ErrorState error={cash.error} onRetry={() => cash.refetch()} />
       ) : (
         <>
-          <dl className="mb-8 grid grid-cols-2 gap-px overflow-hidden rounded-lg border sm:grid-cols-3 lg:grid-cols-6">
+          <dl className="mb-8 grid grid-cols-2 gap-px overflow-hidden rounded-lg border sm:grid-cols-4 lg:grid-cols-7">
             <div className="bg-sidebar text-sidebar-foreground col-span-2 p-4 sm:col-span-1 lg:col-span-1">
               <dt className="text-sidebar-foreground/70 text-xs font-medium tracking-wide uppercase">
                 Total líquido
               </dt>
               <dd className="font-heading mt-1 text-3xl font-bold">{formatMoney(cash.data!.netCents)}</dd>
             </div>
-            {PAYMENT_METHODS.map((method) => (
+            {CASH_METHODS.map((method) => (
               <div key={method.value} className="bg-card p-4">
                 <dt className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase">
                   <method.icon aria-hidden className="size-3.5" /> {method.label}
@@ -94,17 +94,31 @@ function CashDay({ timezone }: { timezone: string }) {
                   <TableRow key={entry.id}>
                     <TableCell>{formatTime(entry.occurredAt, timezone)}</TableCell>
                     <TableCell>
-                      <Link
-                        href={`/painel/comandas/${entry.orderId}`}
-                        className="underline-offset-4 hover:underline"
-                      >
-                        {entry.clientName ?? 'Cliente balcão'}
-                      </Link>
+                      {entry.orderId ? (
+                        <Link
+                          href={`/painel/comandas/${entry.orderId}`}
+                          className="underline-offset-4 hover:underline"
+                        >
+                          {entry.clientName ?? 'Cliente balcão'}
+                        </Link>
+                      ) : (
+                        // Valor retido de falta e reembolso online não têm comanda (§5).
+                        <span>{entry.clientName ?? 'Cliente'}</span>
+                      )}
                       {entry.kind === 'REVERSAL' && (
                         <span className="text-destructive ml-2 text-xs font-medium">Estorno</span>
                       )}
                       {entry.kind === 'REFUND' && (
-                        <span className="text-destructive ml-2 text-xs font-medium">Reembolso de pacote</span>
+                        <span className="text-destructive ml-2 text-xs font-medium">
+                          {entry.method === 'ONLINE'
+                            ? 'Reembolso de reserva paga online'
+                            : 'Reembolso de pacote'}
+                        </span>
+                      )}
+                      {entry.kind === 'ENTRY' && entry.method === 'ONLINE' && !entry.orderId && (
+                        <span className="text-muted-foreground ml-2 text-xs font-medium">
+                          Valor retido (falta ou cancelamento)
+                        </span>
                       )}
                     </TableCell>
                     <TableCell>{paymentLabel(entry.method)}</TableCell>

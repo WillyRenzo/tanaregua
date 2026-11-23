@@ -1209,6 +1209,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/online-payments/bookings/{appointmentId}/refund": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reembolsa pelo painel o valor pago online que ficou com a barbearia
+         * @description Só o valor retido (falta, cancelamento fora do prazo ou comanda estornada), uma vez por pagamento, total ou parte, com motivo. Sai do caixa na hora; o gateway devolve ao cliente em seguida.
+         *
+         *     **Permissões (basta uma):** `orders:void`
+         */
+        post: operations["OnlinePaymentsController_refund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/online-payments/webhook/{webhookKey}": {
         parameters: {
             query?: never;
@@ -2024,9 +2046,11 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 /** Format: uuid */
-                orderId: string;
+                orderId: string | null;
+                /** Format: uuid */
+                appointmentId: string | null;
                 /** @enum {string} */
-                method: "CASH" | "PIX" | "CARD_CREDIT" | "CARD_DEBIT" | "OTHER";
+                method: "CASH" | "PIX" | "CARD_CREDIT" | "CARD_DEBIT" | "OTHER" | "ONLINE";
                 /** @enum {string} */
                 kind: "ENTRY" | "REVERSAL" | "REFUND";
                 amountCents: number;
@@ -2118,6 +2142,20 @@ export interface components {
             paidAt: string | null;
             /** Format: date-time */
             refundedAt: string | null;
+            /** @enum {string|null} */
+            settlement: "ORDER" | "RETAINED" | null;
+            settledCents: number | null;
+            refunds: {
+                /** @enum {string} */
+                kind: "DIFFERENCE" | "MANUAL";
+                amountCents: number;
+                /** @enum {string} */
+                status: "PENDING" | "DONE" | "FAILED";
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                refundedAt: string | null;
+            }[];
         };
         Availability: {
             date: string;
@@ -2311,8 +2349,9 @@ export interface components {
                 commissionCents: number;
             }[];
             totalCents: number;
+            prepaidCents: number;
             /** @enum {string|null} */
-            paymentMethod: "CASH" | "PIX" | "CARD_CREDIT" | "CARD_DEBIT" | "OTHER" | null;
+            paymentMethod: "CASH" | "PIX" | "CARD_CREDIT" | "CARD_DEBIT" | "OTHER" | "ONLINE" | null;
             /** Format: date-time */
             closedAt: string | null;
             /** Format: date-time */
@@ -7117,6 +7156,89 @@ export interface operations {
             };
         };
     };
+    OnlinePaymentsController_refund: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                appointmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    amountCents: number;
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sucesso */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentPayment"];
+                };
+            };
+            /** @description Dados inválidos: campo ausente, formato errado ou campo não permitido. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Sem token ou token expirado. Use **Authorize**. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Painel só para consulta: teste grátis vencido, carência esgotada ou assinatura cancelada (`subscription-inactive`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description O papel do usuário não tem nenhuma das permissões exigidas. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Recurso inexistente ou de outra barbearia. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `payment-not-retained | payment-already-refunded | refund-too-high`: O valor não ficou com a barbearia, já teve um reembolso pelo painel, ou o pedido passa do que ficou. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     OnlinePaymentsController_webhook: {
         parameters: {
             query?: never;
@@ -7738,7 +7860,7 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    paymentMethod: "CASH" | "PIX" | "CARD_CREDIT" | "CARD_DEBIT" | "OTHER";
+                    paymentMethod?: "CASH" | "PIX" | "CARD_CREDIT" | "CARD_DEBIT" | "OTHER";
                 };
             };
         };

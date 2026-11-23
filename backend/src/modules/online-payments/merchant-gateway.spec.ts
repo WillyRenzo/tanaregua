@@ -118,6 +118,13 @@ describe('MercadoPagoMerchantGateway', () => {
     expect(urlOf(call[0])).toBe('https://api.mercadopago.com/v1/payments/987/refunds');
     expect(call[1]).toMatchObject({ method: 'POST' });
     expect(call[1]?.headers).toMatchObject({ 'X-Idempotency-Key': 'refund:pagamento-1' });
+    expect(bodyOf(call)).toEqual({});
+  });
+
+  it('reembolso parcial manda só o valor, em reais', async () => {
+    fetchMock.mockResolvedValueOnce(json(201, { id: 2, status: 'approved' }));
+    await gateway.refund(credentials, '987', 'refund:parcial-1', 1200);
+    expect(bodyOf(fetchMock.mock.calls[0]!)).toEqual({ amount: 12 });
   });
 });
 

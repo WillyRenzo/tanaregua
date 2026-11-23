@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { pageSchema } from '../../common/http/openapi.js';
 
-export const paymentMethodSchema = z.enum(['CASH', 'PIX', 'CARD_CREDIT', 'CARD_DEBIT', 'OTHER']);
+/** `ONLINE` = pago online na reserva (§5); só o sistema lança. */
+export const paymentMethodSchema = z.enum(['CASH', 'PIX', 'CARD_CREDIT', 'CARD_DEBIT', 'OTHER', 'ONLINE']);
 
 export const orderViewSchema = z
   .object({
@@ -30,6 +31,12 @@ export const orderViewSchema = z
       }),
     ),
     totalCents: z.int(),
+    /**
+     * Pago online na reserva (§5). Aberta: o que está disponível para abater; fechada: o que
+     * entrou na comanda (o que passou do total voltou ao cliente).
+     */
+    prepaidCents: z.int(),
+    /** Forma do balcão, ou `ONLINE` se a reserva paga cobriu tudo. */
     paymentMethod: paymentMethodSchema.nullable(),
     closedAt: z.date().nullable(),
     voidedAt: z.date().nullable(),
@@ -49,7 +56,9 @@ export const cashDaySchema = z
     entries: z.array(
       z.object({
         id: z.uuid(),
-        orderId: z.uuid(),
+        /** Null no valor retido de falta e no reembolso de reserva paga online. */
+        orderId: z.uuid().nullable(),
+        appointmentId: z.uuid().nullable(),
         method: paymentMethodSchema,
         kind: z.enum(['ENTRY', 'REVERSAL', 'REFUND']),
         amountCents: z.int(),

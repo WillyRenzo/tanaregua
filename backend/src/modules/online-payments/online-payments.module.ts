@@ -9,6 +9,7 @@ import {
   Module,
   type OnModuleInit,
   Param,
+  ParseUUIDPipe,
   Post,
   Put,
   Redirect,
@@ -25,8 +26,13 @@ import { AppSecretBox, SecretBox } from '../../common/crypto/secret-box.js';
 import { API_TAGS, ApiProblem, ApiResult } from '../../common/http/openapi.js';
 import type { Env } from '../../config/env.js';
 import { AppointmentPayments } from '../appointments/appointment-payments.js';
+import {
+  appointmentPaymentSchema,
+  type AppointmentPaymentSummary,
+} from '../appointments/appointments.responses.js';
 import { AppointmentsModule } from '../appointments/appointments.module.js';
 import { BarbershopsModule } from '../barbershops/barbershops.module.js';
+import { FinanceModule } from '../finance/finance.module.js';
 import { OutboxHandlers } from '../notifications/outbox.service.js';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module.js';
 import { BookingPaymentsService } from './booking-payments.service.js';
@@ -40,8 +46,10 @@ import { onlinePaymentViewSchema, type OnlinePaymentView } from './online-paymen
 import {
   connectPaymentAccountSchema,
   onlinePaymentSettingsSchema,
+  refundBookingPaymentSchema,
   type ConnectPaymentAccountInput,
   type OnlinePaymentSettingsInput,
+  type RefundBookingPaymentInput,
 } from './online-payments.schemas.js';
 import { OnlinePaymentsService } from './online-payments.service.js';
 
@@ -112,6 +120,31 @@ export class OnlinePaymentsController {
     return this.payments.updateSettings(input);
   }
 
+  /**
+   * Reembolso do valor retido: tira dinheiro do caixa, então exige a permissão de estorno (como
+   * o reembolso de pacote). Não depende do plano: reserva paga continua paga (decisão de 04/11).
+   */
+  @RequirePermissions('orders:void')
+  @HttpCode(HttpStatus.OK)
+  @ApiResult(appointmentPaymentSchema)
+  @ApiOperation({
+    summary: 'Reembolsa pelo painel o valor pago online que ficou com a barbearia',
+    description:
+      'Só o valor retido (falta, cancelamento fora do prazo ou comanda estornada), uma vez por pagamento, total ou parte, com motivo. Sai do caixa na hora; o gateway devolve ao cliente em seguida.',
+  })
+  @ApiProblem(
+    422,
+    'payment-not-retained | payment-already-refunded | refund-too-high',
+    'O valor não ficou com a barbearia, já teve um reembolso pelo painel, ou o pedido passa do que ficou.',
+  )
+  @Post('bookings/:appointmentId/refund')
+  refund(
+    @Param('appointmentId', ParseUUIDPipe) appointmentId: string,
+    @Body({ schema: refundBookingPaymentSchema }) input: RefundBookingPaymentInput,
+  ): Promise<AppointmentPaymentSummary> {
+    return this.bookingPayments.refundRetained(appointmentId, input);
+  }
+
   @Public()
   @Throttle(WEBHOOK_THROTTLE)
   @HttpCode(HttpStatus.OK)
@@ -146,7 +179,7 @@ export class OnlinePaymentsController {
 }
 
 @Module({
-  imports: [AppointmentsModule, BarbershopsModule, SubscriptionsModule],
+  imports: [AppointmentsModule, BarbershopsModule, FinanceModule, SubscriptionsModule],
   controllers: [OnlinePaymentsController],
   providers: [
     OnlinePaymentsService,
@@ -180,6 +213,7 @@ export class OnlinePaymentsModule implements OnModuleInit {
     const payments = this.bookingPayments;
     this.appointmentPayments.register({
       summaries: (tx, barbershopId, ids) => payments.summaries(tx, barbershopId, ids),
+      onNoShow: (tx, barbershopId, appointmentId) => payments.onNoShow(tx, barbershopId, appointmentId),
       onCancel: (tx, barbershopId, appointment, context) =>
         payments.onCancel(tx, barbershopId, appointment, context),
     });
@@ -192,5 +226,9 @@ export class OnlinePaymentsModule implements OnModuleInit {
     });
     this.handlers.register('BookingPaymentExtraRefund', { handle: (event) => payments.refundExtra(event) });
     this.handlers.register('BookingPaymentHoldExpired', { handle: (event) => payments.expireHold(event) });
+    this.handlers.register('BookingPaymentPartialRefund', {
+      handle: (event) => payments.partialRefund(event),
+      onDeadLetter: (event) => payments.partialRefundFailed(event),
+    });
   }
 }

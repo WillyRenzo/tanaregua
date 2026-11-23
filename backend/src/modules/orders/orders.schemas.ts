@@ -61,7 +61,11 @@ export type UpdateOrderItemInput = z.infer<typeof updateOrderItemSchema>;
 
 export const closeOrderSchema = z
   .strictObject({
-    paymentMethod: z.enum(PAYMENT_METHODS),
+    /**
+     * Forma do que é pago no balcão. Obrigatória quando sobra algo a pagar depois do valor pago
+     * online na reserva (§5); sem nada a pagar, pode ficar de fora.
+     */
+    paymentMethod: z.enum(PAYMENT_METHODS).optional(),
   })
   .meta({ example: { paymentMethod: 'PIX' } });
 export type CloseOrderInput = z.infer<typeof closeOrderSchema>;

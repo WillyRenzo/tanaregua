@@ -22,7 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { errorMessage } from '@/lib/api/errors';
 import { formatDate, formatMoney } from '@/lib/format';
 import { zodResolver } from '@/lib/forms/zod-resolver';
-import { PAYMENT_METHODS } from '@/lib/payment-methods';
+import { PAYMENT_METHODS, type CounterPaymentMethod } from '@/lib/payment-methods';
 import { can } from '@/lib/permissions';
 import {
   useBarbershop,
@@ -33,7 +33,6 @@ import {
   useServices,
   useUpdatePackage,
   type ClientPackage,
-  type PaymentMethod,
   type ServicePackage,
 } from '@/lib/queries';
 import { useAuthenticatedSession } from '@/lib/session/use-session';
@@ -531,7 +530,7 @@ function RefundForm({ clientPackage, onDone }: { clientPackage: ClientPackage; o
       await refund.mutateAsync({
         id: clientPackage.id,
         amountCents: values.amountCents,
-        paymentMethod: values.paymentMethod as PaymentMethod,
+        paymentMethod: values.paymentMethod as CounterPaymentMethod,
         reason: values.reason,
       });
       toast.success('Pacote reembolsado. O valor saiu do caixa de hoje.');

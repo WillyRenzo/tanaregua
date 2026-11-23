@@ -31,7 +31,9 @@ export type DomainEvent =
   /** Pagamento a mais numa reserva já paga (dois checkouts pagos): devolver esse. */
   | { type: 'BookingPaymentExtraRefund'; payload: { provider: string; gatewayPaymentId: string } }
   /** Fim do prazo para pagar no modo exigido: sem pagamento, a reserva cai. */
-  | { type: 'BookingPaymentHoldExpired'; payload: { bookingPaymentId: string } };
+  | { type: 'BookingPaymentHoldExpired'; payload: { bookingPaymentId: string } }
+  /** Reembolso parcial de um pagamento que já entrou no caixa (diferença da comanda ou manual). */
+  | { type: 'BookingPaymentPartialRefund'; payload: { refundId: string } };
 
 @Injectable()
 export class OutboxService {
